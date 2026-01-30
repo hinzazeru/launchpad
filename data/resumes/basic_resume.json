@@ -1,0 +1,285 @@
+{
+    "$schema": "./resume_schema.json",
+    "version": "1.0",
+    "metadata": {
+        "name": "Hinza's Resume",
+        "description": "Converted from resume.txt",
+        "last_updated": "2026-01-21",
+        "tags": [
+            "product",
+            "data",
+            "fintech"
+        ]
+    },
+    "contact": {
+        "name": "Hinza",
+        "email": "test@test,com",
+        "phone": "",
+        "location": "Toronto, ON",
+        "linkedin": "",
+        "website": ""
+    },
+    "summary": "Senior Product Manager with 10+ years leading B2B data and analytics products in fintech and financial services. Track record of driving $10M+ ARR growth, launching new verticals, and scaling enterprise SaaS platforms. Deep expertise in data products, platforms, and go-to-market strategy. I combine technical fluency (data engineering background) with commercial acumen to deliver products customers love and businesses need.",
+    "skills": {
+        "technical": [
+            "SQL",
+            "Snowflake",
+            "Python",
+            "Azure",
+            "Data Modeling",
+            "Rest APIs"
+        ],
+        "product": [
+            "Product Strategy & Vision",
+            "B2B SaaS",
+            "Go-to-Market (GTM) Strategy",
+            "Cross-functional Leadership",
+            "Data Product Management"
+        ],
+        "tools": [
+            "PowerBI",
+            "Snowflake",
+            "SQL",
+            "JIRA",
+            "Confluence",
+            "Postman"
+        ],
+        "analytics": [
+            "Analytics",
+            "Data Modeling",
+            "Data Pipelines"
+        ],
+        "domains": [
+            "Financial Services",
+            "Investment Management",
+            "ESG Data",
+            "Regulatory and Compliance Data"
+        ]
+    },
+    "experience": [
+        {
+            "company": "ISS-Stoxx",
+            "title": "Vice President - Product, Governance QualityScore",
+            "location": "",
+            "start_date": "2023-05",
+            "end_date": "Present",
+            "duration": "May 2023 - Present",
+            "description": "",
+            "bullets": [
+                {
+                    "text": "Owned strategy and execution for a flagship B2B data product, growing $10M+ global ARR portfolio across 50+ clients",
+                    "keywords": [
+                        "strategy",
+                        "B2B data",
+                        "ARR",
+                        "portfolio growth"
+                    ],
+                    "metrics": {
+                        "arr": "$10M+",
+                        "clients": "50+"
+                    }
+                },
+                {
+                    "text": "Expanded emerging market coverage by 17%, acquiring 3 new enterprise clients",
+                    "keywords": [
+                        "market coverage",
+                        "enterprise clients",
+                        "expansion"
+                    ],
+                    "metrics": {
+                        "coverage_growth": "17%",
+                        "new_clients": "3"
+                    }
+                },
+                {
+                    "text": "Launched a new academic vertical, driving market research, messaging, and GTM planning",
+                    "keywords": [
+                        "new vertical",
+                        "market research",
+                        "GTM planning"
+                    ]
+                },
+                {
+                    "text": "Established market leadership by spearheading the integration of AI governance and SEC InfoSec regulations, creating a defensible competitive moat",
+                    "keywords": [
+                        "AI governance",
+                        "SEC regulations",
+                        "competitive moat"
+                    ]
+                },
+                {
+                    "text": "Drove a LinkedIn campaign that achieved a 3.8% response rate to the call to action, the highest-performing initiative of 2024",
+                    "keywords": [
+                        "LinkedIn campaign",
+                        "marketing",
+                        "response rate"
+                    ],
+                    "metrics": {
+                        "response_rate": "3.8%"
+                    }
+                },
+                {
+                    "text": "Directed rollout of global roadmap intake process, cutting prioritization cycles by 25% and increasing stakeholder satisfaction",
+                    "keywords": [
+                        "roadmap",
+                        "process improvement",
+                        "prioritization"
+                    ],
+                    "metrics": {
+                        "cycle_reduction": "25%"
+                    }
+                }
+            ],
+            "technologies": [
+                "LinkedIn Campaign Manager",
+                "Jira",
+                "Confluence"
+            ]
+        },
+        {
+            "company": "Ontario Teachers' Pension Plan",
+            "title": "Senior Manager, Product and Insights",
+            "location": "",
+            "start_date": "2018-12",
+            "end_date": "2021-04",
+            "duration": "Dec 2018 - Apr 2021",
+            "description": "",
+            "bullets": [
+                {
+                    "text": "Optimized investment decision-making for desks managing $13B+ AUM by leading the development of 4 pre-trade analytical tools",
+                    "keywords": [
+                        "investment decision-making",
+                        "analytical tools",
+                        "AUM"
+                    ],
+                    "metrics": {
+                        "aum": "$13B+",
+                        "tools_developed": "4"
+                    }
+                },
+                {
+                    "text": "Enhanced investment agility for $10B Equity portfolio by rebuilding data pipelines using Azure and Python, improving processing speed by 38% to enable real-time trading decisions",
+                    "keywords": [
+                        "data pipelines",
+                        "Azure",
+                        "Python",
+                        "processing speed"
+                    ],
+                    "metrics": {
+                        "portfolio_size": "$10B",
+                        "speed_improvement": "38%"
+                    }
+                },
+                {
+                    "text": "Productized pre-trade automation for $3B credit portfolio, eliminating 100+ manual hours per quarter and reducing operational risk through workflow redesign and API integrations",
+                    "keywords": [
+                        "automation",
+                        "operational risk",
+                        "API integrations"
+                    ],
+                    "metrics": {
+                        "portfolio_size": "$3B",
+                        "hours_saved": "100+/quarter"
+                    }
+                },
+                {
+                    "text": "Developed and deployed a PowerBI-driven root cause analysis solution for trading execution, leading to a 22% reduction in errors by providing actionable insights to the trading desk.",
+                    "keywords": [
+                        "PowerBI",
+                        "root cause analysis",
+                        "trading execution"
+                    ],
+                    "metrics": {
+                        "error_reduction": "22%"
+                    }
+                },
+                {
+                    "text": "Designed and implemented an end-to-end automated pipeline for quarterly executive reporting across 7 desks, improving timeliness of insights and data accuracy for strategic reviews",
+                    "keywords": [
+                        "automated pipeline",
+                        "reporting",
+                        "data accuracy"
+                    ]
+                }
+            ],
+            "technologies": [
+                "Azure",
+                "Python",
+                "PowerBI"
+            ]
+        },
+        {
+            "company": "Citco Canada Inc.",
+            "title": "Business Intelligence Product Specialist",
+            "location": "",
+            "start_date": "2008-09",
+            "end_date": "2018-02",
+            "duration": "Sep 2008 - Feb 2018",
+            "description": "",
+            "bullets": [
+                {
+                    "text": "Built and scaled B2B enterprise analytics platform from 8 to 400+ hedge fund clients managing $500B+ AUM, driving 28% YoY user growth through customer-driven product iteration",
+                    "keywords": [
+                        "B2B enterprise",
+                        "scaling",
+                        "user growth"
+                    ],
+                    "metrics": {
+                        "clients_growth": "8 to 400+",
+                        "aum": "$500B+",
+                        "yoy_growth": "28%"
+                    }
+                },
+                {
+                    "text": "Generated $540K/year in new ARR by prioritizing high-value features using product telemetry and customer feedback",
+                    "keywords": [
+                        "ARR",
+                        "product telemetry",
+                        "customer feedback"
+                    ],
+                    "metrics": {
+                        "revenue": "$540K/year"
+                    }
+                },
+                {
+                    "text": "Conducted 45+ client interviews annually to refine data workflows and uncover product opportunities, resulting in 98% on-time delivery rate for NAV reporting",
+                    "keywords": [
+                        "client interviews",
+                        "data workflows",
+                        "NAV reporting"
+                    ],
+                    "metrics": {
+                        "interviews": "45+/year",
+                        "delivery_rate": "98%"
+                    }
+                },
+                {
+                    "text": "Championed customer service tooling upgrades, defining requirements that cut resolution time by 30%",
+                    "keywords": [
+                        "customer service",
+                        "tooling",
+                        "resolution time"
+                    ],
+                    "metrics": {
+                        "time_reduction": "30%"
+                    }
+                }
+            ],
+            "technologies": [
+                "Business Intelligence Platform",
+                "SQL",
+                "Data Warehousing"
+            ]
+        }
+    ],
+    "education": [
+        {
+            "institution": "Ryerson University",
+            "degree": "Bachelor of Arts",
+            "field": "Administration and Information Management",
+            "location": "Toronto, ON"
+        }
+    ],
+    "certifications": [],
+    "projects": []
+}

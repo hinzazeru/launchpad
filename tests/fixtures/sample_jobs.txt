@@ -1,0 +1,19 @@
+Job Title: Senior Product Manager
+Company: TechCorp
+Location: San Francisco, CA
+Posted: 2024-11-27
+Skills: Product Management, Agile, Roadmapping, Stakeholder Management
+Experience: 5 years
+URL: https://linkedin.com/jobs/123456
+Description: We are seeking an experienced Senior Product Manager to lead our B2B SaaS platform.
+
+---
+
+Title: Product Manager
+Company: StartupHub
+Location: Remote
+Posted: 2024-11-27
+Skills: Product Strategy, User Research, A/B Testing, SQL
+Experience: 3 years
+URL: https://linkedin.com/jobs/789012
+Description: Join our fast-growing startup as a Product Manager.

@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Resume Schema",
+  "description": "JSON Schema for structured resume data",
+  "type": "object",
+  "required": ["version", "experience"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Reference to this schema file"
+    },
+    "version": {
+      "type": "string",
+      "description": "Schema version",
+      "enum": ["1.0"]
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Resume metadata for organization",
+      "properties": {
+        "name": {"type": "string", "description": "Friendly name for this resume"},
+        "description": {"type": "string"},
+        "last_updated": {"type": "string", "format": "date"},
+        "tags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "contact": {
+      "type": "object",
+      "description": "Contact information (optional for privacy)",
+      "properties": {
+        "name": {"type": "string"},
+        "email": {"type": "string", "format": "email"},
+        "phone": {"type": "string"},
+        "location": {"type": "string"},
+        "linkedin": {"type": "string"},
+        "website": {"type": "string"}
+      }
+    },
+    "summary": {
+      "type": "string",
+      "description": "Professional summary or objective statement"
+    },
+    "skills": {
+      "type": "object",
+      "description": "Skills organized by category",
+      "properties": {
+        "technical": {"type": "array", "items": {"type": "string"}},
+        "product": {"type": "array", "items": {"type": "string"}},
+        "tools": {"type": "array", "items": {"type": "string"}},
+        "domains": {"type": "array", "items": {"type": "string"}},
+        "soft": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    },
+    "experience": {
+      "type": "array",
+      "description": "Work experience entries",
+      "items": {
+        "type": "object",
+        "required": ["company", "title", "bullets"],
+        "properties": {
+          "company": {"type": "string"},
+          "title": {"type": "string"},
+          "location": {"type": "string"},
+          "start_date": {"type": "string", "description": "YYYY-MM format"},
+          "end_date": {"type": "string", "description": "YYYY-MM or 'present'"},
+          "duration": {"type": "string", "description": "Human-readable duration string"},
+          "description": {"type": "string", "description": "Brief role description"},
+          "bullets": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {
+                  "type": "object",
+                  "required": ["text"],
+                  "properties": {
+                    "text": {"type": "string", "description": "The bullet point text"},
+                    "keywords": {
+                      "type": "array",
+                      "items": {"type": "string"},
+                      "description": "Keywords/skills demonstrated in this bullet"
+                    },
+                    "metrics": {
+                      "type": "object",
+                      "description": "Quantifiable metrics from this bullet",
+                      "additionalProperties": true
+                    },
+                    "category": {
+                      "type": "string",
+                      "description": "Category: leadership, technical, impact, process"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "technologies": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Technologies used in this role"
+          }
+        }
+      }
+    },
+    "education": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["institution"],
+        "properties": {
+          "institution": {"type": "string"},
+          "degree": {"type": "string"},
+          "field": {"type": "string"},
+          "graduation_date": {"type": "string"},
+          "gpa": {"type": "string"},
+          "honors": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "certifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "issuer": {"type": "string"},
+          "date": {"type": "string"},
+          "credential_id": {"type": "string"},
+          "url": {"type": "string"}
+        }
+      }
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "url": {"type": "string"},
+          "technologies": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

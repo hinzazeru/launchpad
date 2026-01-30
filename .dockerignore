@@ -1,0 +1,89 @@
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment and secrets
+.env
+.env.local
+.env.production
+config.yaml
+token.json
+credentials.json
+sheets_token.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+bot_output*.log
+launchd*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large data files
+dataset.json
+dataset_*.json
+test.json
+
+# Development files
+*.md
+!README.md
+*.txt
+!requirements.txt
+!runtime.txt
+
+# Git
+.git/
+.gitignore
+
+# Frontend source (only need dist/)
+frontend/src/
+frontend/node_modules/
+frontend/package-lock.json
+frontend/*.json
+frontend/*.ts
+frontend/*.html
+frontend/*.css
+
+# Misc
+*.jpg
+*.png
+output/
+Review/
+ideas/
+tasks/
+scripts/
+docs/

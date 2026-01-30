@@ -1,0 +1,58 @@
+John Doe
+Senior Product Manager
+john.doe@email.com | (555) 123-4567 | San Francisco, CA
+
+SUMMARY
+Results-driven Senior Product Manager with 8 years of experience leading cross-functional teams to deliver innovative B2B SaaS products. Proven track record in product strategy, roadmapping, and stakeholder management. Expert in Agile methodologies and data-driven decision making.
+
+EXPERIENCE
+
+Senior Product Manager
+Tech Innovations Inc., San Francisco, CA
+2020 - Present
+• Led product strategy and roadmap for flagship B2B SaaS platform serving 500+ enterprise clients
+• Managed cross-functional teams of 15+ engineers, designers, and analysts using Agile/Scrum methodologies
+• Drove 40% increase in user engagement through data-driven A/B testing and experimentation
+• Collaborated with stakeholders to define OKRs and KPIs, improving product-market fit
+• Created comprehensive PRDs and user stories for feature prioritization and backlog management
+• Conducted user research and customer interviews to inform product decisions
+
+Product Manager
+Digital Solutions Co., Palo Alto, CA
+2018 - 2020
+• Owned product lifecycle for mobile iOS and Android applications
+• Implemented go-to-market strategy resulting in 200K+ downloads in first quarter
+• Used SQL and analytics tools for data analysis to drive product improvements
+• Designed wireframes and prototypes using Figma for new feature concepts
+• Coordinated with engineering teams on API integrations and technical requirements
+
+Associate Product Manager
+StartupHub, San Jose, CA
+2016 - 2018
+• Supported senior PM in managing product backlog and sprint planning
+• Conducted competitive analysis and market research
+• Worked with UX/UI designers to improve user experience
+• Utilized Jira and Confluence for project management and documentation
+
+EDUCATION
+
+MBA, Technology Management
+Stanford Graduate School of Business, Stanford, CA
+2014 - 2016
+
+BS, Computer Science
+University of California, Berkeley, CA
+2010 - 2014
+
+SKILLS
+• Product Management: Product Strategy, Roadmapping, Feature Prioritization, Product Launch, GTM Strategy
+• Methodologies: Agile, Scrum, Kanban, User Stories, Sprint Planning
+• Tools: Jira, Confluence, Figma, Asana, SQL
+• Analysis: A/B Testing, Data Analysis, KPIs, OKRs, Metrics, Analytics
+• Technical: API, Cloud (AWS), Machine Learning concepts
+• Domain: B2B, SaaS, Mobile, Web, Platform
+• Soft Skills: Stakeholder Management, Cross-functional Leadership, User Research, PRD Writing
+
+CERTIFICATIONS
+• Certified Scrum Product Owner (CSPO)
+• Google Analytics Certified

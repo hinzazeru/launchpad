@@ -1,0 +1,105 @@
+{
+  "_metadata": {
+    "version": "1.0.0",
+    "description": "Skill relationships for enhanced job matching. Related skills receive partial credit (default 0.7x) when matched.",
+    "usage": "Edit this file to add/modify skill relationships without changing code."
+  },
+  "config": {
+    "related_skill_weight": 0.5,
+    "case_sensitive": false
+  },
+  "relationships": {
+    "product_management": {
+      "product management": ["product owner", "product strategy", "product development"],
+      "product roadmap": ["roadmap", "product strategy", "prioritization", "product vision"],
+      "product strategy": ["product vision", "go-to-market", "product roadmap"],
+      "product owner": ["product management", "scrum", "backlog management"],
+      "prd": ["product requirements", "requirements document", "user stories"],
+      "user stories": ["backlog", "requirements document", "prd"],
+      "backlog management": ["prioritization", "sprint planning", "user stories"],
+      "mvp": ["minimum viable product", "product launch", "beta testing"],
+      "go-to-market": ["gtm", "product launch", "product marketing"]
+    },
+    "metrics_analytics": {
+      "metrics": ["kpis", "okrs", "analytics", "data-driven"],
+      "kpis": ["metrics", "okrs", "performance metrics"],
+      "okrs": ["kpis", "metrics", "goal setting"],
+      "analytics": ["data analysis", "product analytics", "business intelligence"],
+      "data analysis": ["analytics", "sql", "data-driven"],
+      "a/b testing": ["ab testing", "experimentation", "hypothesis testing"],
+      "experimentation": ["a/b testing", "hypothesis testing", "data-driven"],
+      "user research": ["customer research", "customer insights", "ux"],
+      "market research": ["competitive analysis", "market sizing", "customer research"],
+      "product analytics": ["analytics", "funnel analysis", "cohort analysis", "amplitude", "mixpanel"]
+    },
+    "technical": {
+      "sql": ["data analysis", "database", "data warehouse", "analytics"],
+      "python": ["data science", "machine learning", "automation"],
+      "api": ["apis", "rest api", "graphql", "microservices"],
+      "apis": ["api", "rest api", "graphql", "integration"],
+      "rest api": ["api", "graphql", "microservices"],
+      "microservices": ["api", "architecture", "backend"],
+      "architecture": ["system design", "technical architecture", "microservices"],
+      "aws": ["cloud", "azure", "gcp", "infrastructure"],
+      "azure": ["cloud", "aws", "gcp", "infrastructure"],
+      "gcp": ["cloud", "aws", "azure", "google cloud"],
+      "machine learning": ["ml", "artificial intelligence", "ai", "data science"],
+      "ai": ["artificial intelligence", "machine learning", "ml"],
+      "data science": ["machine learning", "python", "analytics", "statistics"],
+      "tableau": ["data visualization", "power bi", "looker", "analytics"],
+      "power bi": ["data visualization", "tableau", "looker", "analytics"],
+      "amplitude": ["product analytics", "mixpanel", "analytics"],
+      "mixpanel": ["product analytics", "amplitude", "analytics"]
+    },
+    "methodologies": {
+      "agile": ["scrum", "kanban", "lean", "sprint"],
+      "scrum": ["agile", "sprint", "sprint planning", "retrospective"],
+      "kanban": ["agile", "lean", "workflow"],
+      "lean": ["agile", "kanban", "continuous improvement"],
+      "sprint": ["scrum", "agile", "sprint planning"],
+      "sprint planning": ["sprint", "scrum", "backlog management"],
+      "jira": ["agile", "project management", "confluence", "asana"],
+      "confluence": ["jira", "documentation", "collaboration"],
+      "design thinking": ["user-centered design", "ux", "innovation"],
+      "ux": ["user experience", "ui", "user-centered design", "design thinking"],
+      "ui": ["user interface", "ux", "design", "figma"],
+      "figma": ["ui", "wireframing", "design", "sketch"],
+      "wireframing": ["figma", "prototyping", "ux", "ui"]
+    },
+    "business": {
+      "b2b": ["enterprise", "saas", "business"],
+      "b2c": ["consumer", "marketplace", "e-commerce"],
+      "saas": ["b2b", "subscription", "cloud", "enterprise"],
+      "enterprise": ["b2b", "saas", "large accounts"],
+      "e-commerce": ["ecommerce", "marketplace", "b2c", "retail"],
+      "fintech": ["financial services", "payments", "banking"],
+      "revenue": ["monetization", "pricing", "business model"],
+      "monetization": ["revenue", "pricing", "business model"],
+      "pricing": ["monetization", "revenue", "unit economics"],
+      "business model": ["monetization", "revenue", "strategy"],
+      "roi": ["business case", "unit economics", "financial analysis"],
+      "market sizing": ["tam", "sam", "som", "market research"]
+    },
+    "collaboration": {
+      "cross-functional": ["cross functional", "stakeholder management", "collaboration"],
+      "stakeholder management": ["stakeholder", "cross-functional", "communication", "alignment"],
+      "leadership": ["team leadership", "mentoring", "coaching", "influence"],
+      "communication": ["presentation", "storytelling", "stakeholder management"],
+      "presentation": ["communication", "storytelling", "executive communication"],
+      "mentoring": ["coaching", "leadership", "team development"],
+      "negotiation": ["influence", "stakeholder management", "conflict resolution"],
+      "influence": ["negotiation", "leadership", "stakeholder management", "executive", "persuasion"],
+      "alignment": ["consensus building", "stakeholder alignment", "stakeholder management", "cross-functional"],
+      "executive": ["c-suite", "leadership", "presentation", "stakeholder management"],
+      "consensus building": ["alignment", "stakeholder management", "collaboration", "negotiation"]
+    },
+    "engineering_partnership": {
+      "engineering": ["engineering team", "development team", "technical team"],
+      "devops": ["ci/cd", "deployment", "infrastructure", "automation"],
+      "qa": ["quality assurance", "testing", "test automation"],
+      "testing": ["qa", "quality assurance", "test automation"],
+      "ci/cd": ["devops", "deployment", "automation", "release management"],
+      "release management": ["deployment", "ci/cd", "devops"]
+    }
+  }
+}

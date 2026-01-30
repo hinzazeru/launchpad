@@ -1,0 +1,199 @@
+# LinkedIn Job Matcher Configuration File
+# Copy this file to config.yaml and fill in your values
+
+# Database Configuration
+database:
+  url: "sqlite:///linkedin_job_matcher.db"  # SQLite database path
+  # For PostgreSQL: "postgresql://user:password@localhost/dbname"
+
+# Apify API Configuration
+apify:
+  api_key: "YOUR_APIFY_API_KEY_HERE"  # Get from https://console.apify.com/account/integrations
+  actor_id: "vulnv/linkedin-jobs-scraper"  # Default actor to use
+
+# Default Job Search Criteria
+search:
+  default_location: "United States"
+  default_max_results: 50
+  default_posted_when: "Past 24 hours"  # Options: "Past 24 hours", "Past week", "Past month", "Any time"
+  default_job_type: "Full-time"  # Options: "Full-time", "Part-time", "Contract", "Temporary", "Internship"
+
+  # You can set default filters here
+  default_experience_level: null  # Options: "Entry level", "Mid-Senior level", "Director", "Executive"
+  default_work_arrangement: null  # Options: "Remote", "Hybrid", "On-site"
+  default_search_radius: null  # Example: "25 miles (40 km)"
+
+# Job Matching Configuration
+matching:
+  # Weights for matching algorithm (must sum to 1.0)
+  weights:
+    skills: 0.45  # Weight for skills match (0.0 - 1.0)
+    experience: 0.35  # Weight for experience match (0.0 - 1.0)
+    domains: 0.20  # Weight for domain match (0.0 - 1.0)
+
+  # Minimum match score threshold (0.0 - 1.0)
+  min_match_score: 0.5
+
+  # Enable strict 24-hour freshness validation
+  enforce_24h_freshness: true
+
+  # Maximum age of job postings to include in matching (in days)
+  # Jobs older than this will be excluded from search results
+  # Set to null or 0 to disable (match all jobs regardless of age)
+  max_job_age_days: 7
+
+# Product Management Skills Dictionary
+# These skills are used to parse resumes and match jobs
+pm_skills:
+  - "Product Management"
+  - "Product Strategy"
+  - "Roadmap Planning"
+  - "Agile"
+  - "Scrum"
+  - "Kanban"
+  - "User Stories"
+  - "Backlog Management"
+  - "Sprint Planning"
+  - "Stakeholder Management"
+  - "Data Analysis"
+  - "SQL"
+  - "A/B Testing"
+  - "User Research"
+  - "UX/UI"
+  - "Wireframing"
+  - "Product Analytics"
+  - "KPIs"
+  - "OKRs"
+  - "Go-to-Market Strategy"
+  - "Competitive Analysis"
+  - "Market Research"
+  - "Product Lifecycle"
+  - "Feature Prioritization"
+  - "Customer Development"
+  - "Product-Market Fit"
+  - "Technical Product Management"
+  - "API Management"
+  - "Cloud Platforms"
+  - "SaaS"
+  - "Mobile Products"
+  - "Web Products"
+
+# Email Notification Configuration
+email:
+  enabled: false  # Set to true to enable email notifications
+  service: "gmail"  # Currently only Gmail with OAuth 2.0 is supported
+  credentials_path: "credentials.json"  # Path to Gmail OAuth credentials
+  token_path: "token.json"  # Path to store OAuth token
+
+  # Email content settings
+  from_address: "your-email@gmail.com"
+  to_address: "your-email@gmail.com"
+  subject_template: "New Job Match: {job_title} at {company}"
+
+  # Notification threshold
+  notify_min_score: 0.7  # Only send emails for matches >= this score
+
+# Google Sheets Integration Configuration
+sheets:
+  enabled: false  # Set to true to enable Google Sheets export
+  spreadsheet_id: "YOUR_SPREADSHEET_ID_HERE"  # Get from spreadsheet URL
+  sheet_name: "Job Matches"  # Name of the sheet to export to
+  credentials_path: "credentials.json"  # Reuse Gmail OAuth credentials
+  token_path: "sheets_token.json"  # Path to store Sheets OAuth token
+
+  # Export settings
+  export_min_score: 0.7  # Only export matches >= this score
+  auto_export: true  # Automatically export high matches after matching
+  include_skill_gaps: true  # Include skill gaps column
+  include_matching_skills: true  # Include matching skills column
+  max_skills_display: 10  # Maximum number of skills to display per cell
+
+# Job Scheduling Configuration
+scheduling:
+  enabled: false  # Set to true to enable scheduled job searches
+  interval_hours: 4  # How often to run the job search (in hours)
+  start_time: "08:00"  # Start of daily search window (HH:MM format, 24-hour)
+  end_time: "22:00"  # End of daily search window
+  active_profile: senior_pm  # Which profile to use for scheduled searches
+  muted: false  # Set to true to disable push notifications (searches still run)
+
+  # Keyword profiles - single keyword per profile to minimize API costs
+  # Each search uses 1 API call, so with interval_hours: 4 = 4 API calls/day
+  profiles:
+    pm:
+      keyword: Product Manager
+    senior_pm:
+      keyword: Senior Product Manager
+    senior_pm_remote:
+      keyword: Senior Product Manager Remote
+    pm_remote:
+      keyword: Product Manager Remote
+
+  # Optional overrides (null = use defaults from search section)
+  search_location: null  # Override default_location
+  max_results: null  # Override default_max_results
+  notify_on_new_matches: true  # Send notifications for new matches
+  only_notify_new: true  # Only notify for matches not previously notified
+
+  # Note: Keywords ending with "Remote" will automatically:
+  # - Strip "Remote" from the search term
+  # - Search for remote positions (work_arrangement = "Remote")
+  # - Search in North America instead of just the default_location
+
+# Resume Configuration
+resume:
+  default_format: "text"  # Options: "text", "markdown"
+  storage_path: "data/resumes/"  # Directory to store resume files
+
+# Import Configuration
+import:
+  # File import settings
+  supported_formats:
+    - "json"
+    - "csv"
+    - "txt"
+    - "pdf"
+
+  # Storage settings
+  store_all_jobs: true  # Store all retrieved jobs in database (for quality control)
+  deduplicate: true  # Enable duplicate detection by title + company
+
+# Logging Configuration
+logging:
+  level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  file_path: "logs/job_matcher.log"
+  console_output: true
+
+# Gemini API Configuration (for LLM-based domain extraction and AI suggestions)
+gemini:
+  enabled: false  # Set to true to enable Gemini features
+  api_key: "YOUR_GEMINI_API_KEY_HERE"  # Get from https://aistudio.google.com/app/apikey
+  model: "gemini-3-flash-preview"  # Main model for match re-ranking. Alt: "gemini-2.5-flash" (stable)
+
+  # Domain Extraction & Summarization (during job import)
+  extractor:
+    model: "gemini-2.0-flash"  # Non-thinking model - faster & cheaper for simple tasks
+    domain_max_tokens: 300     # Max tokens for domain extraction (JSON response)
+    summary_max_tokens: 200    # Max tokens for job summaries (2-3 sentences)
+
+# Resume Targeting / Bullet Rewriting Configuration
+targeting:
+  gemini:
+    # Model for bullet rewriting - uses best reasoning model for high-quality rewrites
+    # Options: "gemini-3-flash-preview" (best), "gemini-2.5-flash", "gemini-2.0-flash" (fastest)
+    model: "gemini-3-flash-preview"
+    temperature: 0.35  # Lower = more consistent, higher = more creative
+    max_tokens: 2048   # Higher for thinking model (uses tokens for reasoning)
+
+# Telegram Bot Configuration
+telegram:
+  enabled: false  # Set to true to enable Telegram bot
+  bot_token: "YOUR_BOT_TOKEN_HERE"  # Get from @BotFather on Telegram
+  allowed_user_id: "YOUR_TELEGRAM_USER_ID"  # Your Telegram user ID for security
+
+# Performance Analytics Configuration
+performance:
+  enabled: true
+  retention_days: 90  # How long to keep detailed metrics
+  cleanup_batch_size: 1000
+

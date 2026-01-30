@@ -1,0 +1,70 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment Variables
+.env
+.env.local
+.env.production
+
+# Configuration Files (contains API keys)
+config.yaml
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# OAuth Credentials (Gmail, Sheets, etc.)
+token.json
+credentials.json
+sheets_token.json
+
+# Logs
+*.log
+
+# Sensitive data files
+dataset.json
+dataset_*.json
+test.json
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# Process files
+*.pid
+.webapp.pid

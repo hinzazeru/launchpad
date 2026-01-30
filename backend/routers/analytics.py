@@ -1,0 +1,783 @@
+"""Analytics router for Resume Targeter API.
+
+Provides aggregated analytics data for the dashboard:
+- Summary metrics (cards)
+- Skills analysis (gaps, matches, in-demand)
+- Market research (companies, locations)
+- Activity timeline
+- Performance metrics
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+from datetime import datetime, timedelta
+from collections import Counter
+from sqlalchemy.orm import Session
+from sqlalchemy import func, case
+from statistics import quantiles
+import threading
+import logging
+import time
+
+from src.database.db import get_db
+from src.database.models import JobPosting, MatchResult, SearchPerformance, APICallMetric
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# Thread-safe in-memory cache with TTL (1 hour)
+_cache: Dict[str, tuple] = {}
+_cache_lock = threading.Lock()
+CACHE_TTL_SECONDS = 3600
+
+
+def _get_cached(key: str):
+    """Get value from cache if not expired (thread-safe)."""
+    with _cache_lock:
+        if key in _cache:
+            value, timestamp = _cache[key]
+            if time.time() - timestamp < CACHE_TTL_SECONDS:
+                return value
+    return None
+
+
+def _set_cached(key: str, value):
+    """Set value in cache with current timestamp (thread-safe)."""
+    with _cache_lock:
+        _cache[key] = (value, time.time())
+
+
+# --- Response Models ---
+
+class SummaryMetrics(BaseModel):
+    """Summary metrics for the top row cards."""
+    total_jobs: int
+    high_matches: int
+    ai_analysed: int
+    avg_score: float
+
+
+class SkillCount(BaseModel):
+    """A skill with its occurrence count."""
+    name: str
+    count: int
+
+
+class SkillsAnalytics(BaseModel):
+    """Skills-related analytics data."""
+    skill_gaps: List[SkillCount]  # Missing domains from high matches
+    matching_skills: List[SkillCount]  # Skills driving matches
+    in_demand_skills: List[SkillCount]  # Required skills from all jobs
+
+
+class CompanyCount(BaseModel):
+    """A company with job count."""
+    name: str
+    count: int
+
+
+class LocationCount(BaseModel):
+    """A location with job count."""
+    name: str
+    count: int
+
+
+class MarketAnalytics(BaseModel):
+    """Market research analytics data."""
+    top_companies: List[CompanyCount]
+    locations: List[LocationCount]
+
+
+class TimelinePoint(BaseModel):
+    """A single point in the timeline."""
+    date: str  # ISO date string (YYYY-MM-DD)
+    jobs_fetched: int
+    matches_generated: int
+
+
+class TimelineAnalytics(BaseModel):
+    """Activity timeline data."""
+    points: List[TimelinePoint]
+
+
+class LatencyMetric(BaseModel):
+    """Latency distribution for an API or pipeline stage."""
+    name: str
+    avg_ms: float
+    p50_ms: float
+    p90_ms: float
+    p99_ms: float
+    count: int
+
+
+class PerformanceSummary(BaseModel):
+    """High-level system performance metrics."""
+    avg_search_duration_ms: float
+    avg_gemini_latency_ms: float
+    search_success_rate: float
+    total_searches_30d: int
+    total_api_calls_30d: int
+    latencies: List[LatencyMetric]
+
+
+class PerformanceTimelinePoint(BaseModel):
+    """A single point in the performance timeline."""
+    date: str
+    avg_ms: float
+    count: int
+
+
+class PerformanceTimeline(BaseModel):
+    """Performance timeline data."""
+    points: List[PerformanceTimelinePoint]
+
+
+class StageMetric(BaseModel):
+    """Timing metric for a pipeline stage."""
+    avg_ms: float
+    pct: float
+
+
+class PerformanceBreakdown(BaseModel):
+    """Stage-by-stage timing breakdown."""
+    stages: Dict[str, StageMetric]
+
+
+class ApiLatencyDetail(BaseModel):
+    """Detailed latency percentiles for an API type."""
+    p50: float
+    p90: float
+    p99: float
+    count: int
+
+
+class RecentSearch(BaseModel):
+    """A recent search result for the table."""
+    search_id: str
+    created_at: str
+    total_duration_ms: Optional[int]
+    jobs_fetched: int
+    jobs_matched: int
+    high_matches: int
+    status: str
+    error_message: Optional[str]
+    trigger_source: str = "manual"  # 'manual' or 'scheduled'
+
+
+class RecentSearchesResponse(BaseModel):
+    """Response for recent searches endpoint."""
+    searches: List[RecentSearch]
+
+
+
+# --- Endpoints ---
+
+@router.get("/summary", response_model=SummaryMetrics)
+async def get_summary(session: Session = Depends(get_db)):
+    """Get summary metrics for the analytics cards.
+
+    Returns:
+    - total_jobs: Total number of jobs scanned
+    - high_matches: Jobs with match score > 70%
+    - ai_analysed: Jobs re-ranked by Gemini
+    - avg_score: Average match score
+    """
+    cached = _get_cached("summary")
+    if cached:
+        return cached
+
+    total_jobs = session.query(JobPosting).count()
+
+    high_matches = (
+        session.query(MatchResult)
+        .filter(MatchResult.match_score > 70)
+        .count()
+    )
+
+    ai_analysed = (
+        session.query(MatchResult)
+        .filter(MatchResult.gemini_score.isnot(None))
+        .count()
+    )
+
+    avg_score_result = session.query(func.avg(MatchResult.match_score)).scalar()
+    avg_score = round(float(avg_score_result), 1) if avg_score_result else 0.0
+
+    result = SummaryMetrics(
+        total_jobs=total_jobs,
+        high_matches=high_matches,
+        ai_analysed=ai_analysed,
+        avg_score=avg_score
+    )
+
+    _set_cached("summary", result)
+    return result
+
+
+@router.get("/skills", response_model=SkillsAnalytics)
+async def get_skills_analytics(
+    top_n: int = 10,
+    session: Session = Depends(get_db)
+):
+    """Get skills-related analytics.
+
+    Returns:
+    - skill_gaps: Most common missing domains from high-match jobs (>60%)
+    - matching_skills: Skills that are driving your matches
+    - in_demand_skills: Most requested skills across all jobs
+    """
+    cache_key = f"skills_{top_n}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    # 1. Skill Gaps - aggregate missing_domains from high matches
+    high_matches = (
+        session.query(MatchResult.missing_domains)
+        .filter(MatchResult.match_score > 60)
+        .filter(MatchResult.missing_domains.isnot(None))
+        .all()
+    )
+
+    gap_counter = Counter()
+    for (domains,) in high_matches:
+        if domains:
+            for domain in domains:
+                gap_counter[domain] += 1
+
+    skill_gaps = [
+        SkillCount(name=name, count=count)
+        for name, count in gap_counter.most_common(top_n)
+    ]
+
+    # 2. Matching Skills - aggregate from MatchResult.matching_skills
+    all_matches = (
+        session.query(MatchResult.matching_skills)
+        .filter(MatchResult.matching_skills.isnot(None))
+        .all()
+    )
+
+    match_counter = Counter()
+    for (skills,) in all_matches:
+        if skills:
+            for skill in skills:
+                match_counter[skill] += 1
+
+    matching_skills = [
+        SkillCount(name=name, count=count)
+        for name, count in match_counter.most_common(top_n)
+    ]
+
+    # 3. In-Demand Skills - aggregate from JobPosting.required_skills
+    all_jobs = (
+        session.query(JobPosting.required_skills)
+        .filter(JobPosting.required_skills.isnot(None))
+        .all()
+    )
+
+    demand_counter = Counter()
+    for (skills,) in all_jobs:
+        if skills:
+            for skill in skills:
+                demand_counter[skill] += 1
+
+    in_demand_skills = [
+        SkillCount(name=name, count=count)
+        for name, count in demand_counter.most_common(top_n)
+    ]
+
+    result = SkillsAnalytics(
+        skill_gaps=skill_gaps,
+        matching_skills=matching_skills,
+        in_demand_skills=in_demand_skills
+    )
+
+    _set_cached(cache_key, result)
+    return result
+
+
+@router.get("/market", response_model=MarketAnalytics)
+async def get_market_analytics(
+    top_n: int = 10,
+    min_score: float = 60,
+    session: Session = Depends(get_db)
+):
+    """Get market research analytics.
+
+    Args:
+    - top_n: Number of top items to return
+    - min_score: Minimum match score to filter jobs
+
+    Returns:
+    - top_companies: Companies with most high-match jobs
+    - locations: Distribution of job locations
+    """
+    cache_key = f"market_{top_n}_{min_score}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    # Get high-match jobs
+    high_match_jobs = (
+        session.query(JobPosting)
+        .join(MatchResult)
+        .filter(MatchResult.match_score >= min_score)
+        .all()
+    )
+
+    # 1. Top Companies
+    company_counter = Counter()
+    for job in high_match_jobs:
+        company_counter[job.company] += 1
+
+    top_companies = [
+        CompanyCount(name=name, count=count)
+        for name, count in company_counter.most_common(top_n)
+    ]
+
+    # 2. Locations
+    location_counter = Counter()
+    for job in high_match_jobs:
+        loc = job.location or "Unknown"
+        # Normalize location (take first part before comma for cleaner grouping)
+        loc_normalized = loc.split(",")[0].strip() if loc else "Unknown"
+        location_counter[loc_normalized] += 1
+
+    locations = [
+        LocationCount(name=name, count=count)
+        for name, count in location_counter.most_common(top_n)
+    ]
+
+    result = MarketAnalytics(
+        top_companies=top_companies,
+        locations=locations
+    )
+
+    _set_cached(cache_key, result)
+    return result
+
+
+@router.get("/timeline", response_model=TimelineAnalytics)
+async def get_timeline_analytics(
+    days: int = 30,
+    session: Session = Depends(get_db)
+):
+    """Get activity timeline for the last N days.
+
+    Returns daily counts of:
+    - jobs_fetched: Jobs imported on that day
+    - matches_generated: Match results created on that day
+    """
+    cache_key = f"timeline_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    cutoff = datetime.now() - timedelta(days=days)
+
+    # Group jobs by import_date
+    jobs_by_day = (
+        session.query(
+            func.date(JobPosting.import_date).label('date'),
+            func.count(JobPosting.id).label('count')
+        )
+        .filter(JobPosting.import_date >= cutoff)
+        .group_by(func.date(JobPosting.import_date))
+        .all()
+    )
+    jobs_dict = {str(row.date): row.count for row in jobs_by_day}
+
+    # Group matches by generated_date
+    matches_by_day = (
+        session.query(
+            func.date(MatchResult.generated_date).label('date'),
+            func.count(MatchResult.id).label('count')
+        )
+        .filter(MatchResult.generated_date >= cutoff)
+        .group_by(func.date(MatchResult.generated_date))
+        .all()
+    )
+    matches_dict = {str(row.date): row.count for row in matches_by_day}
+
+    # Build timeline points for each day
+    points = []
+    current = datetime.now().date()
+    for i in range(days):
+        date = current - timedelta(days=i)
+        date_str = str(date)
+        points.append(TimelinePoint(
+            date=date_str,
+            jobs_fetched=jobs_dict.get(date_str, 0),
+            matches_generated=matches_dict.get(date_str, 0)
+        ))
+
+    # Reverse to have oldest first
+    points.reverse()
+
+    result = TimelineAnalytics(points=points)
+
+    _set_cached(cache_key, result)
+    return result
+
+
+@router.get("/score-distribution")
+async def get_score_distribution(session: Session = Depends(get_db)):
+    """Get match score distribution in buckets.
+
+    Returns counts for buckets: 0-50%, 50-70%, 70-85%, 85%+
+    """
+    cached = _get_cached("score_distribution")
+    if cached:
+        return cached
+
+    # Query all match scores
+    scores = (
+        session.query(MatchResult.match_score)
+        .all()
+    )
+
+    buckets = {
+        "0-50": 0,
+        "50-70": 0,
+        "70-85": 0,
+        "85+": 0
+    }
+
+    for (score,) in scores:
+        if score < 50:
+            buckets["0-50"] += 1
+        elif score < 70:
+            buckets["50-70"] += 1
+        elif score < 85:
+            buckets["70-85"] += 1
+        else:
+            buckets["85+"] += 1
+
+    result = [
+        {"range": k, "count": v}
+        for k, v in buckets.items()
+    ]
+
+    _set_cached("score_distribution", result)
+    return result
+
+
+@router.get("/performance/summary", response_model=PerformanceSummary)
+async def get_performance_summary(session: Session = Depends(get_db)):
+    """Get aggregated system performance metrics (30 days)."""
+    cache_key = "perf_summary"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff_30d = datetime.now() - timedelta(days=30)
+
+        # 1. Search Performance Stats
+        search_stats = (
+            session.query(
+                func.avg(SearchPerformance.total_duration_ms),
+                func.count(SearchPerformance.id),
+                func.sum(
+                    case(
+                        (SearchPerformance.status == 'success', 1),
+                        else_=0
+                    )
+                )
+            )
+            .filter(SearchPerformance.created_at >= cutoff_30d)
+            .first()
+        )
+
+        avg_search_ms = float(search_stats[0] or 0)
+        total_searches = search_stats[1] or 0
+        success_searches = search_stats[2] or 0
+        success_rate = (success_searches / total_searches) if total_searches > 0 else 0.0
+
+        # 2. API Call Stats with real percentiles
+        api_types = (
+            session.query(APICallMetric.call_type)
+            .filter(APICallMetric.created_at >= cutoff_30d)
+            .distinct()
+            .all()
+        )
+
+        total_api_calls = 0
+        gemini_latency = 0.0
+        gemini_count = 0
+        latencies = []
+
+        for (call_type,) in api_types:
+            # Get all durations for this call type to calculate real percentiles
+            durations = [
+                d for (d,) in session.query(APICallMetric.duration_ms)
+                .filter(APICallMetric.call_type == call_type)
+                .filter(APICallMetric.created_at >= cutoff_30d)
+                .filter(APICallMetric.duration_ms.isnot(None))
+                .all()
+            ]
+
+            if not durations:
+                continue
+
+            count = len(durations)
+            total_api_calls += count
+            avg_ms = sum(durations) / count
+
+            # Calculate real percentiles
+            if len(durations) >= 4:
+                sorted_d = sorted(durations)
+                p50 = sorted_d[len(sorted_d) // 2]
+                p90 = sorted_d[int(len(sorted_d) * 0.9)]
+                p99 = sorted_d[int(len(sorted_d) * 0.99)] if len(sorted_d) >= 100 else sorted_d[-1]
+            else:
+                p50 = p90 = p99 = avg_ms
+
+            latencies.append(LatencyMetric(
+                name=call_type,
+                avg_ms=round(avg_ms, 1),
+                p50_ms=round(p50, 1),
+                p90_ms=round(p90, 1),
+                p99_ms=round(p99, 1),
+                count=count
+            ))
+
+            if 'gemini' in call_type:
+                gemini_latency += (avg_ms * count)
+                gemini_count += count
+
+        avg_gemini_latency = (gemini_latency / gemini_count) if gemini_count > 0 else 0.0
+
+        result = PerformanceSummary(
+            avg_search_duration_ms=round(avg_search_ms, 1),
+            avg_gemini_latency_ms=round(avg_gemini_latency, 1),
+            search_success_rate=round(success_rate, 2),
+            total_searches_30d=total_searches,
+            total_api_calls_30d=total_api_calls,
+            latencies=latencies
+        )
+
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching performance summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load performance metrics")
+
+
+@router.get("/performance/timeline", response_model=PerformanceTimeline)
+async def get_performance_timeline(
+    days: int = 30,
+    session: Session = Depends(get_db)
+):
+    """Get daily search duration trends for line chart.
+
+    Returns daily averages of search durations for the specified period.
+    """
+    cache_key = f"perf_timeline_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        daily_stats = (
+            session.query(
+                func.date(SearchPerformance.created_at).label('date'),
+                func.avg(SearchPerformance.total_duration_ms).label('avg_ms'),
+                func.count(SearchPerformance.id).label('count')
+            )
+            .filter(SearchPerformance.created_at >= cutoff)
+            .group_by(func.date(SearchPerformance.created_at))
+            .order_by(func.date(SearchPerformance.created_at))
+            .all()
+        )
+
+        points = [
+            PerformanceTimelinePoint(
+                date=str(row.date),
+                avg_ms=round(float(row.avg_ms or 0), 1),
+                count=row.count
+            )
+            for row in daily_stats
+        ]
+
+        result = PerformanceTimeline(points=points)
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching performance timeline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load performance timeline")
+
+
+@router.get("/performance/breakdown", response_model=PerformanceBreakdown)
+async def get_performance_breakdown(
+    days: int = 7,
+    session: Session = Depends(get_db)
+):
+    """Get stage-by-stage timing breakdown for stacked bar chart.
+
+    Returns average duration and percentage for each pipeline stage.
+    """
+    cache_key = f"perf_breakdown_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        stats = (
+            session.query(
+                func.avg(SearchPerformance.initialize_ms).label('initialize'),
+                func.avg(SearchPerformance.fetch_ms).label('fetch'),
+                func.avg(SearchPerformance.import_ms).label('import_stage'),
+                func.avg(SearchPerformance.match_ms).label('match'),
+                func.avg(SearchPerformance.export_ms).label('export'),
+            )
+            .filter(SearchPerformance.created_at >= cutoff)
+            .first()
+        )
+
+        # Extract values with defaults
+        init_ms = float(stats.initialize or 0)
+        fetch_ms = float(stats.fetch or 0)
+        import_ms = float(stats.import_stage or 0)
+        match_ms = float(stats.match or 0)
+        export_ms = float(stats.export or 0)
+
+        total_ms = init_ms + fetch_ms + import_ms + match_ms + export_ms
+
+        def calc_pct(val):
+            return round((val / total_ms * 100) if total_ms > 0 else 0, 1)
+
+        stages = {
+            "initialize": StageMetric(avg_ms=round(init_ms, 1), pct=calc_pct(init_ms)),
+            "fetch": StageMetric(avg_ms=round(fetch_ms, 1), pct=calc_pct(fetch_ms)),
+            "import": StageMetric(avg_ms=round(import_ms, 1), pct=calc_pct(import_ms)),
+            "match": StageMetric(avg_ms=round(match_ms, 1), pct=calc_pct(match_ms)),
+            "export": StageMetric(avg_ms=round(export_ms, 1), pct=calc_pct(export_ms)),
+        }
+
+        result = PerformanceBreakdown(stages=stages)
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching performance breakdown: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load performance breakdown")
+
+
+@router.get("/performance/api-latency")
+async def get_api_latency(
+    days: int = 7,
+    session: Session = Depends(get_db)
+) -> Dict[str, ApiLatencyDetail]:
+    """Get API latency percentiles for each API type.
+
+    Returns p50, p90, p99 for each API type (gemini, apify, sheets).
+    """
+    cache_key = f"perf_api_latency_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        # Get all unique call types
+        api_types = (
+            session.query(APICallMetric.call_type)
+            .filter(APICallMetric.created_at >= cutoff)
+            .distinct()
+            .all()
+        )
+
+        result = {}
+
+        for (call_type,) in api_types:
+            durations = [
+                d for (d,) in session.query(APICallMetric.duration_ms)
+                .filter(APICallMetric.call_type == call_type)
+                .filter(APICallMetric.created_at >= cutoff)
+                .filter(APICallMetric.duration_ms.isnot(None))
+                .all()
+            ]
+
+            if not durations:
+                continue
+
+            count = len(durations)
+            sorted_d = sorted(durations)
+
+            # Calculate percentiles
+            if len(sorted_d) >= 4:
+                p50 = sorted_d[len(sorted_d) // 2]
+                p90 = sorted_d[int(len(sorted_d) * 0.9)]
+                p99 = sorted_d[int(len(sorted_d) * 0.99)] if len(sorted_d) >= 100 else sorted_d[-1]
+            else:
+                avg = sum(sorted_d) / len(sorted_d)
+                p50 = p90 = p99 = avg
+
+            result[call_type] = ApiLatencyDetail(
+                p50=round(p50, 1),
+                p90=round(p90, 1),
+                p99=round(p99, 1),
+                count=count
+            )
+
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching API latency: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load API latency metrics")
+
+
+@router.get("/performance/recent-searches", response_model=RecentSearchesResponse)
+async def get_recent_searches(
+    limit: int = 20,
+    session: Session = Depends(get_db)
+):
+    """Get recent search history for the searches table.
+
+    Returns the most recent searches with their status and metrics.
+    """
+    cache_key = f"perf_recent_{limit}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        searches = (
+            session.query(SearchPerformance)
+            .order_by(SearchPerformance.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        search_list = [
+            RecentSearch(
+                search_id=s.search_id,
+                created_at=s.created_at.isoformat() if s.created_at else "",
+                total_duration_ms=s.total_duration_ms,
+                jobs_fetched=s.jobs_fetched or 0,
+                jobs_matched=s.jobs_matched or 0,
+                high_matches=s.high_matches or 0,
+                status=s.status or "unknown",
+                error_message=s.error_message,
+                trigger_source=s.trigger_source or "manual"
+            )
+            for s in searches
+        ]
+
+        result = RecentSearchesResponse(searches=search_list)
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching recent searches: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load recent searches")

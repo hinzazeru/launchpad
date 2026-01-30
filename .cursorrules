@@ -1,0 +1,142 @@
+# Cursor AI Rules for LinkedIn Job Matcher
+
+## Project Context
+This is a Python application that automates LinkedIn job searching, matching jobs against resumes using NLP, and sending notifications via Telegram.
+
+## Code Style
+
+### Python
+- Use Python 3.9+ syntax
+- Follow PEP 8 style guidelines
+- Use type hints for all function parameters and return values
+- Use f-strings for string formatting
+- Prefer `pathlib.Path` over `os.path` for file operations
+
+### Imports
+- Group imports: stdlib, third-party, local
+- Use absolute imports from `src.` package
+- Example:
+  ```python
+  import logging
+  from datetime import datetime
+  from typing import Optional, List, Dict, Any
+
+  from telegram import Update
+  from sqlalchemy.orm import Session
+
+  from src.config import get_config
+  from src.database.models import MatchResult
+  ```
+
+## Telegram Bot Patterns
+
+### Command Handlers
+Always follow this pattern for new commands:
+```python
+async def command_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /command - brief description.
+
+    Args:
+        update: Telegram update object
+        context: Callback context
+    """
+    if not self._check_authorization(update):
+        await update.message.reply_text("❌ You are not authorized to use this bot.")
+        return
+
+    try:
+        # Command logic here
+        await update.message.reply_text(message, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in command: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+```
+
+### Markdown Escaping
+ALWAYS escape dynamic content in Telegram messages:
+```python
+from src.bot.telegram_bot import escape_markdown
+
+# Required for any user-provided or database content
+msg = f"Profile: {escape_markdown(profile_name)}"
+```
+
+### Adding New Commands
+1. Add handler in `__init__()`: `self.application.add_handler(CommandHandler("cmd", self.cmd_command))`
+2. Implement the async method
+3. Update `help_command()` message
+4. Update docs: TELEGRAM_BOT.md, ARCHITECTURE.md, SCHEDULER.md
+
+## Database Patterns
+
+### Session Management
+Always close sessions:
+```python
+session = SessionLocal()
+try:
+    # operations
+    session.commit()
+finally:
+    session.close()
+```
+
+### SQLAlchemy 2.0 Style
+Use the new query style:
+```python
+# Preferred
+from sqlalchemy import select
+stmt = select(MatchResult).where(MatchResult.match_score >= 70)
+results = session.execute(stmt).scalars().all()
+
+# Also acceptable (legacy style still works)
+results = session.query(MatchResult).filter(MatchResult.match_score >= 70).all()
+```
+
+## Configuration
+
+### Accessing Config
+```python
+from src.config import get_config
+config = get_config()
+value = config.get("section.key", default_value)
+```
+
+### Adding New Options
+1. Add to `config.yaml.example` with descriptive comments
+2. Document in relevant .md files
+
+## Error Handling
+
+### Logging
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+# Use appropriate levels
+logger.debug("Detailed debugging info")
+logger.info("Normal operation events")
+logger.warning("Something unexpected but handled")
+logger.error("Error occurred", exc_info=True)  # Include traceback
+```
+
+## Testing
+
+- Run bot locally: `python run_telegram_bot.py`
+- Run demos: `python run_matching_demo.py`
+- Unit tests: `pytest tests/`
+
+## Files That Change Together
+
+| Feature Change | Update These Files |
+|---------------|-------------------|
+| New Telegram command | telegram_bot.py, TELEGRAM_BOT.md, ARCHITECTURE.md, SCHEDULER.md |
+| New config option | config.yaml.example, config.py, relevant docs |
+| Database schema | models.py, crud.py, possibly need migration |
+| Matching algorithm | engine.py, skills_matcher.py, ARCHITECTURE.md |
+
+## Common Gotchas
+
+1. **Telegram Markdown parsing**: Unescaped `_`, `*`, `[`, `]` in dynamic content will crash the bot
+2. **Event loop conflicts**: Don't use standalone APScheduler with python-telegram-bot's run_polling()
+3. **SQLite in cloud**: Won't persist - use PostgreSQL for production deployments
+4. **Apify costs**: Each API call costs money - profiles use single keywords to minimize calls

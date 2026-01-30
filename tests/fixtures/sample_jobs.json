@@ -1,0 +1,34 @@
+{
+  "jobs": [
+    {
+      "title": "Senior Product Manager",
+      "company": "TechCorp",
+      "location": "San Francisco, CA",
+      "posting_date": "2024-11-27",
+      "required_skills": ["Product Management", "Agile", "Roadmapping", "Stakeholder Management"],
+      "experience_required": 5,
+      "url": "https://linkedin.com/jobs/123456",
+      "description": "We are seeking an experienced Senior Product Manager to lead our B2B SaaS platform. You will be responsible for product strategy, roadmapping, and cross-functional team leadership."
+    },
+    {
+      "title": "Product Manager",
+      "company": "StartupHub",
+      "location": "Remote",
+      "posting_date": "2024-11-27",
+      "required_skills": ["Product Strategy", "User Research", "A/B Testing", "SQL"],
+      "experience_required": 3,
+      "url": "https://linkedin.com/jobs/789012",
+      "description": "Join our fast-growing startup as a Product Manager. Work on innovative features and drive product-market fit through data-driven experimentation."
+    },
+    {
+      "title": "Technical Product Manager",
+      "company": "CloudTech Inc",
+      "location": "New York, NY",
+      "posting_date": "2024-11-26",
+      "required_skills": ["API", "Cloud", "Machine Learning", "Product Management"],
+      "experience_required": 7,
+      "url": "https://linkedin.com/jobs/345678",
+      "description": "Lead our cloud infrastructure products. Strong technical background required with experience in APIs and ML systems."
+    }
+  ]
+}
