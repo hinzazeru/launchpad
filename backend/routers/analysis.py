@@ -219,7 +219,7 @@ async def analyze_resume(request: AnalyzeRequest):
         # Save metrics
         db_session = SessionLocal()
         try:
-            perf_logger.save(db_session, status='success')
+            perf_logger.save(db_session, status='success', trigger_source='manual')
         finally:
             db_session.close()
 
@@ -228,7 +228,7 @@ async def analyze_resume(request: AnalyzeRequest):
         db_session = SessionLocal()
         try:
             perf_logger.record_api_call('analyze_resume', 0, 'error', error_message=str(e))
-            perf_logger.save(db_session, status='error', error_message=str(e))
+            perf_logger.save(db_session, status='error', trigger_source='manual', error_message=str(e))
         finally:
             db_session.close()
             
@@ -352,16 +352,16 @@ async def generate_suggestions(request: SuggestionsRequest):
         # Save metrics
         db_session = SessionLocal()
         try:
-            perf_logger.save(db_session, status='success')
+            perf_logger.save(db_session, status='success', trigger_source='manual')
         finally:
             db_session.close()
-            
+
     except Exception as e:
         # Save error metrics
         db_session = SessionLocal()
         try:
             perf_logger.record_api_call('gemini_suggestions', 0, 'error', error_message=str(e))
-            perf_logger.save(db_session, status='error', error_message=str(e))
+            perf_logger.save(db_session, status='error', trigger_source='manual', error_message=str(e))
         finally:
             db_session.close()
             

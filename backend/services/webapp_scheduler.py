@@ -4,8 +4,10 @@ APScheduler-based service for running scheduled job searches.
 Integrates with the existing search pipeline and tracks trigger source.
 """
 
+import asyncio
 import logging
-from datetime import datetime, timedelta
+import threading
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 
@@ -39,6 +41,7 @@ class WebAppScheduler:
             timezone=ZoneInfo('America/Toronto')
         )
         self._running = False
+        self._lock = threading.RLock()  # Reentrant lock for nested calls
     
     @property
     def running(self) -> bool:
@@ -55,7 +58,7 @@ class WebAppScheduler:
     def shutdown(self) -> None:
         """Shutdown the scheduler gracefully."""
         if self._running:
-            self._scheduler.shutdown(wait=False)
+            self._scheduler.shutdown(wait=True)
             self._running = False
             logger.info("WebAppScheduler stopped")
     
@@ -88,46 +91,50 @@ class WebAppScheduler:
     
     def add_schedule(self, schedule: ScheduledSearch) -> None:
         """Add a new schedule to the scheduler.
-        
+
         Args:
             schedule: ScheduledSearch model instance
         """
         if not schedule.enabled:
             logger.debug(f"Schedule {schedule.id} is disabled, skipping registration")
             return
-        
-        self._register_schedule_jobs(schedule)
+
+        with self._lock:
+            self._register_schedule_jobs(schedule)
         logger.info(f"Added schedule '{schedule.name}' (id={schedule.id}) with {len(schedule.run_times or [])} daily times")
     
     def remove_schedule(self, schedule_id: int) -> None:
         """Remove a schedule from the scheduler.
-        
+
         Args:
             schedule_id: ID of the schedule to remove
         """
-        # Remove all jobs for this schedule (one per run_time)
-        removed = 0
-        for job in self._scheduler.get_jobs():
-            if job.id.startswith(f"schedule_{schedule_id}_"):
-                job.remove()
-                removed += 1
-        
-        if removed > 0:
-            logger.info(f"Removed {removed} jobs for schedule {schedule_id}")
-        else:
-            logger.debug(f"No jobs found for schedule {schedule_id}")
+        with self._lock:
+            # Remove all jobs for this schedule (one per run_time)
+            removed = 0
+            for job in self._scheduler.get_jobs():
+                if job.id.startswith(f"schedule_{schedule_id}_"):
+                    job.remove()
+                    removed += 1
+
+            if removed > 0:
+                logger.info(f"Removed {removed} jobs for schedule {schedule_id}")
+            else:
+                logger.debug(f"No jobs found for schedule {schedule_id}")
     
     def update_schedule(self, schedule: ScheduledSearch) -> None:
         """Update an existing schedule in the scheduler.
-        
+
         Removes old jobs and adds new ones based on updated config.
-        
+
         Args:
             schedule: Updated ScheduledSearch model instance
         """
-        self.remove_schedule(schedule.id)
-        if schedule.enabled:
-            self.add_schedule(schedule)
+        with self._lock:
+            # Acquire lock for the entire update to make it atomic
+            self.remove_schedule(schedule.id)
+            if schedule.enabled:
+                self.add_schedule(schedule)
     
     def _register_schedule_jobs(self, schedule: ScheduledSearch) -> None:
         """Register APScheduler jobs for a schedule.
@@ -194,7 +201,7 @@ class WebAppScheduler:
             logger.info(f"Executing scheduled search: '{schedule.name}' (id={schedule_id})")
             
             # Update last_run_at
-            schedule.last_run_at = datetime.utcnow()
+            schedule.last_run_at = datetime.now(timezone.utc)
             db.commit()
             
             # Execute the search pipeline
@@ -309,7 +316,7 @@ class WebAppScheduler:
                         try:
                             years = int(year_match[-1]) - int(year_match[0])
                             experience_years += max(0, years)
-                        except:
+                        except ValueError:
                             pass
                     elif 'year' in duration:
                         num_match = re.search(r'(\d+)', duration)
@@ -353,8 +360,26 @@ class WebAppScheduler:
                     split_calls=True
                 )
                 
+                # Deduplicate fetched jobs by (title, company) - split_calls can return duplicates
+                if jobs:
+                    seen_raw = {}
+                    for job in jobs:
+                        try:
+                            norm = importer.normalize_apify_job(job)
+                            title = norm.get('title', '').strip().lower()
+                            company = norm.get('company', '').strip().lower()
+                            dedup_key = (title, company)
+                            if dedup_key not in seen_raw:
+                                seen_raw[dedup_key] = job
+                        except Exception:
+                            continue
+                    duplicate_count = len(jobs) - len(seen_raw)
+                    if duplicate_count > 0:
+                        logger.info(f"Removed {duplicate_count} duplicate jobs from Apify results")
+                    jobs = list(seen_raw.values())
+
                 result['jobs_fetched'] = len(jobs) if jobs else 0
-                
+
                 if not jobs:
                     logger.info(f"No jobs found for scheduled search '{schedule.name}'")
                     result['success'] = True
@@ -383,7 +408,7 @@ class WebAppScheduler:
                 
                 max_job_age_days = config.get("matching.max_job_age_days", 7)
                 if max_job_age_days and max_job_age_days > 0:
-                    cutoff_date = datetime.now() - timedelta(days=max_job_age_days)
+                    cutoff_date = datetime.now(timezone.utc) - timedelta(days=max_job_age_days)
                     query = query.filter(
                         or_(
                             JobPosting.posting_date >= cutoff_date,

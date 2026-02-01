@@ -1,5 +1,7 @@
 import sys
-from unittest.mock import MagicMock
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 # MOCKING MUST HAPPEN BEFORE IMPORTING APP
 # Mock sentence-transformers dependent modules to avoid environment issues and slow loading
@@ -57,10 +59,31 @@ app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(scope="function")
-def client(db_session):
+def test_resume_dir(tmp_path):
+    """Create a temporary directory with test resume files."""
+    resume_dir = tmp_path / "resumes"
+    resume_dir.mkdir()
+
+    # Create test resume files that tests expect
+    test_files = [
+        "test_resume.txt",
+        "test.txt",
+        "resume.txt",
+        "test_resume.md",
+    ]
+    for filename in test_files:
+        (resume_dir / filename).write_text("# Test Resume\n\n## Skills\n- Python\n- FastAPI")
+
+    return resume_dir
+
+
+@pytest.fixture(scope="function")
+def client(db_session, test_resume_dir):
     """Create test client - uses function scope for proper isolation."""
-    with TestClient(app) as c:
-        yield c
+    # Patch the RESUME_LIBRARY_DIR in the scheduler router
+    with patch("backend.routers.scheduler.RESUME_LIBRARY_DIR", test_resume_dir):
+        with TestClient(app) as c:
+            yield c
 
 
 @pytest.fixture(scope="function")

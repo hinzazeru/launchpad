@@ -6,6 +6,7 @@ Defines request/response models for CRUD operations on scheduled searches.
 import re
 from datetime import datetime
 from typing import Optional, List
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -39,6 +40,18 @@ class ScheduleBase(BaseModel):
                     f"Invalid time format: '{time_str}'. Use HH:MM (24-hour format, e.g., '08:00', '14:30')"
                 )
         return sorted(set(v))  # Remove duplicates and sort
+
+    @field_validator('timezone')
+    @classmethod
+    def validate_timezone(cls, v: str) -> str:
+        """Validate that timezone is a valid IANA timezone."""
+        try:
+            ZoneInfo(v)
+        except (KeyError, ValueError):
+            raise ValueError(
+                f"Invalid timezone: '{v}'. Use IANA timezone format (e.g., 'America/Toronto', 'UTC')"
+            )
+        return v
 
 
 class ScheduleCreate(ScheduleBase):
@@ -77,6 +90,20 @@ class ScheduleUpdate(BaseModel):
                     f"Invalid time format: '{time_str}'. Use HH:MM (24-hour format)"
                 )
         return sorted(set(v))
+
+    @field_validator('timezone')
+    @classmethod
+    def validate_timezone(cls, v: Optional[str]) -> Optional[str]:
+        """Validate timezone if provided."""
+        if v is None:
+            return v
+        try:
+            ZoneInfo(v)
+        except (KeyError, ValueError):
+            raise ValueError(
+                f"Invalid timezone: '{v}'. Use IANA timezone format (e.g., 'America/Toronto', 'UTC')"
+            )
+        return v
 
 
 class ScheduleResponse(ScheduleBase):

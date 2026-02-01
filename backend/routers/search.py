@@ -217,7 +217,7 @@ async def search_jobs(request: JobSearchRequest):
                     try:
                         years = int(year_match[-1]) - int(year_match[0])
                         experience_years += max(0, years)
-                    except:
+                    except ValueError:
                         pass
                 # Match "X years" pattern
                 elif 'year' in duration:
@@ -309,6 +309,24 @@ async def search_jobs(request: JobSearchRequest):
                 error=f"Apify API error: {str(e)}"
             ))
             return
+
+        # Deduplicate fetched jobs by (title, company) - split_calls can return duplicates
+        if jobs:
+            seen_raw = {}
+            for job in jobs:
+                try:
+                    norm = importer.normalize_apify_job(job)
+                    title = norm.get('title', '').strip().lower()
+                    company = norm.get('company', '').strip().lower()
+                    dedup_key = (title, company)
+                    if dedup_key not in seen_raw:
+                        seen_raw[dedup_key] = job
+                except Exception:
+                    continue
+            duplicate_count = len(jobs) - len(seen_raw)
+            if duplicate_count > 0:
+                logger.info(f"Removed {duplicate_count} duplicate jobs from Apify results")
+            jobs = list(seen_raw.values())
 
         jobs_fetched = len(jobs) if jobs else 0
 
@@ -651,17 +669,12 @@ async def search_jobs(request: JobSearchRequest):
                 gemini_score=round(match.get('gemini_score', 0) * 100, 1) if match.get('gemini_score') else None
             ))
 
-        # Build fetched jobs preview (top 20)
+        # Build fetched jobs preview (already deduplicated after fetch)
         fetched_jobs = []
         if jobs:
             try:
-                # We reuse the importer (if available) to normalize raw jobs
-                # If importer not available (e.g. error in fetch), jobs is likely empty anyway
                 norm_importer = importer if importer else ApifyJobImporter()
-                
-                count = 0
                 for job in jobs:
-                        
                     try:
                         norm = norm_importer.normalize_apify_job(job)
                         fetched_jobs.append(TopMatch(
@@ -672,7 +685,6 @@ async def search_jobs(request: JobSearchRequest):
                             score=0.0,
                             gemini_score=None
                         ))
-                        count += 1
                     except Exception:
                         continue
             except Exception as e:
@@ -701,7 +713,7 @@ async def search_jobs(request: JobSearchRequest):
             
             db_session = SessionLocal()
             try:
-                perf_logger.save(db_session, status='success')
+                perf_logger.save(db_session, status='success', trigger_source='manual')
             finally:
                 db_session.close()
         except Exception as e:

@@ -5,14 +5,19 @@ with integration to the WebAppScheduler service.
 """
 
 import logging
+from pathlib import Path
 from typing import List
 import uuid
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
-from src.database.db import SessionLocal
+from src.database.db import SessionLocal, get_db
 from src.database.models import ScheduledSearch
+
+# Resume library path for validation
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+RESUME_LIBRARY_DIR = PROJECT_ROOT / "data" / "resumes"
 from backend.schemas.scheduler import (
     ScheduleCreate,
     ScheduleUpdate,
@@ -29,40 +34,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_db():
-    """Get database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 # ============================================================================
 # Schedule CRUD Endpoints
 # ============================================================================
 
 @router.get("/schedules", response_model=ScheduleListResponse)
-async def list_schedules():
+async def list_schedules(db: Session = Depends(get_db)):
     """List all scheduled searches."""
-    db = SessionLocal()
-    try:
-        schedules = db.query(ScheduledSearch).order_by(
-            ScheduledSearch.created_at.desc()
-        ).all()
-        
-        return ScheduleListResponse(
-            schedules=[ScheduleResponse.model_validate(s) for s in schedules],
-            total=len(schedules)
-        )
-    finally:
-        db.close()
+    schedules = db.query(ScheduledSearch).order_by(
+        ScheduledSearch.created_at.desc()
+    ).all()
+
+    return ScheduleListResponse(
+        schedules=[ScheduleResponse.model_validate(s) for s in schedules],
+        total=len(schedules)
+    )
 
 
 @router.post("/schedules", response_model=ScheduleResponse, status_code=201)
-async def create_schedule(schedule: ScheduleCreate):
+async def create_schedule(schedule: ScheduleCreate, db: Session = Depends(get_db)):
     """Create a new scheduled search."""
-    db = SessionLocal()
+    # Validate resume file exists
+    resume_path = RESUME_LIBRARY_DIR / schedule.resume_filename
+    if not resume_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Resume file not found: {schedule.resume_filename}"
+        )
+
     try:
         # Create database record
         db_schedule = ScheduledSearch(
@@ -79,119 +78,118 @@ async def create_schedule(schedule: ScheduleCreate):
             run_times=schedule.run_times,
             timezone=schedule.timezone,
         )
-        
+
         db.add(db_schedule)
         db.commit()
         db.refresh(db_schedule)
-        
+
         # Register with scheduler if enabled
         if schedule.enabled:
             scheduler = get_scheduler()
             if scheduler.running:
                 scheduler.add_schedule(db_schedule)
-        
+
         logger.info(f"Created schedule '{db_schedule.name}' (id={db_schedule.id})")
-        
+
         return ScheduleResponse.model_validate(db_schedule)
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to create schedule: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
 
 
 @router.get("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def get_schedule(schedule_id: int):
+async def get_schedule(schedule_id: int, db: Session = Depends(get_db)):
     """Get details of a specific schedule."""
-    db = SessionLocal()
-    try:
-        schedule = db.query(ScheduledSearch).filter(
-            ScheduledSearch.id == schedule_id
-        ).first()
-        
-        if not schedule:
-            raise HTTPException(status_code=404, detail="Schedule not found")
-        
-        return ScheduleResponse.model_validate(schedule)
-    finally:
-        db.close()
+    schedule = db.query(ScheduledSearch).filter(
+        ScheduledSearch.id == schedule_id
+    ).first()
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    return ScheduleResponse.model_validate(schedule)
 
 
 @router.put("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def update_schedule(schedule_id: int, schedule_update: ScheduleUpdate):
+async def update_schedule(schedule_id: int, schedule_update: ScheduleUpdate, db: Session = Depends(get_db)):
     """Update an existing schedule."""
-    db = SessionLocal()
+    schedule = db.query(ScheduledSearch).filter(
+        ScheduledSearch.id == schedule_id
+    ).first()
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    # Validate resume file if being updated
+    if schedule_update.resume_filename:
+        resume_path = RESUME_LIBRARY_DIR / schedule_update.resume_filename
+        if not resume_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Resume file not found: {schedule_update.resume_filename}"
+            )
+
     try:
-        schedule = db.query(ScheduledSearch).filter(
-            ScheduledSearch.id == schedule_id
-        ).first()
-        
-        if not schedule:
-            raise HTTPException(status_code=404, detail="Schedule not found")
-        
         # Update only provided fields
         update_data = schedule_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             if value is not None:
                 setattr(schedule, field, value)
-        
+
         db.commit()
         db.refresh(schedule)
-        
+
         # Update scheduler registration
         scheduler = get_scheduler()
         if scheduler.running:
             scheduler.update_schedule(schedule)
-        
+
         logger.info(f"Updated schedule '{schedule.name}' (id={schedule.id})")
-        
+
         return ScheduleResponse.model_validate(schedule)
-    
+
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to update schedule {schedule_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
 
 
 @router.delete("/schedules/{schedule_id}", status_code=204)
-async def delete_schedule(schedule_id: int):
+async def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
     """Delete a schedule."""
-    db = SessionLocal()
+    schedule = db.query(ScheduledSearch).filter(
+        ScheduledSearch.id == schedule_id
+    ).first()
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
     try:
-        schedule = db.query(ScheduledSearch).filter(
-            ScheduledSearch.id == schedule_id
-        ).first()
-        
-        if not schedule:
-            raise HTTPException(status_code=404, detail="Schedule not found")
-        
         # Remove from scheduler first
         scheduler = get_scheduler()
         if scheduler.running:
             scheduler.remove_schedule(schedule_id)
-        
+
         # Delete from database
         db.delete(schedule)
         db.commit()
-        
+
         logger.info(f"Deleted schedule (id={schedule_id})")
-        
+
         return None
-    
+
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to delete schedule {schedule_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
 
 
 # ============================================================================
@@ -199,30 +197,29 @@ async def delete_schedule(schedule_id: int):
 # ============================================================================
 
 @router.post("/schedules/{schedule_id}/toggle", response_model=ScheduleToggleResponse)
-async def toggle_schedule(schedule_id: int):
+async def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
     """Toggle a schedule's enabled status."""
-    db = SessionLocal()
+    schedule = db.query(ScheduledSearch).filter(
+        ScheduledSearch.id == schedule_id
+    ).first()
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
     try:
-        schedule = db.query(ScheduledSearch).filter(
-            ScheduledSearch.id == schedule_id
-        ).first()
-        
-        if not schedule:
-            raise HTTPException(status_code=404, detail="Schedule not found")
-        
         # Toggle enabled status
         schedule.enabled = not schedule.enabled
         db.commit()
         db.refresh(schedule)
-        
+
         # Update scheduler registration
         scheduler = get_scheduler()
         if scheduler.running:
             scheduler.update_schedule(schedule)
-        
+
         status_text = "enabled" if schedule.enabled else "disabled"
         logger.info(f"Schedule '{schedule.name}' (id={schedule_id}) {status_text}")
-        
+
         return ScheduleToggleResponse(
             id=schedule.id,
             name=schedule.name,
@@ -230,70 +227,58 @@ async def toggle_schedule(schedule_id: int):
             next_run_at=schedule.next_run_at,
             message=f"Schedule {status_text}"
         )
-    
+
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to toggle schedule {schedule_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
 
 
 @router.post("/schedules/{schedule_id}/run-now", response_model=ScheduleRunNowResponse)
-async def run_schedule_now(schedule_id: int, background_tasks: BackgroundTasks):
+async def run_schedule_now(schedule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Trigger an immediate run of a schedule.
-    
+
     The search runs in the background and returns immediately with a search ID
     that can be used to track progress.
     """
-    db = SessionLocal()
-    try:
-        schedule = db.query(ScheduledSearch).filter(
-            ScheduledSearch.id == schedule_id
-        ).first()
-        
-        if not schedule:
-            raise HTTPException(status_code=404, detail="Schedule not found")
-        
-        # Generate search ID for tracking
-        search_id = str(uuid.uuid4())
-        
-        # Get scheduler and trigger background execution
-        scheduler = get_scheduler()
-        
-        if not scheduler.running:
-            raise HTTPException(
-                status_code=503,
-                detail="Scheduler is not running"
-            )
-        
-        # Run in background
-        async def run_search():
-            try:
-                await scheduler.execute_scheduled_search(schedule_id)
-            except Exception as e:
-                logger.error(f"Background search failed: {e}")
-        
-        background_tasks.add_task(run_search)
-        
-        logger.info(f"Triggered immediate run for schedule '{schedule.name}' (search_id={search_id})")
-        
-        return ScheduleRunNowResponse(
-            id=schedule.id,
-            name=schedule.name,
-            message="Search started in background",
-            search_id=search_id
+    schedule = db.query(ScheduledSearch).filter(
+        ScheduledSearch.id == schedule_id
+    ).first()
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    # Generate search ID for tracking
+    search_id = str(uuid.uuid4())
+
+    # Get scheduler and trigger background execution
+    scheduler = get_scheduler()
+
+    if not scheduler.running:
+        raise HTTPException(
+            status_code=503,
+            detail="Scheduler is not running"
         )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to trigger schedule {schedule_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+
+    # Run in background
+    async def run_search():
+        try:
+            await scheduler.execute_scheduled_search(schedule_id)
+        except Exception as e:
+            logger.error(f"Background search failed: {e}", exc_info=True)
+
+    background_tasks.add_task(run_search)
+
+    logger.info(f"Triggered immediate run for schedule '{schedule.name}' (search_id={search_id})")
+
+    return ScheduleRunNowResponse(
+        id=schedule.id,
+        name=schedule.name,
+        message="Search started in background",
+        search_id=search_id
+    )
 
 
 # ============================================================================

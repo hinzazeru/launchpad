@@ -167,6 +167,9 @@ class ScheduledSearch(Base):
     next_run_at = Column(DateTime, nullable=True)
     last_run_status = Column(String(20), nullable=True)  # 'success' | 'error'
 
+    # Relationships
+    search_runs = relationship("SearchPerformance", back_populates="scheduled_search")
+
     def __repr__(self):
         return f"<ScheduledSearch(id={self.id}, name='{self.name}', keyword='{self.keyword}', enabled={self.enabled})>"
 
@@ -210,6 +213,9 @@ class SearchPerformance(Base):
     # Error tracking
     error_stage = Column(String(50), nullable=True)
     error_message = Column(Text, nullable=True)
+
+    # Relationships
+    scheduled_search = relationship("ScheduledSearch", back_populates="search_runs")
 
     def __repr__(self):
         return f"<SearchPerformance(id={self.id}, status='{self.status}', duration={self.total_duration_ms}ms)>"
