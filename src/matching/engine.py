@@ -4,13 +4,17 @@ This module orchestrates the job matching process by combining skills matching
 (NLP-based semantic similarity), experience matching (rule-based years comparison),
 and domain matching (industry expertise alignment) to produce an overall compatibility score.
 
-Score Calculation:
+Supports two matching modes:
+- NLP: Traditional embedding-based matching (faster, free, good accuracy)
+- Gemini: AI-powered matching with richer insights (higher accuracy, costs per call)
+
+Score Calculation (NLP mode):
     Overall Score = (Skills × skills_weight) + (Experience × experience_weight) + (Domains × domains_weight)
 
     Default weights: skills=0.45, experience=0.35, domains=0.20 (configurable in config.yaml).
 
 Key Classes:
-    JobMatcher: Main matching orchestrator that combines skills, experience, and domain scores
+    JobMatcher: Main matching orchestrator that supports both NLP and Gemini modes
 
 Key Functions:
     create_job_matcher(): Factory function to create a JobMatcher instance
@@ -19,15 +23,20 @@ Usage Example:
     >>> from src.matching.engine import JobMatcher
     >>> from src.database.models import Resume, JobPosting
     >>>
+    >>> # NLP mode (default)
     >>> matcher = JobMatcher()
     >>> result = matcher.match_job(resume, job_posting)
+    >>>
+    >>> # Gemini mode (richer insights)
+    >>> matcher = JobMatcher(mode="gemini")
+    >>> result = matcher.match_job(resume, job_posting)
     >>> print(f"Match score: {result['overall_score'] * 100}%")
-    >>> print(f"Matching skills: {result['matching_skills']}")
-    >>> print(f"Skill gaps: {result['skill_gaps']}")
-    >>> print(f"Missing domains: {result['missing_domains']}")
+    >>> print(f"Strengths: {result.get('ai_strengths', [])}")
+    >>> print(f"Recommendations: {result.get('ai_recommendations', [])}")
 
 Configuration (config.yaml):
     matching:
+      engine: "auto"  # "nlp", "gemini", or "auto"
       weights:
         skills: 0.45      # Weight for skills match
         experience: 0.35  # Weight for experience match
@@ -48,27 +57,60 @@ logger = logging.getLogger(__name__)
 
 
 class JobMatcher:
-    """Job matching engine that scores jobs against a resume."""
+    """Job matching engine that scores jobs against a resume.
 
-    def __init__(self, skills_matcher: Optional[SkillsMatcher] = None, preload_cache: bool = True):
+    Supports two matching modes:
+    - "nlp": Traditional NLP-based matching (default, free, fast)
+    - "gemini": AI-powered matching with richer insights (higher accuracy, costs per call)
+    - "auto": Use Gemini if available and job has structured requirements, else NLP
+    """
+
+    def __init__(
+        self,
+        skills_matcher: Optional[SkillsMatcher] = None,
+        preload_cache: bool = True,
+        mode: str = "auto"
+    ):
         """Initialize job matcher.
 
         Args:
             skills_matcher: SkillsMatcher instance. If None, creates a new one.
             preload_cache: If True, pre-cache skill dictionary embeddings for performance.
+            mode: Matching mode - "nlp", "gemini", or "auto" (default).
         """
-        # Pre-load skill dictionary embeddings for faster matching
+        self.config = get_config()
+
+        # Determine mode from config if not explicitly set
+        self.mode = mode
+        if mode == "auto":
+            self.mode = self.config.get("matching.engine", "auto")
+
+        # Always initialize NLP matcher (used as fallback)
         if skills_matcher:
             self.skills_matcher = skills_matcher
         elif preload_cache:
             logger.info("Initializing JobMatcher with pre-cached skill embeddings...")
-            # Convert set to list for the skill dictionary
             skill_list = list(ALL_SKILLS)
             self.skills_matcher = SkillsMatcher(preload_skills=skill_list)
         else:
             self.skills_matcher = SkillsMatcher()
 
-        self.config = get_config()
+        # Initialize Gemini matcher if mode allows
+        self.gemini_matcher = None
+        if self.mode in ("gemini", "auto"):
+            try:
+                from src.matching.gemini_matcher import GeminiMatcher
+                matcher = GeminiMatcher()
+                if matcher.is_available():
+                    self.gemini_matcher = matcher
+                    logger.info(f"GeminiMatcher initialized (mode={self.mode})")
+                elif self.mode == "gemini":
+                    logger.warning("Gemini mode requested but not available, falling back to NLP")
+                    self.mode = "nlp"
+            except Exception as e:
+                logger.warning(f"Failed to initialize GeminiMatcher: {e}")
+                if self.mode == "gemini":
+                    self.mode = "nlp"
 
         # Get matching weights from config
         weights = self.config.get_matching_weights()
@@ -91,6 +133,98 @@ class JobMatcher:
         if resume_skills:
             return self.skills_matcher.preload_embeddings(resume_skills)
         return 0
+
+    def _should_use_gemini(self, job: JobPosting) -> bool:
+        """Determine if Gemini should be used for this job.
+
+        Args:
+            job: JobPosting to evaluate
+
+        Returns:
+            True if Gemini should be used
+        """
+        if self.mode == "nlp":
+            return False
+
+        if self.mode == "gemini":
+            return self.gemini_matcher is not None
+
+        # Auto mode: prefer Gemini when available
+        if self.gemini_matcher is None:
+            return False
+
+        # Use Gemini for all jobs in auto mode (structured requirements improve accuracy but aren't required)
+        return True
+
+    def _match_with_gemini(
+        self,
+        resume: Resume,
+        job: JobPosting
+    ) -> Optional[Dict]:
+        """Match using Gemini AI.
+
+        Args:
+            resume: Resume object
+            job: JobPosting object
+
+        Returns:
+            Match result dict or None if failed
+        """
+        if not self.gemini_matcher:
+            return None
+
+        # Get structured requirements if available
+        structured_requirements = getattr(job, 'structured_requirements', None)
+
+        # Get recent roles from resume job_titles
+        recent_roles = resume.job_titles[:5] if resume.job_titles else []
+
+        result = self.gemini_matcher.match_job(
+            resume_skills=resume.skills or [],
+            experience_years=resume.experience_years or 0,
+            resume_domains=resume.domains or [],
+            recent_roles=recent_roles,
+            job_title=job.title,
+            company=job.company,
+            job_description=job.description or "",
+            structured_requirements=structured_requirements,
+            use_batch_model=False  # Use best model for single matches
+        )
+
+        if result:
+            # Convert GeminiMatchResult to dict format matching NLP output
+            return {
+                'overall_score': result.overall_score / 100,  # Convert to 0-1 scale
+                'skills_score': result.skills_score / 100,
+                'experience_score': result.experience_score / 100,
+                'domain_score': result.domain_score / 100,
+                'seniority_fit': result.seniority_fit / 100,
+                'matching_skills': [m.resume_skill for m in result.skill_matches],
+                'skill_gaps': [g.skill for g in result.skill_gaps],
+                'matching_domains': [],  # Not tracked separately in AI mode
+                'missing_domains': [],
+                'match_details': {},
+                'extracted_skills': [],
+                'resume_years': resume.experience_years or 0,
+                'job_years_required': job.experience_required,
+                'engine_version': self.engine_version,
+                # AI-specific fields
+                'match_engine': 'gemini',
+                'ai_match_score': result.overall_score,
+                'ai_skills_score': result.skills_score,
+                'ai_experience_score': result.experience_score,
+                'ai_seniority_fit': result.seniority_fit,
+                'ai_domain_score': result.domain_score,
+                'ai_strengths': result.strengths,
+                'ai_concerns': result.concerns,
+                'ai_recommendations': result.recommendations,
+                'skill_matches': [m.to_dict() for m in result.skill_matches],
+                'skill_gaps_detailed': [g.to_dict() for g in result.skill_gaps],
+                'match_confidence': result.confidence,
+                'gemini_reasoning': result.reasoning,
+            }
+
+        return None
 
     def calculate_experience_match(
         self,
@@ -177,14 +311,16 @@ class JobMatcher:
         self,
         resume: Resume,
         job: JobPosting,
-        skills_threshold: float = 0.5
+        skills_threshold: float = 0.5,
+        force_nlp: bool = False
     ) -> Dict:
         """Match a single job against a resume.
 
         Args:
             resume: Resume object from database
             job: JobPosting object from database
-            skills_threshold: Minimum similarity for skill matching
+            skills_threshold: Minimum similarity for skill matching (NLP mode)
+            force_nlp: Force NLP mode even if Gemini is available
 
         Returns:
             Dictionary with match results:
@@ -197,6 +333,42 @@ class JobMatcher:
                 - matching_domains: List of matched domains
                 - missing_domains: List of required domains not in resume
                 - match_details: Detailed skill matching info
+                - match_engine: "nlp" or "gemini"
+
+            AI mode includes additional fields:
+                - ai_strengths: List of candidate strengths
+                - ai_concerns: List of concerns
+                - ai_recommendations: List of recommendations
+                - skill_matches: Detailed skill match analysis
+                - skill_gaps_detailed: Detailed gap analysis with transferability
+        """
+        # Try Gemini matching if appropriate
+        if not force_nlp and self._should_use_gemini(job):
+            try:
+                ai_result = self._match_with_gemini(resume, job)
+                if ai_result:
+                    return ai_result
+            except Exception as e:
+                logger.warning(f"Gemini matching failed for '{job.title}', falling back to NLP: {e}")
+
+        # Fall back to NLP matching
+        return self._match_with_nlp(resume, job, skills_threshold)
+
+    def _match_with_nlp(
+        self,
+        resume: Resume,
+        job: JobPosting,
+        skills_threshold: float = 0.5
+    ) -> Dict:
+        """Match using NLP-based semantic similarity (original algorithm).
+
+        Args:
+            resume: Resume object from database
+            job: JobPosting object from database
+            skills_threshold: Minimum similarity for skill matching
+
+        Returns:
+            Dictionary with match results
         """
         # Extract skills from job description (preferred over LinkedIn tags)
         extracted_skills = extract_skills_from_description(job.description or "")
@@ -254,10 +426,11 @@ class JobMatcher:
             'matching_domains': matching_domains,
             'missing_domains': missing_domains,
             'match_details': match_details,
-            'extracted_skills': extracted_skills,  # Include for debugging
+            'extracted_skills': extracted_skills,
             'resume_years': resume.experience_years or 0,
             'job_years_required': job.experience_required,
             'engine_version': self.engine_version,
+            'match_engine': 'nlp',
         }
 
     def match_jobs(
@@ -334,7 +507,7 @@ class JobMatcher:
             # Convert score from 0-1 to 0-100 format for database storage
             score_as_percentage = match['overall_score'] * 100
 
-            # Convert Gemini score from 0-1 to 0-100 (if present)
+            # Convert Gemini score from 0-1 to 0-100 (if present - for old re-ranker)
             gemini_score = match.get('gemini_score')
             if gemini_score is not None:
                 gemini_score = gemini_score * 100
@@ -347,6 +520,24 @@ class JobMatcher:
             else:
                 experience_alignment_text = f"Resume: {resume_years} years, Required: Not specified"
 
+            # Prepare AI-specific fields (if using Gemini matching)
+            ai_fields = {}
+            if match.get('match_engine') == 'gemini':
+                ai_fields = {
+                    'ai_match_score': match.get('ai_match_score'),
+                    'skills_score': match.get('ai_skills_score'),
+                    'experience_score': match.get('ai_experience_score'),
+                    'seniority_fit': match.get('ai_seniority_fit'),
+                    'domain_score': match.get('ai_domain_score'),
+                    'ai_strengths': match.get('ai_strengths'),
+                    'ai_concerns': match.get('ai_concerns'),
+                    'ai_recommendations': match.get('ai_recommendations'),
+                    'skill_matches': match.get('skill_matches'),
+                    'skill_gaps_detailed': match.get('skill_gaps_detailed'),
+                    'match_engine': 'gemini',
+                    'match_confidence': match.get('match_confidence'),
+                }
+
             result = crud.create_match_result(
                 db=db_session,
                 job_id=match['job_id'],
@@ -357,7 +548,8 @@ class JobMatcher:
                 engine_version=match.get('engine_version'),
                 gemini_score=gemini_score,
                 gemini_reasoning=match.get('gemini_reasoning'),
-                missing_domains=match.get('missing_domains')
+                missing_domains=match.get('missing_domains'),
+                **ai_fields
             )
             saved_results.append(result)
 
@@ -366,15 +558,17 @@ class JobMatcher:
 
 def create_job_matcher(
     skills_matcher: Optional[SkillsMatcher] = None,
-    preload_cache: bool = True
+    preload_cache: bool = True,
+    mode: str = "auto"
 ) -> JobMatcher:
     """Factory function to create a JobMatcher instance.
 
     Args:
         skills_matcher: Optional SkillsMatcher instance
         preload_cache: If True, pre-cache skill dictionary embeddings
+        mode: Matching mode - "nlp", "gemini", or "auto"
 
     Returns:
         JobMatcher instance
     """
-    return JobMatcher(skills_matcher=skills_matcher, preload_cache=preload_cache)
+    return JobMatcher(skills_matcher=skills_matcher, preload_cache=preload_cache, mode=mode)

@@ -258,6 +258,7 @@ def create_match_result(
     gemini_score: Optional[float] = None,
     gemini_reasoning: Optional[str] = None,
     missing_domains: Optional[List[str]] = None,
+    **kwargs
 ) -> MatchResult:
     """Create a new match result.
 
@@ -272,6 +273,7 @@ def create_match_result(
         gemini_score: Gemini LLM re-ranking score (0-100)
         gemini_reasoning: Gemini's explanation for the match quality
         missing_domains: List of required domains the candidate lacks
+        **kwargs: Additional AI matching fields (ai_match_score, ai_strengths, etc.)
 
     Returns:
         MatchResult: Created match result object
@@ -286,6 +288,19 @@ def create_match_result(
         gemini_score=gemini_score,
         gemini_reasoning=gemini_reasoning,
         missing_domains=missing_domains,
+        # AI matching fields (pass through from kwargs)
+        ai_match_score=kwargs.get('ai_match_score'),
+        skills_score=kwargs.get('skills_score'),
+        experience_score=kwargs.get('experience_score'),
+        seniority_fit=kwargs.get('seniority_fit'),
+        domain_score=kwargs.get('domain_score'),
+        ai_strengths=kwargs.get('ai_strengths'),
+        ai_concerns=kwargs.get('ai_concerns'),
+        ai_recommendations=kwargs.get('ai_recommendations'),
+        skill_matches=kwargs.get('skill_matches'),
+        skill_gaps_detailed=kwargs.get('skill_gaps_detailed'),
+        match_engine=kwargs.get('match_engine', 'nlp'),
+        match_confidence=kwargs.get('match_confidence'),
     )
     db.add(match)
     db.commit()

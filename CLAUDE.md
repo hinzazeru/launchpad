@@ -6,8 +6,8 @@ This file provides context for AI assistants (Claude, GPT, Copilot, etc.) workin
 
 LinkedIn Job Matcher is a Python application that automates job discovery by:
 1. Fetching job postings from LinkedIn via Apify API
-2. Matching jobs against a user's resume using NLP
-3. **Advanced AI Features**: Rewriting resume bullets for specific jobs, saving liked rewrites, and persisting AI analysis.
+2. **Dual-Mode Matching**: Jobs matched against resume using NLP (fast, free) or Gemini AI (accurate, rich insights)
+3. **Advanced AI Features**: AI-powered match analysis with strengths/concerns/recommendations, resume bullet rewrites, and persistent AI suggestions
 4. Sending notifications via Telegram and exporting to Google Sheets
 
 ## Architecture Quick Reference
@@ -17,7 +17,9 @@ src/
 ├── bot/telegram_bot.py      # Telegram bot commands and handlers
 ├── scheduler/job_scheduler.py # Job scheduling logic (uses Telegram JobQueue)
 ├── matching/
-│   ├── engine.py            # Main matching orchestrator
+│   ├── engine.py            # Main matching orchestrator (dual-mode: NLP/Gemini)
+│   ├── gemini_matcher.py    # AI-powered matching with Gemini LLM
+│   ├── requirements.py      # StructuredRequirements & GeminiMatchResult dataclasses
 │   ├── skills_matcher.py    # NLP-based skill matching (sentence-transformers)
 │   └── skill_extractor.py   # Extracts skills from job descriptions
 ├── database/
@@ -55,19 +57,30 @@ frontend/src/
 
 3. **Markdown Escaping**: Dynamic content in Telegram messages must be escaped using `escape_markdown()` in `telegram_bot.py` to prevent parse errors.
 
-4. **Match Score Formula**: `Overall = (Skills × 0.45) + (Experience × 0.35) + (Domains × 0.20)`. Handles missing data with neutral scores (0.5).
+4. **Dual-Mode Matching Engine**: Supports three modes via `matching.engine` config:
+   - `"nlp"` - Fast, free NLP matching using sentence-transformers
+   - `"gemini"` - Full AI matching with rich insights (strengths, concerns, recommendations)
+   - `"auto"` (default) - Uses Gemini if available/configured, falls back to NLP
 
-5. **Location-Aware Matching**: Regular searches filter jobs by configured location (e.g., Canada). Remote searches skip location filtering since remote jobs can be listed from anywhere.
+5. **NLP Match Score Formula**: `Overall = (Skills × 0.45) + (Experience × 0.35) + (Domains × 0.20)`. Handles missing data with neutral scores (0.5).
 
-6. **Job Freshness Filter**: Only matches jobs posted within `max_job_age_days` (default: 7 days) to focus on recent listings and avoid stale month-old postings.
+6. **AI Match Insights**: When using Gemini matcher, each match includes:
+   - Component scores (skills, experience, seniority, domain)
+   - Skill matches with confidence levels
+   - Skill gaps with transferability analysis
+   - Strengths, concerns, and application recommendations
 
-7. **Persistent AI Suggestions**: AI-generated bullet point rewrites are saved to the database (`MatchResult.bullet_suggestions`) automatically. This prevents re-running expensive LLM calls when revisiting a job match.
+7. **Location-Aware Matching**: Regular searches filter jobs by configured location (e.g., Canada). Remote searches skip location filtering since remote jobs can be listed from anywhere.
 
-8. **Role-Aligned Suggestions**: Saved AI suggestions are mapped to resume roles using a composite key (`Company_Title`), ensuring they attach to the correct experience even if resume order changes.
+8. **Job Freshness Filter**: Only matches jobs posted within `max_job_age_days` (default: 7 days) to focus on recent listings and avoid stale month-old postings.
 
-9. **Global Search State (Zustand)**: The "Get Jobs" search state is managed via Zustand (`frontend/src/stores/searchStore.ts`) so searches persist across page navigation. A floating `SearchStatusIndicator` shows progress on all pages when a search is running.
+9. **Persistent AI Suggestions**: AI-generated bullet point rewrites are saved to the database (`MatchResult.bullet_suggestions`) automatically. This prevents re-running expensive LLM calls when revisiting a job match.
 
-10. **Performance Logging**: All critical operations (Search, AI Analysis) are wrapped with `PerformanceLogger` contexts. Metrics are persisted to SQLite for the `/analytics/performance` dashboard.
+10. **Role-Aligned Suggestions**: Saved AI suggestions are mapped to resume roles using a composite key (`Company_Title`), ensuring they attach to the correct experience even if resume order changes.
+
+11. **Global Search State (Zustand)**: The "Get Jobs" search state is managed via Zustand (`frontend/src/stores/searchStore.ts`) so searches persist across page navigation. A floating `SearchStatusIndicator` shows progress on all pages when a search is running.
+
+12. **Performance Logging**: All critical operations (Search, AI Analysis) are wrapped with `PerformanceLogger` contexts. Metrics are persisted to SQLite for the `/analytics/performance` dashboard.
 
 ## Common Tasks
 
@@ -94,10 +107,17 @@ frontend/src/
 
 ### Modifying Match Algorithm
 
+**NLP Matching (traditional)**:
 - Skills matching: `src/matching/skills_matcher.py`
 - Experience matching: `src/matching/engine.py` → `_calculate_experience_score()`
 - Skill extraction dictionary: `src/matching/skill_extractor.py` → `SKILL_DICTIONARY`
 - **Skill relationships**: `data/skill_relationships.json` (edit without code changes)
+
+**AI Matching (Gemini)**:
+- Matching prompts: `src/matching/gemini_matcher.py` → `MATCHING_PROMPT`
+- Data structures: `src/matching/requirements.py` → `GeminiMatchResult`, `StructuredRequirements`
+- Engine mode selection: `src/matching/engine.py` → `_should_use_gemini()`
+- Requirements extraction: `src/integrations/gemini_client.py` → `GeminiRequirementsExtractor`
 
 ### Skill Relationships
 
@@ -173,7 +193,9 @@ When modifying features, these files often need synchronized updates:
 |--------|-----------------|
 | New Telegram command | `telegram_bot.py`, `TELEGRAM_BOT.md`, `ARCHITECTURE.md`, `SCHEDULER.md` |
 | New config option | `config.yaml.example`, `config.py`, relevant docs |
-| Matching algorithm | `engine.py`, `skills_matcher.py`, `ARCHITECTURE.md` |
+| NLP matching algorithm | `engine.py`, `skills_matcher.py`, `ARCHITECTURE.md` |
+| AI matching algorithm | `gemini_matcher.py`, `requirements.py`, `engine.py`, `ARCHITECTURE.md` |
+| AI match insights UI | `api.ts` (types), `JobMatches.tsx`, `Dashboard.tsx` |
 | Database schema | `models.py`, `crud.py`, may need migration |
 
 ## Known Limitations

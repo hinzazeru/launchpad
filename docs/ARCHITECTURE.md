@@ -111,7 +111,9 @@
 | `components/SearchStatusIndicator.tsx` | Floating progress indicator shown on all pages during active search |
 | `components/analytics/PerformanceTab.tsx` | Latency and success charts for system performance |
 | `pages/GetJobs.tsx` | Job search page consuming global search state |
-| `services/api.ts` | API client with React Query hooks and types |
+| `pages/JobMatches.tsx` | Match results with AI insights panel, score tooltips, aggregated insights |
+| `pages/Dashboard.tsx` | Resume analysis with AI match context when selecting jobs |
+| `services/api.ts` | API client with React Query hooks and AI match types |
 
 ### 2. BACKEND (FastAPI)
 
@@ -125,7 +127,9 @@
 | **Telegram Bot** | `src/bot/telegram_bot.py` | Command handling, user interaction |
 | **Job Scheduler** | `src/scheduler/job_scheduler.py` | Automated background scheduling |
 | **API Importer** | `src/importers/api_importer.py` | Fetch jobs from Apify |
-| **Job Matcher** | `src/matching/engine.py` | Calculate match scores |
+| **Job Matcher** | `src/matching/engine.py` | Orchestrate matching (dual-mode) |
+| **AI Matcher** | `src/matching/gemini_matcher.py` | Gemini-based AI matching |
+| **Match Types** | `src/matching/requirements.py` | Data structures for AI results |
 | **Resume Parser** | `src/resume/parser.py` | Parse text/PDF/JSON resumes |
 
 ### 3. STORAGE
@@ -195,11 +199,17 @@ NOTE: Search continues running even if user navigates away from GetJobs page.
 
 ## Match Score Calculation
 
+The system supports **dual-mode matching** configurable via `matching.engine`:
+
+### Mode 1: NLP Matching (`engine: "nlp"`)
+
+Fast, free matching using traditional NLP techniques:
+
 ```
 Overall Score = (Skills × 0.45) + (Experience × 0.35) + (Domains × 0.20)
 
 1. Skills Score (NLP):
-   - Semantic similarity using `sentence-transformers`
+   - Semantic similarity using `sentence-transformers` (all-MiniLM-L6-v2)
    - Compares job description skills vs resume skills
 
 2. Experience Score:
@@ -207,10 +217,54 @@ Overall Score = (Skills × 0.45) + (Experience × 0.35) + (Domains × 0.20)
    - Seniority level matching
    - Generates alignment text (e.g., "Resume: 5 years, Required: 3 years")
 
-3. Domain Score (AI):
+3. Domain Score:
    - Gemini LLM extracts industry domains (Fintech, SaaS, etc.)
-   - Matches against job requirements
+   - Simple set intersection matching
 ```
+
+### Mode 2: AI Matching (`engine: "gemini"`)
+
+Full AI-powered matching with rich insights using Google Gemini:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GEMINI AI MATCHER                            │
+│  ┌───────────────┐    ┌───────────────┐    ┌───────────────┐   │
+│  │ Resume Data   │───▶│ Gemini LLM    │───▶│ Match Result  │   │
+│  │ + Job Posting │    │ (Structured   │    │ + Insights    │   │
+│  │               │    │  Prompting)   │    │               │   │
+│  └───────────────┘    └───────────────┘    └───────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+Output includes:
+├── Component Scores (0-100)
+│   ├── skills_score      # How well skills match
+│   ├── experience_score  # Experience level fit
+│   ├── seniority_fit     # Career stage alignment
+│   └── domain_score      # Industry relevance
+│
+├── Skill Analysis
+│   ├── skill_matches[]   # Matched skills with confidence
+│   └── skill_gaps[]      # Missing skills with transferability
+│
+└── Insights
+    ├── strengths[]       # Candidate advantages
+    ├── concerns[]        # Potential issues
+    └── recommendations[] # Application tips
+```
+
+### Mode 3: Auto (`engine: "auto"`) - Default
+
+Uses Gemini if available and configured, otherwise falls back to NLP.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/matching/engine.py` | Orchestrates matching, selects mode |
+| `src/matching/gemini_matcher.py` | AI matching prompts and logic |
+| `src/matching/requirements.py` | Data structures for AI matching |
+| `src/matching/skills_matcher.py` | NLP semantic similarity |
 
 ## Configuration
 
@@ -223,16 +277,27 @@ search:
   default_job_type: "Full-time"
 
 matching:
+  # Matching engine mode: "nlp" | "gemini" | "auto" (default)
+  engine: "auto"
+
+  # NLP weights (used when engine is "nlp" or as fallback)
   weights:
     skills: 0.45
     experience: 0.35
     domains: 0.20
   min_match_score: 0.6
-  gemini_rerank:
+
+gemini:
+  enabled: true
+  api_key: "YOUR_API_KEY"
+
+  # AI Matcher settings
+  matcher:
     enabled: true
-    blend_weights:
-      ai: 0.75
-      nlp: 0.25
+    model: "gemini-3-flash-preview"  # Best accuracy
+    batch_model: "gemini-2.0-flash"  # Faster for bulk ops
+    concurrency: 5
+    fallback_to_nlp: true            # Fall back if Gemini fails
 
 sheets:
   enabled: true
@@ -247,6 +312,48 @@ Jobs are tagged with industry domains (fintech, healthcare, b2b_saas, etc.) usin
 - **Industries**: fintech, banking, healthcare, ecommerce, b2b_saas, etc.
 - **Platforms**: salesforce, shopify, stripe, snowflake, etc.
 - **Technologies**: ai_ml, blockchain, devops, mobile, etc.
+
+## AI Match Insights (Frontend)
+
+When using Gemini AI matching, the frontend displays rich insights:
+
+### Job Matches Page (`JobMatches.tsx`)
+
+| Feature | Description |
+|---------|-------------|
+| **AI/NLP Badge** | Shows matching engine used (violet "AI" or blue "NLP" badge) |
+| **Score Tooltip** | Hover over radial score to see component breakdown |
+| **Stats Bar** | Shows AI vs NLP match counts (e.g., "15/35 AI/NLP Matches") |
+| **Aggregated Insights** | Panel showing common skill gaps, strengths, and recommendations across all AI-matched jobs |
+| **Expanded Card** | Full AI analysis with strengths, concerns, recommendations, and skill gaps with transferability |
+
+### Resume Analysis Page (`Dashboard.tsx`)
+
+When selecting an AI-matched job for resume analysis:
+- Shows AI match context (strengths, concerns, focus areas)
+- Displays key skill gaps to address during bullet rewriting
+- NLP-matched jobs show prompt to enable Gemini for richer insights
+
+### Data Flow
+
+```
+Backend (search.py)
+    │
+    ├── AI Match Result
+    │   ├── ai_match_score, skills_score, experience_score, etc.
+    │   ├── ai_strengths[], ai_concerns[], ai_recommendations[]
+    │   └── skill_matches[], skill_gaps_detailed[]
+    │
+    ▼
+Frontend (api.ts types)
+    │
+    ├── Job interface with AI fields
+    │
+    ▼
+UI Components
+    ├── JobMatches.tsx (full display)
+    └── Dashboard.tsx (context for analysis)
+```
 
 ## AI Bullet Optimization & Persistence
 

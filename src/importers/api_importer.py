@@ -415,13 +415,19 @@ class ApifyJobImporter:
         from src.database.crud import get_job_by_title_company
         from src.importers.validators import normalize_job_data, validate_job_posting
 
-        # Try to initialize Gemini for domain extraction
+        # Try to initialize Gemini for domain extraction and requirements extraction
         gemini_extractor = None
+        requirements_extractor = None
         try:
-            from src.integrations.gemini_client import GeminiDomainExtractor
+            from src.integrations.gemini_client import GeminiDomainExtractor, GeminiRequirementsExtractor
             extractor = GeminiDomainExtractor()
             if extractor.is_available():
                 gemini_extractor = extractor
+
+            # Also initialize requirements extractor if enabled
+            req_extractor = GeminiRequirementsExtractor()
+            if req_extractor.is_available():
+                requirements_extractor = req_extractor
         except Exception:
             pass  # Gemini not available, will use keyword extraction
 
@@ -521,6 +527,25 @@ class ApifyJobImporter:
                     except Exception as e:
                         logger.warning(f"Gemini summarization failed for {job_posting.title}: {e}")
                         # Summary is optional
+
+                session.commit()
+
+            # Extract structured requirements for AI matching
+            if requirements_extractor and new_job_postings:
+                for job_posting in new_job_postings:
+                    try:
+                        requirements = requirements_extractor.extract_requirements(
+                            description=job_posting.description or '',
+                            title=job_posting.title,
+                            company=job_posting.company
+                        )
+                        if requirements:
+                            job_posting.structured_requirements = requirements
+                            job_posting.requirements_extracted_at = datetime.utcnow()
+                            job_posting.requirements_extraction_model = requirements_extractor.model_name
+                    except Exception as e:
+                        logger.warning(f"Requirements extraction failed for {job_posting.title}: {e}")
+                        # Requirements extraction is optional - AI matching can still work without it
 
                 session.commit()
 

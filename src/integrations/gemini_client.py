@@ -159,6 +159,47 @@ Current Alignment Score: {score}%
 {{"analysis": "Brief explanation of why this bullet scored low and what's missing", "suggestions": ["suggestion1", "suggestion2", "suggestion3"]}}
 """
 
+REQUIREMENTS_EXTRACTION_PROMPT = """Analyze this job posting and extract structured requirements.
+
+**Job Title:** {title}
+**Company:** {company}
+
+**Job Description:**
+{description}
+
+**Instructions:**
+1. Distinguish between MUST-HAVE (required, essential, "must have") and NICE-TO-HAVE (preferred, bonus, "nice to have") skills
+2. For each skill, include:
+   - name: The skill name
+   - context: How it's used (e.g., "for data pipelines", "in production environments") - null if not specified
+   - level: beginner, intermediate, advanced, or expert (infer from requirements)
+   - years: Specific years required for this skill (null if not specified)
+3. Identify seniority level from title, years required, and responsibility scope
+4. Identify required vs preferred domains/industries
+5. Classify role focus as technical (IC work), strategic (leadership/vision), or hybrid
+
+**Response format (JSON only, no markdown):**
+{{
+  "must_have_skills": [
+    {{"name": "Python", "context": "for backend development", "level": "advanced", "years": 3}}
+  ],
+  "nice_to_have_skills": [
+    {{"name": "Kubernetes", "context": null, "level": "intermediate", "years": null}}
+  ],
+  "min_years": 5,
+  "max_years": 10,
+  "seniority_level": "senior",
+  "required_domains": ["fintech", "b2b_saas"],
+  "preferred_domains": ["payments"],
+  "role_focus": "hybrid",
+  "key_responsibilities": ["Lead product roadmap", "Partner with engineering", "Define metrics"]
+}}
+
+Use null for unknown values. Keep key_responsibilities to top 5-7 items.
+Valid seniority levels: entry, mid, senior, staff, principal, director
+Valid role focus: technical, strategic, hybrid
+"""
+
 DOMAIN_EXTRACTION_PROMPT = """Analyze this job posting and identify the industry domains and technology platforms that are REQUIRED or strongly preferred for this role.
 
 **Company:** {company}
@@ -418,6 +459,199 @@ def get_gemini_extractor() -> Optional[GeminiDomainExtractor]:
         GeminiDomainExtractor if available, None otherwise
     """
     extractor = GeminiDomainExtractor()
+    if extractor.is_available():
+        return extractor
+    return None
+
+
+class GeminiRequirementsExtractor:
+    """Extract structured requirements from job descriptions using Gemini LLM.
+
+    This class extracts:
+    - Must-have vs nice-to-have skills with context and levels
+    - Experience requirements (min/max years)
+    - Seniority level
+    - Required/preferred domains
+    - Role focus (technical/strategic/hybrid)
+    - Key responsibilities
+    """
+
+    def __init__(self):
+        """Initialize the Gemini requirements extractor."""
+        self.config = get_config()
+        self.enabled = self.config.get("gemini.enabled", False)
+        # Use fast model for extraction
+        self.model_name = self.config.get("gemini.extractor.model", "gemini-2.0-flash")
+        self.api_key = self.config.get("gemini.api_key")
+        self.model = None
+
+        if self.enabled and self.api_key:
+            try:
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel(self.model_name)
+                logger.info(f"Gemini requirements extractor initialized with model: {self.model_name}")
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini requirements extractor: {e}")
+                self.enabled = False
+
+    def is_available(self) -> bool:
+        """Check if Gemini extraction is available."""
+        return self.enabled and self.model is not None
+
+    def extract_requirements(
+        self,
+        description: str,
+        title: str = "",
+        company: str = ""
+    ) -> Optional[Dict]:
+        """Extract structured requirements from a job description.
+
+        Args:
+            description: Job description text
+            title: Job title
+            company: Company name
+
+        Returns:
+            Dict with structured requirements or None if extraction fails
+        """
+        if not self.is_available():
+            logger.warning("Gemini not available for requirements extraction")
+            return None
+
+        if not description:
+            return None
+
+        # Truncate very long descriptions to save tokens
+        max_chars = 10000
+        if len(description) > max_chars:
+            description = description[:max_chars] + "..."
+
+        prompt = REQUIREMENTS_EXTRACTION_PROMPT.format(
+            title=title or "Unknown",
+            company=company or "Unknown",
+            description=description
+        )
+
+        try:
+            response = self.model.generate_content(
+                prompt,
+                generation_config=types.GenerationConfig(
+                    temperature=0.1,  # Low temperature for consistent extraction
+                    max_output_tokens=1024,  # Needs more tokens for detailed output
+                    response_mime_type="application/json",
+                )
+            )
+
+            # Parse response safely
+            response_text = ""
+            if response.candidates and response.candidates[0].content.parts:
+                try:
+                    response_text = response.text or ""
+                except ValueError:
+                    # Handle non-text parts
+                    parts = []
+                    for part in response.candidates[0].content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            parts.append(part.text)
+                    response_text = "".join(parts)
+            else:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
+                logger.warning(f"Gemini returned no content for requirements extraction. Finish reason: {finish_reason}")
+                return None
+
+            cleaned_text = clean_json_text(response_text)
+            result = json.loads(cleaned_text)
+
+            # Validate and normalize the result
+            normalized = self._normalize_result(result)
+
+            # Add metadata
+            from datetime import datetime
+            normalized["extraction_model"] = self.model_name
+            normalized["extraction_timestamp"] = datetime.utcnow().isoformat()
+
+            return normalized
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Gemini requirements response: {e}")
+            logger.debug(f"Raw text: {response_text if 'response_text' in locals() else 'N/A'}")
+            return None
+        except Exception as e:
+            logger.error(f"Gemini requirements extraction error: {e}")
+            return None
+
+    def _normalize_result(self, result: Dict) -> Dict:
+        """Normalize and validate the extraction result.
+
+        Args:
+            result: Raw result from Gemini
+
+        Returns:
+            Normalized result with valid values
+        """
+        # Valid enum values
+        valid_seniority = ["entry", "mid", "senior", "staff", "principal", "director"]
+        valid_role_focus = ["technical", "strategic", "hybrid"]
+        valid_skill_levels = ["beginner", "intermediate", "advanced", "expert"]
+
+        # Normalize must_have_skills
+        must_have = []
+        for skill in result.get("must_have_skills", []):
+            if isinstance(skill, dict) and skill.get("name"):
+                level = skill.get("level", "intermediate")
+                if level not in valid_skill_levels:
+                    level = "intermediate"
+                must_have.append({
+                    "name": skill["name"],
+                    "context": skill.get("context"),
+                    "level": level,
+                    "years": skill.get("years")
+                })
+
+        # Normalize nice_to_have_skills
+        nice_to_have = []
+        for skill in result.get("nice_to_have_skills", []):
+            if isinstance(skill, dict) and skill.get("name"):
+                level = skill.get("level", "intermediate")
+                if level not in valid_skill_levels:
+                    level = "intermediate"
+                nice_to_have.append({
+                    "name": skill["name"],
+                    "context": skill.get("context"),
+                    "level": level,
+                    "years": skill.get("years")
+                })
+
+        # Normalize seniority_level
+        seniority = result.get("seniority_level", "mid")
+        if seniority not in valid_seniority:
+            seniority = "mid"
+
+        # Normalize role_focus
+        role_focus = result.get("role_focus", "hybrid")
+        if role_focus not in valid_role_focus:
+            role_focus = "hybrid"
+
+        return {
+            "must_have_skills": must_have,
+            "nice_to_have_skills": nice_to_have,
+            "min_years": result.get("min_years"),
+            "max_years": result.get("max_years"),
+            "seniority_level": seniority,
+            "required_domains": result.get("required_domains", []),
+            "preferred_domains": result.get("preferred_domains", []),
+            "role_focus": role_focus,
+            "key_responsibilities": result.get("key_responsibilities", [])[:7]
+        }
+
+
+def get_requirements_extractor() -> Optional[GeminiRequirementsExtractor]:
+    """Factory function to get a Gemini requirements extractor instance.
+
+    Returns:
+        GeminiRequirementsExtractor if available, None otherwise
+    """
+    extractor = GeminiRequirementsExtractor()
     if extractor.is_available():
         return extractor
     return None

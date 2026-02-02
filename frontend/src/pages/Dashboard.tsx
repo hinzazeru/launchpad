@@ -28,6 +28,9 @@ import {
   TrendingUp,
   AlertCircle,
   CheckCircle2,
+  Bot,
+  Lightbulb,
+  XCircle,
 } from 'lucide-react';
 
 import { useDebounce } from '@/hooks/use-debounce';
@@ -751,6 +754,97 @@ export function Dashboard() {
                         <p className="text-emerald-500 text-xs font-medium">{selectedJob.salary}</p>
                       )}
                     </div>
+
+                    {/* AI Match Insights */}
+                    {selectedJob.match_engine === 'gemini' && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="mt-3 pt-3 border-t border-border/50 space-y-2"
+                      >
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                          <Bot className="w-3 h-3" />
+                          AI Match Insights
+                        </div>
+
+                        {/* Strengths */}
+                        {(selectedJob.ai_strengths?.length ?? 0) > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Strengths
+                            </p>
+                            <ul className="space-y-0.5">
+                              {selectedJob.ai_strengths?.slice(0, 2).map((s, i) => (
+                                <li key={i} className="text-[11px] text-muted-foreground line-clamp-1">• {s}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Concerns */}
+                        {(selectedJob.ai_concerns?.length ?? 0) > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> Concerns
+                            </p>
+                            <ul className="space-y-0.5">
+                              {selectedJob.ai_concerns?.slice(0, 2).map((c, i) => (
+                                <li key={i} className="text-[11px] text-muted-foreground line-clamp-1">• {c}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Recommendations */}
+                        {(selectedJob.ai_recommendations?.length ?? 0) > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
+                              <Lightbulb className="w-3 h-3" /> Focus Areas
+                            </p>
+                            <ul className="space-y-0.5">
+                              {selectedJob.ai_recommendations?.slice(0, 2).map((r, i) => (
+                                <li key={i} className="text-[11px] text-muted-foreground line-clamp-1">→ {r}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Skill Gaps */}
+                        {(selectedJob.skill_gaps_detailed?.length ?? 0) > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+                              <XCircle className="w-3 h-3" /> Key Gaps
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedJob.skill_gaps_detailed?.slice(0, 4).map((gap, i) => (
+                                <span
+                                  key={i}
+                                  className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${
+                                    gap.importance === 'must_have'
+                                      ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                  }`}
+                                >
+                                  {gap.skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {/* NLP Match Badge */}
+                    {selectedJob.match_engine !== 'gemini' && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                          NLP Matched
+                        </span>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Run analysis with Gemini enabled for AI insights
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

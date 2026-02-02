@@ -228,16 +228,21 @@ async def search_jobs(request: JobSearchRequest):
             # Create a Resume-like object for the matcher
             # Using a simple class that mimics the Resume model interface
             class ParsedResume:
-                def __init__(self, skills, experience_years, domains=None):
+                def __init__(self, skills, experience_years, domains=None, job_titles=None):
                     self.id = 0  # Temporary ID
                     self.skills = skills
                     self.experience_years = experience_years
                     self.domains = domains or []
+                    self.job_titles = job_titles or []
+
+            # Extract recent job titles from parsed roles
+            recent_titles = [role.title for role in parsed.roles[:5]] if parsed.roles else []
 
             resume = ParsedResume(
                 skills=flat_skills,
                 experience_years=experience_years,
-                domains=[]  # Could extract from parsed data if available
+                domains=[],  # Could extract from parsed data if available
+                job_titles=recent_titles
             )
 
             logger.info(f"Parsed resume: {len(flat_skills)} skills, {experience_years} years experience")
@@ -458,8 +463,8 @@ async def search_jobs(request: JobSearchRequest):
                     jobs_imported=jobs_imported
                 ))
 
-                # Run matching
-                matcher = JobMatcher()
+                # Run matching (auto mode uses Gemini AI if available)
+                matcher = JobMatcher(mode="auto")
                 matches = matcher.match_jobs(resume, all_jobs, min_score=0.0)
 
                 yield send_progress(SearchProgress(
@@ -538,10 +543,17 @@ async def search_jobs(request: JobSearchRequest):
             return
 
         # Sort by blended score
+        # Supports both new AI matching (ai_match_score) and old re-ranker (gemini_score)
         ai_weight = config.get("matching.gemini_rerank.blend_weights.ai", 0.75)
         nlp_weight = config.get("matching.gemini_rerank.blend_weights.nlp", 0.25)
 
         def get_blended_score(match):
+            # Check if this is a new AI match (match_engine == 'gemini')
+            if match.get('match_engine') == 'gemini':
+                # New AI matching - overall_score already reflects AI score
+                return match.get('overall_score', 0)
+
+            # Legacy: check for re-ranker score
             nlp_score = match.get('overall_score', 0)
             ai_score = match.get('gemini_score')
             if ai_score is not None:

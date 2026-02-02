@@ -6,6 +6,19 @@ const API_BASE = '/api';
 
 // Types matching backend Pydantic models
 
+export interface SkillMatchDetail {
+  job_skill: string;
+  resume_skill: string;
+  confidence: number;
+  context?: string;
+}
+
+export interface SkillGapDetail {
+  skill: string;
+  importance: 'must_have' | 'nice_to_have';
+  transferable_from?: string;
+}
+
 export interface Job {
   id: number;
   title: string;
@@ -31,6 +44,26 @@ export interface Job {
   skills_required_count: number;
   skill_gaps: string[];
   experience_required?: number;
+
+  // New AI matching fields
+  ai_match_score?: number;
+  skills_score?: number;
+  experience_score?: number;
+  seniority_fit?: number;
+  domain_score?: number;
+
+  // Rich AI insights
+  ai_strengths?: string[];
+  ai_concerns?: string[];
+  ai_recommendations?: string[];
+
+  // Detailed skill analysis
+  skill_matches?: SkillMatchDetail[];
+  skill_gaps_detailed?: SkillGapDetail[];
+
+  // Matching metadata
+  match_engine?: 'nlp' | 'gemini';
+  match_confidence?: number;
 }
 
 export interface JobListResponse {

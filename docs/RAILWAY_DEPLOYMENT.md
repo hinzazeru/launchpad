@@ -2,14 +2,34 @@
 
 Deploy the LinkedIn Job Matcher to Railway with PostgreSQL for reliable scheduled job searches.
 
+## Progress Status
+
+### Completed ✅
+- [x] GitHub repository created and code pushed
+- [x] Repository structure fixed (files at root level)
+- [x] Dockerfile created (multi-stage Python 3.10 build)
+- [x] railway.json configuration (health checks, restart policy)
+- [x] Procfile updated (Gunicorn + Uvicorn workers)
+- [x] .dockerignore created
+- [x] PostgreSQL migration script ready
+- [x] Local PostgreSQL tested with data migration
+
+### Pending ⏳
+- [ ] Create Railway project
+- [ ] Add PostgreSQL database on Railway
+- [ ] Configure environment variables
+- [ ] Deploy and verify
+
+---
+
 ## Prerequisites
 
-- GitHub repo: `empyre-github/linkedin-job-matcher`
+- GitHub repo: `empyre-github/linkedin-job-matcher` ✅
 - Railway account: [https://railway.app](https://railway.app)
 
 ---
 
-## Quick Deploy (5 minutes)
+## Quick Deploy (When Ready)
 
 ### 1. Create Project
 1. Go to [Railway Dashboard](https://railway.app/dashboard) → **"New Project"**
@@ -40,16 +60,14 @@ In web service → **"Variables"**:
 
 ---
 
-## Configuration Files
-
-This repo includes Railway-optimized configuration:
+## Configuration Files (Already Created)
 
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Multi-stage build with Python 3.10, PostgreSQL deps |
-| `railway.json` | Health checks, restart policy, deploy settings |
+| `railway.json` | Health checks at `/api/health`, restart policy |
 | `Procfile` | Gunicorn + Uvicorn workers |
-| `.dockerignore` | Excludes dev files from build |
+| `.dockerignore` | Excludes 80+ unnecessary files from build |
 
 ---
 
@@ -80,14 +98,6 @@ python -m src.database.migrations.migrate_to_postgres
 
 ### Fresh start:
 Skip migration — tables are created automatically on first startup.
-
----
-
-## Verify Deployment
-
-1. Visit `https://your-app.railway.app/api/health`
-2. Check Railway **"Logs"** tab for startup messages
-3. Test the scheduler: **Get Jobs** → **Scheduled** tab
 
 ---
 

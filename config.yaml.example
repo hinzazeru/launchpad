@@ -25,7 +25,15 @@ search:
 
 # Job Matching Configuration
 matching:
-  # Weights for matching algorithm (must sum to 1.0)
+  # Matching engine mode
+  # Options:
+  #   "nlp" - Traditional NLP-based matching (free, fast, good accuracy)
+  #   "gemini" - AI-powered matching with richer insights (higher accuracy, costs per call)
+  #   "auto" - Use Gemini if available, fall back to NLP (recommended)
+  engine: "auto"
+
+  # Weights for NLP matching algorithm (must sum to 1.0)
+  # Only used when engine is "nlp" or as fallback
   weights:
     skills: 0.45  # Weight for skills match (0.0 - 1.0)
     experience: 0.35  # Weight for experience match (0.0 - 1.0)
@@ -41,6 +49,12 @@ matching:
   # Jobs older than this will be excluded from search results
   # Set to null or 0 to disable (match all jobs regardless of age)
   max_job_age_days: 7
+
+  # Gemini re-ranking blend weights (for legacy re-ranker)
+  gemini_rerank:
+    blend_weights:
+      ai: 0.75    # Weight for AI score
+      nlp: 0.25   # Weight for NLP score
 
 # Product Management Skills Dictionary
 # These skills are used to parse resumes and match jobs
@@ -175,6 +189,14 @@ gemini:
     model: "gemini-2.0-flash"  # Non-thinking model - faster & cheaper for simple tasks
     domain_max_tokens: 300     # Max tokens for domain extraction (JSON response)
     summary_max_tokens: 200    # Max tokens for job summaries (2-3 sentences)
+
+  # AI Job Matcher Configuration (when matching.engine is "gemini" or "auto")
+  matcher:
+    enabled: true              # Enable AI matching (requires gemini.enabled: true)
+    model: "gemini-3-flash-preview"  # Best model for accurate matching
+    batch_model: "gemini-2.0-flash"  # Faster model for batch operations
+    concurrency: 5             # Number of parallel API calls
+    fallback_to_nlp: true      # Fall back to NLP if Gemini fails
 
 # Resume Targeting / Bullet Rewriting Configuration
 targeting:

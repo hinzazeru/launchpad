@@ -18,6 +18,8 @@ import {
     TrendingDown,
     ExternalLink,
     Briefcase,
+    Lightbulb,
+    Bot,
 } from 'lucide-react';
 import {
     Select,
@@ -27,8 +29,29 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 
+// Score breakdown for tooltip
+interface ScoreBreakdown {
+    skills_score?: number;
+    experience_score?: number;
+    seniority_fit?: number;
+    domain_score?: number;
+    match_engine?: string;
+    match_confidence?: number;
+}
+
 // Radial Progress Component - The hero visual element
-function RadialScore({ score, size = 72, strokeWidth = 6 }: { score: number; size?: number; strokeWidth?: number }) {
+function RadialScore({
+    score,
+    size = 72,
+    strokeWidth = 6,
+    breakdown
+}: {
+    score: number;
+    size?: number;
+    strokeWidth?: number;
+    breakdown?: ScoreBreakdown;
+}) {
+    const [showTooltip, setShowTooltip] = useState(false);
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const offset = circumference - (score / 100) * circumference;
@@ -43,8 +66,19 @@ function RadialScore({ score, size = 72, strokeWidth = 6 }: { score: number; siz
     const colors = getGradientColors();
     const gradientId = `score-gradient-${score}-${Math.random().toString(36).substr(2, 9)}`;
 
+    const hasBreakdown = breakdown && (
+        breakdown.skills_score !== undefined ||
+        breakdown.experience_score !== undefined ||
+        breakdown.domain_score !== undefined
+    );
+
     return (
-        <div className="relative" style={{ width: size, height: size }}>
+        <div
+            className="relative"
+            style={{ width: size, height: size }}
+            onMouseEnter={() => hasBreakdown && setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+        >
             <svg width={size} height={size} className="-rotate-90">
                 <defs>
                     <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -88,6 +122,67 @@ function RadialScore({ score, size = 72, strokeWidth = 6 }: { score: number; siz
                     {Math.round(score)}
                 </motion.span>
             </div>
+
+            {/* Score Breakdown Tooltip */}
+            <AnimatePresence>
+                {showTooltip && hasBreakdown && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 min-w-[160px] p-2.5 rounded-lg bg-popover border border-border shadow-lg"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-border/50">
+                                <span className="font-semibold text-foreground">Score Breakdown</span>
+                                {breakdown.match_engine && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                        breakdown.match_engine === 'gemini'
+                                            ? 'bg-violet-500/15 text-violet-500'
+                                            : 'bg-blue-500/15 text-blue-500'
+                                    }`}>
+                                        {breakdown.match_engine === 'gemini' ? 'AI' : 'NLP'}
+                                    </span>
+                                )}
+                            </div>
+                            {breakdown.skills_score !== undefined && (
+                                <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-muted-foreground">Skills</span>
+                                    <span className="font-mono font-medium text-blue-500">{breakdown.skills_score}</span>
+                                </div>
+                            )}
+                            {breakdown.experience_score !== undefined && (
+                                <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-muted-foreground">Experience</span>
+                                    <span className="font-mono font-medium text-violet-500">{breakdown.experience_score}</span>
+                                </div>
+                            )}
+                            {breakdown.seniority_fit !== undefined && (
+                                <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-muted-foreground">Seniority</span>
+                                    <span className="font-mono font-medium text-purple-500">{breakdown.seniority_fit}</span>
+                                </div>
+                            )}
+                            {breakdown.domain_score !== undefined && (
+                                <div className="flex items-center justify-between text-[11px]">
+                                    <span className="text-muted-foreground">Domain</span>
+                                    <span className="font-mono font-medium text-cyan-500">{breakdown.domain_score}</span>
+                                </div>
+                            )}
+                            {breakdown.match_confidence !== undefined && (
+                                <div className="flex items-center justify-between text-[10px] pt-1 border-t border-border/50 text-muted-foreground">
+                                    <span>Confidence</span>
+                                    <span className="font-mono">{Math.round(breakdown.match_confidence * 100)}%</span>
+                                </div>
+                            )}
+                        </div>
+                        {/* Tooltip arrow */}
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-popover border-l border-t border-border" />
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
@@ -212,7 +307,17 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                     <div className="flex gap-4 p-4 pl-5">
                         {/* Score Gauge */}
                         <div className="flex-shrink-0 flex flex-col items-center gap-1">
-                            <RadialScore score={job.match_score} />
+                            <RadialScore
+                                score={job.match_score}
+                                breakdown={{
+                                    skills_score: job.skills_score,
+                                    experience_score: job.experience_score,
+                                    seniority_fit: job.seniority_fit,
+                                    domain_score: job.domain_score,
+                                    match_engine: job.match_engine,
+                                    match_confidence: job.match_confidence
+                                }}
+                            />
                             {job.gemini_score !== undefined && job.gemini_score > 0 && (
                                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                     <Sparkles className="w-3 h-3 text-violet-500" />
@@ -226,15 +331,37 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                             {/* Header */}
                             <div className="space-y-1">
                                 <div className="flex items-start justify-between gap-2">
-                                    <a
-                                        href={job.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="font-semibold text-[15px] leading-tight hover:text-primary transition-colors line-clamp-1 group-hover:underline decoration-primary/30 underline-offset-2"
-                                    >
-                                        {job.title}
-                                    </a>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <a
+                                            href={job.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="font-semibold text-[15px] leading-tight hover:text-primary transition-colors line-clamp-1 group-hover:underline decoration-primary/30 underline-offset-2"
+                                        >
+                                            {job.title}
+                                        </a>
+                                        {/* AI/NLP Engine Badge */}
+                                        {job.match_engine && (
+                                            <span
+                                                className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${
+                                                    job.match_engine === 'gemini'
+                                                        ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/30'
+                                                        : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                                                }`}
+                                                title={job.match_engine === 'gemini' ? 'AI-powered matching with Gemini' : 'NLP-based matching'}
+                                            >
+                                                {job.match_engine === 'gemini' ? (
+                                                    <>
+                                                        <Bot className="w-2.5 h-2.5" />
+                                                        AI
+                                                    </>
+                                                ) : (
+                                                    'NLP'
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
                                     <a
                                         href={job.url}
                                         target="_blank"
@@ -392,8 +519,129 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                         </div>
                                     )}
 
-                                    {/* AI Analysis */}
-                                    {job.gemini_reasoning && (
+                                    {/* AI Analysis - New AI Matcher */}
+                                    {job.match_engine === 'gemini' && (
+                                        <div className="space-y-4 p-3 rounded-lg bg-violet-500/5 border border-violet-500/20">
+                                            <div className="flex items-center gap-2">
+                                                <Bot className="w-4 h-4 text-violet-500" />
+                                                <span className="text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                                                    AI-Powered Match Analysis
+                                                </span>
+                                                {job.match_confidence && (
+                                                    <span className="ml-auto text-[10px] text-muted-foreground">
+                                                        {Math.round(job.match_confidence * 100)}% confidence
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Score Breakdown */}
+                                            {(job.skills_score || job.experience_score || job.domain_score) && (
+                                                <div className="grid grid-cols-4 gap-2 text-center">
+                                                    <div className="p-2 rounded-md bg-background/50">
+                                                        <p className="text-lg font-bold text-blue-500">{job.skills_score ?? '-'}</p>
+                                                        <p className="text-[10px] text-muted-foreground">Skills</p>
+                                                    </div>
+                                                    <div className="p-2 rounded-md bg-background/50">
+                                                        <p className="text-lg font-bold text-violet-500">{job.experience_score ?? '-'}</p>
+                                                        <p className="text-[10px] text-muted-foreground">Experience</p>
+                                                    </div>
+                                                    <div className="p-2 rounded-md bg-background/50">
+                                                        <p className="text-lg font-bold text-purple-500">{job.seniority_fit ?? '-'}</p>
+                                                        <p className="text-[10px] text-muted-foreground">Seniority</p>
+                                                    </div>
+                                                    <div className="p-2 rounded-md bg-background/50">
+                                                        <p className="text-lg font-bold text-cyan-500">{job.domain_score ?? '-'}</p>
+                                                        <p className="text-[10px] text-muted-foreground">Domain</p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* AI Strengths */}
+                                            {(job.ai_strengths?.length ?? 0) > 0 && (
+                                                <div className="space-y-2">
+                                                    <h4 className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                                                        <TrendingUp className="w-3.5 h-3.5" />
+                                                        Strengths
+                                                    </h4>
+                                                    <ul className="space-y-1">
+                                                        {job.ai_strengths?.map((s, i) => (
+                                                            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                                                {s}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+
+                                            {/* AI Concerns */}
+                                            {(job.ai_concerns?.length ?? 0) > 0 && (
+                                                <div className="space-y-2">
+                                                    <h4 className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                                        <AlertCircle className="w-3.5 h-3.5" />
+                                                        Concerns
+                                                    </h4>
+                                                    <ul className="space-y-1">
+                                                        {job.ai_concerns?.map((c, i) => (
+                                                            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                                                <XCircle className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                                                                {c}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+
+                                            {/* AI Recommendations */}
+                                            {(job.ai_recommendations?.length ?? 0) > 0 && (
+                                                <div className="space-y-2">
+                                                    <h4 className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                                                        <Lightbulb className="w-3.5 h-3.5" />
+                                                        Recommendations
+                                                    </h4>
+                                                    <ul className="space-y-1">
+                                                        {job.ai_recommendations?.map((r, i) => (
+                                                            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                                                <span className="text-blue-500 mt-0.5 flex-shrink-0">→</span>
+                                                                {r}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+
+                                            {/* Skill Gaps with Transferability */}
+                                            {(job.skill_gaps_detailed?.length ?? 0) > 0 && (
+                                                <div className="space-y-2">
+                                                    <h4 className="text-xs font-semibold text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                                                        <XCircle className="w-3.5 h-3.5" />
+                                                        Skill Gaps
+                                                    </h4>
+                                                    <div className="space-y-1">
+                                                        {job.skill_gaps_detailed?.map((gap, i) => (
+                                                            <div key={i} className="flex items-center gap-2 text-sm">
+                                                                <span className={`px-2 py-0.5 text-[11px] font-medium rounded-md border ${
+                                                                    gap.importance === 'must_have'
+                                                                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                                                }`}>
+                                                                    {gap.skill}
+                                                                </span>
+                                                                {gap.transferable_from && (
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        ← transferable from <span className="text-emerald-500">{gap.transferable_from}</span>
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Legacy AI Analysis (old re-ranker) */}
+                                    {job.match_engine !== 'gemini' && job.gemini_reasoning && (
                                         <div className="space-y-2">
                                             <h4 className="text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
                                                 <Sparkles className="w-3.5 h-3.5" />
@@ -405,8 +653,8 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                         </div>
                                     )}
 
-                                    {/* AI Strengths & Gaps */}
-                                    {((job.gemini_strengths?.length ?? 0) > 0 || (job.gemini_gaps?.length ?? 0) > 0) && (
+                                    {/* Legacy AI Strengths & Gaps (old re-ranker) */}
+                                    {job.match_engine !== 'gemini' && ((job.gemini_strengths?.length ?? 0) > 0 || (job.gemini_gaps?.length ?? 0) > 0) && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {/* Strengths */}
                                             {(job.gemini_strengths?.length ?? 0) > 0 && (
@@ -491,6 +739,64 @@ export function JobMatches() {
     const avgScore = totalJobs > 0
         ? Math.round(data!.jobs.reduce((sum, j) => sum + j.match_score, 0) / totalJobs)
         : 0;
+    const aiMatches = data?.jobs.filter(j => j.match_engine === 'gemini').length || 0;
+    const nlpMatches = totalJobs - aiMatches;
+
+    // Aggregated AI Insights
+    const aggregatedInsights = (() => {
+        if (!data?.jobs.length) return null;
+
+        const aiJobs = data.jobs.filter(j => j.match_engine === 'gemini');
+        if (aiJobs.length === 0) return null;
+
+        // Count skill gaps across all jobs
+        const skillGapCounts: Record<string, number> = {};
+        const recommendationCounts: Record<string, number> = {};
+        const strengthCounts: Record<string, number> = {};
+
+        aiJobs.forEach(job => {
+            // Count skill gaps
+            job.skill_gaps_detailed?.forEach(gap => {
+                skillGapCounts[gap.skill] = (skillGapCounts[gap.skill] || 0) + 1;
+            });
+            job.skill_gaps?.forEach(skill => {
+                skillGapCounts[skill] = (skillGapCounts[skill] || 0) + 1;
+            });
+
+            // Count recommendations
+            job.ai_recommendations?.forEach(rec => {
+                recommendationCounts[rec] = (recommendationCounts[rec] || 0) + 1;
+            });
+
+            // Count strengths
+            job.ai_strengths?.forEach(str => {
+                strengthCounts[str] = (strengthCounts[str] || 0) + 1;
+            });
+        });
+
+        // Get top items (appearing in multiple jobs)
+        const topSkillGaps = Object.entries(skillGapCounts)
+            .filter(([, count]) => count >= 2)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+        const topRecommendations = Object.entries(recommendationCounts)
+            .filter(([, count]) => count >= 2)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3);
+
+        const topStrengths = Object.entries(strengthCounts)
+            .filter(([, count]) => count >= 2)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3);
+
+        return {
+            skillGaps: topSkillGaps,
+            recommendations: topRecommendations,
+            strengths: topStrengths,
+            jobsAnalyzed: aiJobs.length
+        };
+    })();
 
     return (
         <div className="space-y-6">
@@ -516,7 +822,7 @@ export function JobMatches() {
             {/* Stats Bar */}
             {!isLoading && totalJobs > 0 && (
                 <motion.div
-                    className="grid grid-cols-3 gap-4"
+                    className="grid grid-cols-2 md:grid-cols-4 gap-4"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
@@ -547,6 +853,98 @@ export function JobMatches() {
                             <p className="text-2xl font-bold tabular-nums">{avgScore}%</p>
                             <p className="text-xs text-muted-foreground">Average Score</p>
                         </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-2 rounded-md bg-violet-500/10">
+                            <Bot className="w-4 h-4 text-violet-500" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold tabular-nums">
+                                {aiMatches}<span className="text-sm font-normal text-muted-foreground">/{nlpMatches}</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground">AI / NLP Matches</p>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Aggregated AI Insights Panel */}
+            {aggregatedInsights && (aggregatedInsights.skillGaps.length > 0 || aggregatedInsights.recommendations.length > 0) && (
+                <motion.div
+                    className="p-4 rounded-xl bg-gradient-to-r from-violet-500/5 to-blue-500/5 border border-violet-500/20"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                >
+                    <div className="flex items-center gap-2 mb-3">
+                        <Bot className="w-4 h-4 text-violet-500" />
+                        <h3 className="text-sm font-semibold text-violet-600 dark:text-violet-400">
+                            AI Insights Summary
+                        </h3>
+                        <span className="text-xs text-muted-foreground ml-auto">
+                            Based on {aggregatedInsights.jobsAnalyzed} AI-analyzed matches
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Common Skill Gaps */}
+                        {aggregatedInsights.skillGaps.length > 0 && (
+                            <div className="space-y-2">
+                                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                    <XCircle className="w-3 h-3 text-red-500" />
+                                    Common Skill Gaps
+                                </h4>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {aggregatedInsights.skillGaps.map(([skill, count]) => (
+                                        <span
+                                            key={skill}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                                        >
+                                            {skill}
+                                            <span className="text-[9px] text-red-400/70">×{count}</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Common Strengths */}
+                        {aggregatedInsights.strengths.length > 0 && (
+                            <div className="space-y-2">
+                                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                    Your Strengths
+                                </h4>
+                                <ul className="space-y-1">
+                                    {aggregatedInsights.strengths.map(([strength, count]) => (
+                                        <li key={strength} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                            <span className="text-emerald-500 mt-0.5">✓</span>
+                                            <span className="line-clamp-2">{strength}</span>
+                                            <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Top Recommendations */}
+                        {aggregatedInsights.recommendations.length > 0 && (
+                            <div className="space-y-2">
+                                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                    <Lightbulb className="w-3 h-3 text-blue-500" />
+                                    Top Recommendations
+                                </h4>
+                                <ul className="space-y-1">
+                                    {aggregatedInsights.recommendations.map(([rec, count]) => (
+                                        <li key={rec} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                            <span className="text-blue-500 mt-0.5">→</span>
+                                            <span className="line-clamp-2">{rec}</span>
+                                            <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                     </div>
                 </motion.div>
             )}

@@ -51,6 +51,11 @@ class JobPosting(Base):
     domain_extraction_method = Column(String(20), nullable=True)  # "keyword" or "llm" - tracks how domains were extracted
     summary = Column(Text, nullable=True)  # LLM-generated summary of the job description
 
+    # Structured requirements for LLM matching
+    structured_requirements = Column(JSON, nullable=True)  # StructuredRequirements dict
+    requirements_extracted_at = Column(DateTime, nullable=True)
+    requirements_extraction_model = Column(String(50), nullable=True)  # e.g., "gemini-2.0-flash"
+
     # Relationships
     match_results = relationship("MatchResult", back_populates="job_posting")
     application_tracking = relationship(
@@ -85,6 +90,25 @@ class MatchResult(Base):
     gemini_gaps = Column(JSON, nullable=True)  # AI-identified candidate gaps
     bullet_suggestions = Column(JSON, nullable=True)  # Saved AI bullet suggestions
 
+    # LLM-based matching scores (new AI matching system)
+    ai_match_score = Column(Float, nullable=True)  # Primary AI score (0-100)
+    skills_score = Column(Float, nullable=True)  # Skills component score (0-100)
+    experience_score = Column(Float, nullable=True)  # Experience fit score (0-100)
+    seniority_fit = Column(Float, nullable=True)  # Seniority alignment score (0-100)
+    domain_score = Column(Float, nullable=True)  # Domain relevance score (0-100)
+
+    # Rich AI insights
+    ai_strengths = Column(JSON, nullable=True)  # ["Strong PM background", ...]
+    ai_concerns = Column(JSON, nullable=True)  # ["Missing cloud certifications", ...]
+    ai_recommendations = Column(JSON, nullable=True)  # ["Highlight scaling experience", ...]
+
+    # Detailed skill analysis
+    skill_matches = Column(JSON, nullable=True)  # [{job_skill, resume_skill, confidence}]
+    skill_gaps_detailed = Column(JSON, nullable=True)  # [{skill, importance, transferable_from}]
+
+    # Matching metadata
+    match_engine = Column(String(20), default="nlp")  # "nlp" or "gemini"
+    match_confidence = Column(Float, nullable=True)  # Model confidence (0-1)
 
     # Relationships
     job_posting = relationship("JobPosting", back_populates="match_results")

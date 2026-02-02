@@ -1,0 +1,391 @@
+"""Gemini LLM-based job matching for higher accuracy and richer insights.
+
+This module provides AI-powered job matching that:
+- Evaluates skill alignment with context awareness
+- Assesses experience fit including seniority alignment
+- Identifies strengths, concerns, and recommendations
+- Provides detailed skill match/gap analysis
+"""
+
+import json
+import logging
+from typing import Dict, List, Optional
+from dataclasses import dataclass, field
+
+import google.generativeai as genai
+from google.generativeai import types
+
+from src.config import get_config
+from src.integrations.gemini_client import clean_json_text
+from src.matching.requirements import (
+    StructuredRequirements,
+    GeminiMatchResult,
+    SkillMatch,
+    SkillGap
+)
+
+logger = logging.getLogger(__name__)
+
+# AI Matching prompt - comprehensive evaluation
+AI_MATCH_PROMPT = """You are an expert job matching assistant. Evaluate how well this candidate matches the job requirements.
+
+**CANDIDATE PROFILE:**
+Skills: {resume_skills}
+Experience: {experience_years} years
+Domain Expertise: {resume_domains}
+Recent Roles: {recent_roles}
+
+**JOB REQUIREMENTS:**
+Title: {job_title}
+Company: {company}
+
+Must-Have Skills:
+{must_have_skills}
+
+Nice-to-Have Skills:
+{nice_to_have_skills}
+
+Experience Required: {required_years}
+Seniority Level: {seniority_level}
+Required Domains: {required_domains}
+Preferred Domains: {preferred_domains}
+Key Responsibilities:
+{responsibilities}
+
+**SCORING CRITERIA:**
+1. Skills Match (40%): How many must-have skills does the candidate have? Partial credit for related/transferable skills.
+2. Experience Fit (25%): Is experience level appropriate? Consider both under-qualification AND over-qualification.
+3. Seniority Alignment (20%): Does candidate's career stage match the role level?
+4. Domain Relevance (15%): Does candidate have relevant industry experience?
+
+**Important Guidelines:**
+- A score of 75+ indicates a strong match
+- A score of 60-74 indicates a moderate match with some gaps
+- A score below 60 indicates significant misalignment
+- Be realistic - most candidates won't have every skill
+- Consider skill transferability (e.g., "React" skills transfer to "Vue")
+- Seniority mismatch (too senior OR too junior) should impact score
+
+**Response format (JSON only, no markdown):**
+{{
+  "overall_score": 0-100,
+  "skills_score": 0-100,
+  "experience_score": 0-100,
+  "seniority_fit": 0-100,
+  "domain_score": 0-100,
+  "skill_matches": [
+    {{"job_skill": "Python", "resume_skill": "Python/Django", "confidence": 0.95, "context": "Direct match"}}
+  ],
+  "skill_gaps": [
+    {{"skill": "Kubernetes", "importance": "must_have", "transferable_from": "Docker experience"}}
+  ],
+  "strengths": ["Strong PM background", "Relevant fintech experience"],
+  "concerns": ["Missing cloud certifications", "No team lead experience mentioned"],
+  "recommendations": ["Highlight scaling experience", "Mention cross-functional work"],
+  "confidence": 0.85,
+  "reasoning": "2-3 sentence summary of match quality"
+}}
+"""
+
+# Simplified prompt for when structured requirements aren't available
+AI_MATCH_SIMPLE_PROMPT = """You are an expert job matching assistant. Evaluate how well this candidate matches the job posting.
+
+**CANDIDATE PROFILE:**
+Skills: {resume_skills}
+Experience: {experience_years} years
+Domain Expertise: {resume_domains}
+
+**JOB POSTING:**
+Title: {job_title}
+Company: {company}
+Description:
+{description}
+
+**SCORING CRITERIA:**
+1. Skills Match (40%): How well do candidate's skills match job requirements?
+2. Experience Fit (25%): Is experience level appropriate for this role?
+3. Seniority Alignment (20%): Does career stage match the role?
+4. Domain Relevance (15%): Does candidate have relevant industry experience?
+
+**Response format (JSON only, no markdown):**
+{{
+  "overall_score": 0-100,
+  "skills_score": 0-100,
+  "experience_score": 0-100,
+  "seniority_fit": 0-100,
+  "domain_score": 0-100,
+  "skill_matches": [{{"job_skill": "skill", "resume_skill": "matching skill", "confidence": 0.0-1.0, "context": "reason"}}],
+  "skill_gaps": [{{"skill": "missing skill", "importance": "must_have|nice_to_have", "transferable_from": "related skill or null"}}],
+  "strengths": ["strength 1", "strength 2"],
+  "concerns": ["concern 1"],
+  "recommendations": ["recommendation 1"],
+  "confidence": 0.0-1.0,
+  "reasoning": "2-3 sentence summary"
+}}
+"""
+
+
+class GeminiMatcher:
+    """AI-powered job matching using Gemini LLM."""
+
+    def __init__(self):
+        """Initialize the Gemini matcher."""
+        self.config = get_config()
+        self.enabled = self.config.get("gemini.enabled", False)
+        # Use best reasoning model for matching accuracy
+        self.model_name = self.config.get("gemini.matcher.model", "gemini-3-flash-preview")
+        # Faster model for batch operations
+        self.batch_model_name = self.config.get("gemini.matcher.batch_model", "gemini-2.0-flash")
+        self.api_key = self.config.get("gemini.api_key")
+        self.model = None
+        self.batch_model = None
+
+        if self.enabled and self.api_key:
+            try:
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel(self.model_name)
+                self.batch_model = genai.GenerativeModel(self.batch_model_name)
+                logger.info(f"GeminiMatcher initialized with model: {self.model_name}")
+            except Exception as e:
+                logger.error(f"Failed to initialize GeminiMatcher: {e}")
+                self.enabled = False
+
+    def is_available(self) -> bool:
+        """Check if Gemini matching is available."""
+        return self.enabled and self.model is not None
+
+    def match_job(
+        self,
+        resume_skills: List[str],
+        experience_years: float,
+        resume_domains: List[str],
+        recent_roles: List[str],
+        job_title: str,
+        company: str,
+        job_description: str,
+        structured_requirements: Optional[Dict] = None,
+        use_batch_model: bool = False
+    ) -> Optional[GeminiMatchResult]:
+        """Match a job against a resume using AI.
+
+        Args:
+            resume_skills: List of candidate skills
+            experience_years: Years of experience
+            resume_domains: List of domain expertise
+            recent_roles: List of recent job titles
+            job_title: Target job title
+            company: Target company
+            job_description: Full job description
+            structured_requirements: Pre-extracted requirements (optional)
+            use_batch_model: Use faster model for batch operations
+
+        Returns:
+            GeminiMatchResult with scores and insights, or None if failed
+        """
+        if not self.is_available():
+            logger.warning("GeminiMatcher not available")
+            return None
+
+        model = self.batch_model if use_batch_model else self.model
+
+        # Build prompt based on whether we have structured requirements
+        if structured_requirements:
+            prompt = self._build_structured_prompt(
+                resume_skills=resume_skills,
+                experience_years=experience_years,
+                resume_domains=resume_domains,
+                recent_roles=recent_roles,
+                job_title=job_title,
+                company=company,
+                requirements=structured_requirements
+            )
+        else:
+            prompt = self._build_simple_prompt(
+                resume_skills=resume_skills,
+                experience_years=experience_years,
+                resume_domains=resume_domains,
+                job_title=job_title,
+                company=company,
+                job_description=job_description
+            )
+
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config=types.GenerationConfig(
+                    temperature=0.2,  # Low for consistent scoring
+                    max_output_tokens=1024,
+                    response_mime_type="application/json",
+                )
+            )
+
+            # Parse response
+            result = self._parse_response(response, job_title)
+            if result:
+                return result
+
+        except Exception as e:
+            logger.error(f"GeminiMatcher error for {job_title}: {e}")
+
+        return None
+
+    def _build_structured_prompt(
+        self,
+        resume_skills: List[str],
+        experience_years: float,
+        resume_domains: List[str],
+        recent_roles: List[str],
+        job_title: str,
+        company: str,
+        requirements: Dict
+    ) -> str:
+        """Build prompt using structured requirements."""
+        # Format must-have skills
+        must_have = requirements.get("must_have_skills", [])
+        must_have_text = "\n".join([
+            f"- {s.get('name', s) if isinstance(s, dict) else s}"
+            + (f" ({s.get('context', '')})" if isinstance(s, dict) and s.get('context') else "")
+            + (f" [{s.get('level', '')}]" if isinstance(s, dict) and s.get('level') else "")
+            for s in must_have
+        ]) if must_have else "Not specified"
+
+        # Format nice-to-have skills
+        nice_to_have = requirements.get("nice_to_have_skills", [])
+        nice_to_have_text = "\n".join([
+            f"- {s.get('name', s) if isinstance(s, dict) else s}"
+            for s in nice_to_have
+        ]) if nice_to_have else "Not specified"
+
+        # Format experience
+        min_years = requirements.get("min_years")
+        max_years = requirements.get("max_years")
+        if min_years and max_years:
+            required_years = f"{min_years}-{max_years} years"
+        elif min_years:
+            required_years = f"{min_years}+ years"
+        else:
+            required_years = "Not specified"
+
+        # Format responsibilities
+        responsibilities = requirements.get("key_responsibilities", [])
+        resp_text = "\n".join([f"- {r}" for r in responsibilities[:7]]) if responsibilities else "Not specified"
+
+        return AI_MATCH_PROMPT.format(
+            resume_skills=", ".join(resume_skills[:30]),
+            experience_years=experience_years,
+            resume_domains=", ".join(resume_domains) if resume_domains else "Not specified",
+            recent_roles=", ".join(recent_roles[:5]) if recent_roles else "Not specified",
+            job_title=job_title,
+            company=company,
+            must_have_skills=must_have_text,
+            nice_to_have_skills=nice_to_have_text,
+            required_years=required_years,
+            seniority_level=requirements.get("seniority_level", "Not specified"),
+            required_domains=", ".join(requirements.get("required_domains", [])) or "Not specified",
+            preferred_domains=", ".join(requirements.get("preferred_domains", [])) or "Not specified",
+            responsibilities=resp_text
+        )
+
+    def _build_simple_prompt(
+        self,
+        resume_skills: List[str],
+        experience_years: float,
+        resume_domains: List[str],
+        job_title: str,
+        company: str,
+        job_description: str
+    ) -> str:
+        """Build prompt when structured requirements aren't available."""
+        # Truncate description to save tokens
+        max_desc = 6000
+        if len(job_description) > max_desc:
+            job_description = job_description[:max_desc] + "..."
+
+        return AI_MATCH_SIMPLE_PROMPT.format(
+            resume_skills=", ".join(resume_skills[:30]),
+            experience_years=experience_years,
+            resume_domains=", ".join(resume_domains) if resume_domains else "Not specified",
+            job_title=job_title,
+            company=company,
+            description=job_description
+        )
+
+    def _parse_response(self, response, job_title: str) -> Optional[GeminiMatchResult]:
+        """Parse Gemini response into GeminiMatchResult."""
+        # Extract text from response
+        if not response.candidates or not response.candidates[0].content.parts:
+            finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
+            logger.warning(f"Gemini returned no content for {job_title}. Finish reason: {finish_reason}")
+            return None
+
+        # Extract text parts only
+        text_parts = []
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'text') and part.text:
+                text_parts.append(part.text)
+
+        if not text_parts:
+            logger.warning(f"Gemini response has no text parts for {job_title}")
+            return None
+
+        response_text = "".join(text_parts)
+
+        try:
+            cleaned = clean_json_text(response_text)
+            result = json.loads(cleaned)
+
+            # Build skill matches
+            skill_matches = []
+            for m in result.get("skill_matches", []):
+                if isinstance(m, dict):
+                    skill_matches.append(SkillMatch(
+                        job_skill=m.get("job_skill", ""),
+                        resume_skill=m.get("resume_skill", ""),
+                        confidence=float(m.get("confidence", 0)),
+                        context=m.get("context")
+                    ))
+
+            # Build skill gaps
+            skill_gaps = []
+            for g in result.get("skill_gaps", []):
+                if isinstance(g, dict):
+                    skill_gaps.append(SkillGap(
+                        skill=g.get("skill", ""),
+                        importance=g.get("importance", "nice_to_have"),
+                        transferable_from=g.get("transferable_from")
+                    ))
+
+            return GeminiMatchResult(
+                overall_score=float(result.get("overall_score", 0)),
+                skills_score=float(result.get("skills_score", 0)),
+                experience_score=float(result.get("experience_score", 0)),
+                seniority_fit=float(result.get("seniority_fit", 0)),
+                domain_score=float(result.get("domain_score", 0)),
+                skill_matches=skill_matches,
+                skill_gaps=skill_gaps,
+                strengths=result.get("strengths", []),
+                concerns=result.get("concerns", []),
+                recommendations=result.get("recommendations", []),
+                confidence=float(result.get("confidence", 0)),
+                reasoning=result.get("reasoning", "")
+            )
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Gemini match response for {job_title}: {e}")
+            logger.debug(f"Response text: {response_text[:500] if response_text else 'EMPTY'}")
+            return None
+        except Exception as e:
+            logger.error(f"Error processing Gemini match for {job_title}: {e}")
+            return None
+
+
+def get_gemini_matcher() -> Optional[GeminiMatcher]:
+    """Factory function to get a GeminiMatcher instance.
+
+    Returns:
+        GeminiMatcher if available, None otherwise
+    """
+    matcher = GeminiMatcher()
+    if matcher.is_available():
+        return matcher
+    return None
