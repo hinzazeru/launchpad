@@ -96,6 +96,14 @@ class TopMatch(BaseModel):
     gemini_score: Optional[float]
 
 
+class GeminiStatsResponse(BaseModel):
+    """Statistics about Gemini API usage during matching."""
+    attempted: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    failure_reasons: List[str] = []
+
+
 class SearchResult(BaseModel):
     """Final result of a job search."""
     success: bool
@@ -108,6 +116,7 @@ class SearchResult(BaseModel):
     top_matches: List[TopMatch]
     fetched_jobs: List[TopMatch] = []
     sheets_url: Optional[str] = None
+    gemini_stats: Optional[GeminiStatsResponse] = None
 
 
 # Endpoints
@@ -202,15 +211,59 @@ async def search_jobs(request: JobSearchRequest):
 
             # Extract flat skills list from categorized skills dict
             flat_skills = []
-            for category_skills in parsed.skills.values():
-                flat_skills.extend(category_skills)
+            resume_domains = []
+            for category_name, category_skills in parsed.skills.items():
+                if category_name.lower() == 'domains':
+                    # Store domain names for mapping later
+                    resume_domains = list(category_skills)
+                else:
+                    flat_skills.extend(category_skills)
+
+            # Map resume domain names to domain expertise keys
+            # Load domain expertise config for mapping
+            domain_expertise_path = Path(__file__).parent.parent.parent / "data" / "domain_expertise.json"
+            mapped_domains = []
+            if domain_expertise_path.exists():
+                try:
+                    with open(domain_expertise_path, 'r') as f:
+                        domain_config = json.load(f)
+                    
+                    # Build reverse lookup: keyword -> domain key
+                    domain_lookup = {}
+                    for category in ['industries', 'platforms', 'technologies']:
+                        if category in domain_config.get('domains', {}):
+                            for domain_key, domain_data in domain_config['domains'][category].items():
+                                # Add the domain key itself
+                                domain_lookup[domain_key.lower()] = domain_key
+                                # Add keywords
+                                for keyword in domain_data.get('keywords', []):
+                                    domain_lookup[keyword.lower()] = domain_key
+                    
+                    # Map resume domains to domain keys
+                    for domain_name in resume_domains:
+                        domain_lower = domain_name.lower().replace(' ', '_')
+                        # Try direct match first
+                        if domain_lower in domain_lookup:
+                            mapped_domains.append(domain_lookup[domain_lower])
+                        else:
+                            # Try keyword matching
+                            for keyword, domain_key in domain_lookup.items():
+                                if keyword in domain_lower or domain_lower in keyword:
+                                    mapped_domains.append(domain_key)
+                                    break
+                    
+                    # Remove duplicates while preserving order
+                    mapped_domains = list(dict.fromkeys(mapped_domains))
+                    logger.info(f"Mapped resume domains: {resume_domains} -> {mapped_domains}")
+                except Exception as e:
+                    logger.warning(f"Failed to load domain expertise config: {e}")
 
             # Estimate experience years from roles (count years from durations)
             experience_years = 0.0
+            import re
             for role in parsed.roles:
                 # Try to extract years from duration string like "2020 - 2023" or "3 years"
                 duration = role.duration.lower()
-                import re
                 # Match year ranges like "2020 - 2023"
                 year_match = re.findall(r'20\d{2}', duration)
                 if len(year_match) >= 2:
@@ -241,7 +294,7 @@ async def search_jobs(request: JobSearchRequest):
             resume = ParsedResume(
                 skills=flat_skills,
                 experience_years=experience_years,
-                domains=[],  # Could extract from parsed data if available
+                domains=mapped_domains,
                 job_titles=recent_titles
             )
 
@@ -294,6 +347,19 @@ async def search_jobs(request: JobSearchRequest):
         jobs = [] 
         importer = None
         
+        # Progress queue for collecting updates from async callback
+        progress_queue: List[SearchProgress] = []
+        
+        async def apify_progress_callback(message: str, sub_progress: float):
+            """Collect progress updates from Apify calls."""
+            # Map sub_progress (0.0-1.0) to overall progress (15-38)
+            overall_progress = 15 + int(sub_progress * 23)
+            progress_queue.append(SearchProgress(
+                stage=SearchStage.FETCHING,
+                progress=overall_progress,
+                message=message
+            ))
+        
         try:
             importer = ApifyJobImporter()
             jobs = await importer.search_jobs_async(
@@ -303,8 +369,14 @@ async def search_jobs(request: JobSearchRequest):
                 max_results=request.max_results,
                 experience_level=request.experience_level,
                 work_arrangement=work_arrangement,
-                split_calls=True  # Enable parallel execution
+                split_calls=True,  # Enable parallel execution
+                progress_callback=apify_progress_callback
             )
+            
+            # Yield any progress updates that were collected during async execution
+            for prog in progress_queue:
+                yield send_progress(prog)
+                
         except Exception as e:
             logger.error(f"Apify fetch failed: {e}", exc_info=True)
             yield send_progress(SearchProgress(
@@ -465,7 +537,7 @@ async def search_jobs(request: JobSearchRequest):
 
                 # Run matching (auto mode uses Gemini AI if available)
                 matcher = JobMatcher(mode="auto")
-                matches = matcher.match_jobs(resume, all_jobs, min_score=0.0)
+                matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
 
                 yield send_progress(SearchProgress(
                     stage=SearchStage.MATCHING,
@@ -702,6 +774,16 @@ async def search_jobs(request: JobSearchRequest):
             except Exception as e:
                 logger.warning(f"Error building fetched jobs preview: {e}")
 
+        # Build gemini stats response if available
+        gemini_stats_response = None
+        if gemini_stats:
+            gemini_stats_response = GeminiStatsResponse(
+                attempted=gemini_stats.attempted,
+                succeeded=gemini_stats.succeeded,
+                failed=gemini_stats.failed,
+                failure_reasons=gemini_stats.failure_reasons
+            )
+
         # Build final result
         result = SearchResult(
             success=True,
@@ -713,7 +795,8 @@ async def search_jobs(request: JobSearchRequest):
             duration_seconds=round(duration, 1),
             top_matches=top_matches,
             fetched_jobs=fetched_jobs,
-            sheets_url=sheets_url
+            sheets_url=sheets_url,
+            gemini_stats=gemini_stats_response
         )
         
         # Save performance metrics
@@ -755,3 +838,93 @@ async def search_jobs(request: JobSearchRequest):
             "X-Accel-Buffering": "no"  # Disable nginx buffering
         }
     )
+
+
+# ========================================================================
+# Config & Health Endpoints
+# ========================================================================
+
+class GeminiConfigStatus(BaseModel):
+    """Gemini configuration status for frontend."""
+    enabled: bool
+    matcher_enabled: bool
+    has_api_key: bool
+    mode: str
+    model: Optional[str] = None
+
+
+class GeminiHealthResponse(BaseModel):
+    """Gemini API health check response."""
+    available: bool
+    model: Optional[str] = None
+    latency_ms: Optional[float] = None
+    error: Optional[str] = None
+
+
+@router.get("/config/gemini-status", response_model=GeminiConfigStatus)
+async def get_gemini_config_status():
+    """Get Gemini configuration status for frontend display.
+
+    Returns configuration state so frontend can show appropriate warnings
+    if Gemini is not properly configured.
+    """
+    config = get_config()
+
+    return GeminiConfigStatus(
+        enabled=config.get("gemini.enabled", False),
+        matcher_enabled=config.get("gemini.matcher.enabled", False),
+        has_api_key=bool(config.get("gemini.api_key")),
+        mode=config.get("matching.engine", "auto"),
+        model=config.get("gemini.matcher.model") if config.get("gemini.enabled") else None
+    )
+
+
+@router.get("/health/gemini", response_model=GeminiHealthResponse)
+async def check_gemini_health():
+    """Check Gemini API availability.
+
+    Performs a lightweight test to verify Gemini API is reachable
+    and properly configured. Used for pre-search validation.
+    """
+    config = get_config()
+
+    # Check if Gemini is even enabled
+    if not config.get("gemini.enabled", False):
+        return GeminiHealthResponse(
+            available=False,
+            error="Gemini is not enabled in configuration"
+        )
+
+    if not config.get("gemini.api_key"):
+        return GeminiHealthResponse(
+            available=False,
+            error="Gemini API key not configured"
+        )
+
+    # Try to test the connection
+    try:
+        from src.integrations.gemini_client import GeminiClient
+
+        client = GeminiClient()
+        if not client.enabled:
+            return GeminiHealthResponse(
+                available=False,
+                error="Gemini client initialization failed"
+            )
+
+        # Perform a lightweight test
+        result = client.test_connection()
+
+        return GeminiHealthResponse(
+            available=result.get("available", False),
+            model=result.get("model"),
+            latency_ms=result.get("latency_ms"),
+            error=result.get("error")
+        )
+
+    except Exception as e:
+        logger.error(f"Gemini health check failed: {e}")
+        return GeminiHealthResponse(
+            available=False,
+            error=str(e)
+        )

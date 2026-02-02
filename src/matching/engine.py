@@ -45,6 +45,7 @@ Configuration (config.yaml):
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from src.matching.skills_matcher import SkillsMatcher
@@ -54,6 +55,30 @@ from src.database.models import Resume, JobPosting, MatchResult
 from src.config import get_config
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GeminiStats:
+    """Statistics about Gemini API usage during job matching."""
+    attempted: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    failure_reasons: List[str] = field(default_factory=list)
+
+    def add_failure(self, reason: str) -> None:
+        """Add a failure reason (unique only)."""
+        self.failed += 1
+        if reason not in self.failure_reasons:
+            self.failure_reasons.append(reason)
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for API response."""
+        return {
+            "attempted": self.attempted,
+            "succeeded": self.succeeded,
+            "failed": self.failed,
+            "failure_reasons": self.failure_reasons
+        }
 
 
 class JobMatcher:
@@ -155,6 +180,32 @@ class JobMatcher:
 
         # Use Gemini for all jobs in auto mode (structured requirements improve accuracy but aren't required)
         return True
+
+    def _categorize_error(self, error: Exception) -> str:
+        """Categorize a Gemini error for user-friendly reporting.
+
+        Args:
+            error: The exception that occurred
+
+        Returns:
+            A short, user-friendly error category string
+        """
+        error_str = str(error).lower()
+
+        if "rate limit" in error_str or "quota" in error_str or "429" in error_str:
+            return "rate_limit"
+        if "timeout" in error_str or "timed out" in error_str:
+            return "timeout"
+        if "safety" in error_str or "blocked" in error_str:
+            return "safety_blocked"
+        if "parse" in error_str or "json" in error_str or "decode" in error_str:
+            return "parse_error"
+        if "connection" in error_str or "network" in error_str:
+            return "connection_error"
+        if "auth" in error_str or "key" in error_str or "401" in error_str or "403" in error_str:
+            return "auth_error"
+
+        return "api_error"
 
     def _match_with_gemini(
         self,
@@ -312,7 +363,8 @@ class JobMatcher:
         resume: Resume,
         job: JobPosting,
         skills_threshold: float = 0.5,
-        force_nlp: bool = False
+        force_nlp: bool = False,
+        gemini_stats: Optional[GeminiStats] = None
     ) -> Dict:
         """Match a single job against a resume.
 
@@ -321,6 +373,7 @@ class JobMatcher:
             job: JobPosting object from database
             skills_threshold: Minimum similarity for skill matching (NLP mode)
             force_nlp: Force NLP mode even if Gemini is available
+            gemini_stats: Optional GeminiStats object for tracking API usage
 
         Returns:
             Dictionary with match results:
@@ -344,11 +397,24 @@ class JobMatcher:
         """
         # Try Gemini matching if appropriate
         if not force_nlp and self._should_use_gemini(job):
+            if gemini_stats:
+                gemini_stats.attempted += 1
+
             try:
                 ai_result = self._match_with_gemini(resume, job)
                 if ai_result:
+                    if gemini_stats:
+                        gemini_stats.succeeded += 1
                     return ai_result
+                else:
+                    # Gemini returned None (empty response)
+                    if gemini_stats:
+                        gemini_stats.add_failure("empty_response")
+                    logger.warning(f"Gemini returned empty for '{job.title}', falling back to NLP")
             except Exception as e:
+                if gemini_stats:
+                    reason = self._categorize_error(e)
+                    gemini_stats.add_failure(reason)
                 logger.warning(f"Gemini matching failed for '{job.title}', falling back to NLP: {e}")
 
         # Fall back to NLP matching
@@ -438,8 +504,9 @@ class JobMatcher:
         resume: Resume,
         jobs: List[JobPosting],
         min_score: Optional[float] = None,
-        top_n: Optional[int] = None
-    ) -> List[Dict]:
+        top_n: Optional[int] = None,
+        track_gemini_stats: bool = True
+    ) -> Tuple[List[Dict], Optional[GeminiStats]]:
         """Match multiple jobs against a resume and rank them.
 
         Args:
@@ -447,18 +514,22 @@ class JobMatcher:
             jobs: List of JobPosting objects
             min_score: Minimum overall score to include (uses config default if None)
             top_n: Return only top N matches (returns all if None)
+            track_gemini_stats: If True, track and return Gemini API usage stats
 
         Returns:
-            List of match dictionaries, sorted by overall_score descending.
-            Each dict includes all match_job() results plus job details.
+            Tuple of (matches, gemini_stats):
+                - matches: List of match dictionaries, sorted by overall_score descending.
+                  Each dict includes all match_job() results plus job details.
+                - gemini_stats: GeminiStats object with API usage info, or None if not tracking
         """
         if min_score is None:
             min_score = self.config.get_min_match_score()
 
         matches = []
+        gemini_stats = GeminiStats() if track_gemini_stats else None
 
         for job in jobs:
-            match_result = self.match_job(resume, job)
+            match_result = self.match_job(resume, job, gemini_stats=gemini_stats)
 
             # Only include if meets minimum score
             if match_result['overall_score'] >= min_score:
@@ -483,7 +554,15 @@ class JobMatcher:
         if top_n:
             matches = matches[:top_n]
 
-        return matches
+        # Log stats if tracking
+        if gemini_stats and gemini_stats.attempted > 0:
+            logger.info(
+                f"Gemini stats: {gemini_stats.succeeded}/{gemini_stats.attempted} succeeded, "
+                f"{gemini_stats.failed} failed"
+                + (f" (reasons: {', '.join(gemini_stats.failure_reasons)})" if gemini_stats.failure_reasons else "")
+            )
+
+        return matches, gemini_stats
 
     def save_match_results(
         self,

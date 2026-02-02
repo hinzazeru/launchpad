@@ -2,213 +2,706 @@
   "config": {
     "domain_match_weight": 0.15,
     "mismatch_penalty": 0.1,
-    "required_keywords": ["must have", "required", "essential", "mandatory", "need experience in", "expertise in", "background in"],
-    "preferred_keywords": ["nice to have", "preferred", "bonus", "ideally", "plus if you have"]
+    "required_keywords": [
+      "must have",
+      "required",
+      "essential",
+      "mandatory",
+      "need experience in",
+      "expertise in",
+      "background in"
+    ],
+    "preferred_keywords": [
+      "nice to have",
+      "preferred",
+      "bonus",
+      "ideally",
+      "plus if you have"
+    ]
   },
   "domains": {
     "industries": {
       "ecommerce": {
-        "keywords": ["ecommerce", "e-commerce", "online retail", "digital commerce", "retail tech", "shopping platform", "online store", "direct-to-consumer", "dtc", "d2c"],
+        "keywords": [
+          "ecommerce",
+          "e-commerce",
+          "online retail",
+          "digital commerce",
+          "retail tech",
+          "shopping platform",
+          "online store",
+          "direct-to-consumer",
+          "dtc",
+          "d2c"
+        ],
         "description": "Online retail and digital commerce"
       },
       "fintech": {
-        "keywords": ["fintech", "financial technology", "payments", "lending", "insurance tech", "insurtech", "wealthtech", "regtech", "neobank", "credit", "loans"],
+        "keywords": [
+          "fintech",
+          "financial technology",
+          "payments",
+          "lending",
+          "insurance tech",
+          "insurtech",
+          "wealthtech",
+          "regtech",
+          "neobank",
+          "credit",
+          "loans"
+        ],
         "description": "Financial technology and services"
       },
       "banking": {
-        "keywords": ["banking", "bank", "retail banking", "commercial banking", "corporate banking", "digital banking", "neo bank", "challenger bank", "core banking"],
+        "keywords": [
+          "banking",
+          "bank",
+          "retail banking",
+          "commercial banking",
+          "corporate banking",
+          "digital banking",
+          "neo bank",
+          "challenger bank",
+          "core banking"
+        ],
         "description": "Banking and digital banking"
       },
       "investment_management": {
-        "keywords": ["investment management", "portfolio management", "wealth management", "robo-advisor", "trading platform", "brokerage", "securities", "equities", "fixed income"],
+        "keywords": [
+          "investment management",
+          "portfolio management",
+          "wealth management",
+          "robo-advisor",
+          "trading platform",
+          "brokerage",
+          "securities",
+          "equities",
+          "fixed income"
+        ],
         "description": "Investment and portfolio management"
       },
       "asset_management": {
-        "keywords": ["asset management", "asset manager", "fund management", "mutual funds", "etf", "hedge fund", "private equity", "venture capital", "aum", "assets under management"],
+        "keywords": [
+          "asset management",
+          "asset manager",
+          "fund management",
+          "mutual funds",
+          "etf",
+          "hedge fund",
+          "private equity",
+          "venture capital",
+          "aum",
+          "assets under management"
+        ],
         "description": "Asset and fund management"
       },
       "financial_services": {
-        "keywords": ["financial services", "financial institution", "capital markets", "treasury", "financial risk", "aml", "kyc", "financial planning", "wealth planning"],
+        "keywords": [
+          "financial services",
+          "financial institution",
+          "capital markets",
+          "treasury",
+          "financial risk",
+          "aml",
+          "kyc",
+          "financial planning",
+          "wealth planning"
+        ],
         "description": "Financial services and capital markets"
       },
       "b2b": {
-        "keywords": ["b2b", "business to business", "enterprise software", "enterprise sales", "business software", "corporate clients", "business customers"],
+        "keywords": [
+          "b2b",
+          "business to business",
+          "enterprise software",
+          "enterprise sales",
+          "business software",
+          "corporate clients",
+          "business customers"
+        ],
         "description": "Business-to-business products"
       },
       "b2b_saas": {
-        "keywords": ["b2b saas", "saas", "software as a service", "subscription software", "cloud software", "enterprise saas", "saas platform", "recurring revenue", "arr", "mrr"],
+        "keywords": [
+          "b2b saas",
+          "saas",
+          "software as a service",
+          "subscription software",
+          "cloud software",
+          "enterprise saas",
+          "saas platform",
+          "recurring revenue",
+          "arr",
+          "mrr"
+        ],
         "description": "B2B SaaS products"
       },
       "healthcare": {
-        "keywords": ["healthcare industry", "healthtech", "health tech", "clinical trials", "pharma", "pharmaceutical", "biotech", "life sciences", "digital health", "telehealth", "telemedicine", "patient care", "medical device", "ehr", "electronic health record", "hospital", "healthcare provider"],
+        "keywords": [
+          "healthcare industry",
+          "healthtech",
+          "health tech",
+          "clinical trials",
+          "pharma",
+          "pharmaceutical",
+          "biotech",
+          "life sciences",
+          "digital health",
+          "telehealth",
+          "telemedicine",
+          "patient care",
+          "medical device",
+          "ehr",
+          "electronic health record",
+          "hospital",
+          "healthcare provider"
+        ],
         "description": "Healthcare and medical technology"
       },
       "edtech": {
-        "keywords": ["edtech", "education technology", "e-learning", "online learning", "lms", "learning management", "higher education", "k-12", "student information system", "courseware"],
+        "keywords": [
+          "edtech",
+          "education technology",
+          "e-learning",
+          "online learning",
+          "lms",
+          "learning management",
+          "higher education",
+          "k-12",
+          "student information system",
+          "courseware"
+        ],
         "description": "Education technology"
       },
       "adtech": {
-        "keywords": ["adtech", "advertising technology", "digital advertising", "programmatic", "ad platform", "demand-side", "supply-side", "dsp", "ssp", "ad exchange"],
+        "keywords": [
+          "adtech",
+          "advertising technology",
+          "digital advertising",
+          "programmatic",
+          "ad platform",
+          "demand-side",
+          "supply-side",
+          "dsp",
+          "ssp",
+          "ad exchange"
+        ],
         "description": "Advertising technology"
       },
       "martech": {
-        "keywords": ["martech", "marketing technology", "marketing automation", "crm platform", "customer data platform", "cdp", "email marketing", "marketing platform", "marketing software"],
+        "keywords": [
+          "martech",
+          "marketing technology",
+          "marketing automation",
+          "crm platform",
+          "customer data platform",
+          "cdp",
+          "email marketing",
+          "marketing platform",
+          "marketing software"
+        ],
         "description": "Marketing technology"
       },
       "logistics": {
-        "keywords": ["logistics", "supply chain", "fulfillment center", "freight", "warehouse", "last mile", "transportation", "3pl", "fleet management", "carrier management"],
+        "keywords": [
+          "logistics",
+          "supply chain",
+          "fulfillment center",
+          "freight",
+          "warehouse",
+          "last mile",
+          "transportation",
+          "3pl",
+          "fleet management",
+          "carrier management"
+        ],
         "description": "Logistics and supply chain"
       },
       "real_estate": {
-        "keywords": ["real estate", "proptech", "property tech", "property management", "real estate tech", "housing", "mortgage", "mls"],
+        "keywords": [
+          "real estate",
+          "proptech",
+          "property tech",
+          "property management",
+          "real estate tech",
+          "housing",
+          "mortgage",
+          "mls"
+        ],
         "description": "Real estate technology"
       },
       "gaming": {
-        "keywords": ["gaming", "game development", "video games", "mobile games", "esports", "game studio", "interactive entertainment"],
+        "keywords": [
+          "gaming",
+          "game development",
+          "video games",
+          "mobile games",
+          "esports",
+          "game studio",
+          "interactive entertainment"
+        ],
         "description": "Gaming and interactive entertainment"
       },
       "media": {
-        "keywords": ["media company", "entertainment", "streaming", "content platform", "publishing industry", "news media", "broadcast", "digital media", "ott", "media industry"],
+        "keywords": [
+          "media company",
+          "entertainment",
+          "streaming",
+          "content platform",
+          "publishing industry",
+          "news media",
+          "broadcast",
+          "digital media",
+          "ott",
+          "media industry"
+        ],
         "description": "Media and entertainment"
       },
       "cybersecurity": {
-        "keywords": ["cybersecurity", "cyber security", "infosec", "information security", "threat detection", "identity management", "iam", "siem", "security operations", "security software", "endpoint security"],
+        "keywords": [
+          "cybersecurity",
+          "cyber security",
+          "infosec",
+          "information security",
+          "threat detection",
+          "identity management",
+          "iam",
+          "siem",
+          "security operations",
+          "security software",
+          "endpoint security"
+        ],
         "description": "Cybersecurity and information security"
       },
       "hr_tech": {
-        "keywords": ["hr tech", "hrtech", "talent management", "applicant tracking", "ats", "payroll software", "workforce management", "hris", "hr software", "people analytics", "hcm"],
+        "keywords": [
+          "hr tech",
+          "hrtech",
+          "talent management",
+          "applicant tracking",
+          "ats",
+          "payroll software",
+          "workforce management",
+          "hris",
+          "hr software",
+          "people analytics",
+          "hcm"
+        ],
         "description": "Human resources technology"
       },
       "legal_tech": {
-        "keywords": ["legal tech", "legaltech", "legal technology", "contract management", "legal operations", "e-discovery", "law firm"],
+        "keywords": [
+          "legal tech",
+          "legaltech",
+          "legal technology",
+          "contract management",
+          "legal operations",
+          "e-discovery",
+          "law firm"
+        ],
         "description": "Legal technology"
       },
       "construction": {
-        "keywords": ["construction tech", "contech", "construction management", "general contractor", "subcontractor", "jobsite", "aec industry", "bim", "building information modeling", "construction project"],
+        "keywords": [
+          "construction tech",
+          "contech",
+          "construction management",
+          "general contractor",
+          "subcontractor",
+          "jobsite",
+          "aec industry",
+          "bim",
+          "building information modeling",
+          "construction project"
+        ],
         "description": "Construction technology"
       },
       "travel": {
-        "keywords": ["travel tech", "travel industry", "hospitality industry", "booking platform", "airline", "hotel industry", "tourism", "leisure travel", "travel management"],
+        "keywords": [
+          "travel tech",
+          "travel industry",
+          "hospitality industry",
+          "booking platform",
+          "airline",
+          "hotel industry",
+          "tourism",
+          "leisure travel",
+          "travel management"
+        ],
         "description": "Travel and hospitality"
       },
       "automotive": {
-        "keywords": ["automotive", "auto tech", "autonomous vehicle", "self-driving", "electric vehicle", "connected car", "vehicle software", "automotive oem"],
+        "keywords": [
+          "automotive",
+          "auto tech",
+          "autonomous vehicle",
+          "self-driving",
+          "electric vehicle",
+          "connected car",
+          "vehicle software",
+          "automotive oem"
+        ],
         "description": "Automotive and mobility"
       },
       "agriculture": {
-        "keywords": ["agriculture", "agtech", "farming", "agritech", "food tech", "precision agriculture", "farm management"],
+        "keywords": [
+          "agriculture",
+          "agtech",
+          "farming",
+          "agritech",
+          "food tech",
+          "precision agriculture",
+          "farm management"
+        ],
         "description": "Agriculture technology"
       },
       "energy": {
-        "keywords": ["energy sector", "cleantech", "renewable energy", "solar energy", "wind energy", "oil and gas", "utilities", "smart grid", "energy tech"],
+        "keywords": [
+          "energy sector",
+          "cleantech",
+          "renewable energy",
+          "solar energy",
+          "wind energy",
+          "oil and gas",
+          "utilities",
+          "smart grid",
+          "energy tech"
+        ],
         "description": "Energy and cleantech"
       },
       "government": {
-        "keywords": ["govtech", "public sector", "federal government", "state government", "municipal government", "civic tech", "government agency", "public administration"],
+        "keywords": [
+          "govtech",
+          "public sector",
+          "federal government",
+          "state government",
+          "municipal government",
+          "civic tech",
+          "government agency",
+          "public administration"
+        ],
         "description": "Government and public sector"
       },
       "nonprofit": {
-        "keywords": ["nonprofit", "non-profit", "ngo", "charity", "charitable organization", "philanthropy", "501c3", "501(c)(3)"],
+        "keywords": [
+          "nonprofit",
+          "non-profit",
+          "ngo",
+          "charity",
+          "charitable organization",
+          "philanthropy",
+          "501c3",
+          "501(c)(3)"
+        ],
         "description": "Nonprofit and social impact"
       }
     },
     "platforms": {
       "salesforce": {
-        "keywords": ["salesforce", "sfdc", "sales cloud", "service cloud", "marketing cloud", "salesforce platform", "force.com", "apex", "lightning"],
+        "keywords": [
+          "salesforce",
+          "sfdc",
+          "sales cloud",
+          "service cloud",
+          "marketing cloud",
+          "salesforce platform",
+          "force.com",
+          "apex",
+          "lightning"
+        ],
         "description": "Salesforce CRM platform"
       },
       "shopify": {
-        "keywords": ["shopify", "shopify plus", "shopify app", "liquid", "shopify theme"],
+        "keywords": [
+          "shopify",
+          "shopify plus",
+          "shopify app",
+          "liquid",
+          "shopify theme"
+        ],
         "description": "Shopify ecommerce platform"
       },
       "sap": {
-        "keywords": ["sap", "sap erp", "sap s/4hana", "sap hana", "sap business", "abap"],
+        "keywords": [
+          "sap",
+          "sap erp",
+          "sap s/4hana",
+          "sap hana",
+          "sap business",
+          "abap"
+        ],
         "description": "SAP enterprise software"
       },
       "oracle": {
-        "keywords": ["oracle", "oracle cloud", "netsuite", "oracle erp", "oracle fusion"],
+        "keywords": [
+          "oracle",
+          "oracle cloud",
+          "netsuite",
+          "oracle erp",
+          "oracle fusion"
+        ],
         "description": "Oracle enterprise software"
       },
       "workday": {
-        "keywords": ["workday", "workday hcm", "workday financials"],
+        "keywords": [
+          "workday",
+          "workday hcm",
+          "workday financials"
+        ],
         "description": "Workday HR and finance"
       },
       "adobe": {
-        "keywords": ["adobe experience", "aem", "adobe experience manager", "adobe analytics", "adobe campaign", "adobe target", "magento"],
+        "keywords": [
+          "adobe experience",
+          "aem",
+          "adobe experience manager",
+          "adobe analytics",
+          "adobe campaign",
+          "adobe target",
+          "magento"
+        ],
         "description": "Adobe Experience Cloud"
       },
       "hubspot": {
-        "keywords": ["hubspot", "hubspot crm", "hubspot marketing", "hubspot sales"],
+        "keywords": [
+          "hubspot",
+          "hubspot crm",
+          "hubspot marketing",
+          "hubspot sales"
+        ],
         "description": "HubSpot CRM and marketing"
       },
       "stripe": {
-        "keywords": ["stripe", "stripe payments", "stripe connect", "stripe billing"],
+        "keywords": [
+          "stripe",
+          "stripe payments",
+          "stripe connect",
+          "stripe billing"
+        ],
         "description": "Stripe payments platform"
       },
       "twilio": {
-        "keywords": ["twilio", "twilio segment", "sendgrid"],
+        "keywords": [
+          "twilio",
+          "twilio segment",
+          "sendgrid"
+        ],
         "description": "Twilio communications platform"
       },
       "zendesk": {
-        "keywords": ["zendesk", "zendesk support", "zendesk sell"],
+        "keywords": [
+          "zendesk",
+          "zendesk support",
+          "zendesk sell"
+        ],
         "description": "Zendesk customer service"
       },
       "servicenow": {
-        "keywords": ["servicenow", "service now", "itsm", "itom"],
+        "keywords": [
+          "servicenow",
+          "service now",
+          "itsm",
+          "itom"
+        ],
         "description": "ServiceNow IT service management"
       },
       "atlassian": {
-        "keywords": ["atlassian", "jira", "confluence", "bitbucket", "trello"],
+        "keywords": [
+          "atlassian",
+          "jira",
+          "confluence",
+          "bitbucket",
+          "trello"
+        ],
         "description": "Atlassian collaboration tools"
       },
       "snowflake": {
-        "keywords": ["snowflake", "snowflake data", "data warehouse", "snowflake cloud"],
+        "keywords": [
+          "snowflake",
+          "snowflake data",
+          "data warehouse",
+          "snowflake cloud"
+        ],
         "description": "Snowflake data platform"
       },
       "databricks": {
-        "keywords": ["databricks", "spark", "delta lake", "lakehouse"],
+        "keywords": [
+          "databricks",
+          "spark",
+          "delta lake",
+          "lakehouse"
+        ],
         "description": "Databricks data platform"
+      },
+      "aws": {
+        "keywords": [
+          "aws",
+          "amazon web services",
+          "ec2",
+          "s3",
+          "lambda",
+          "dynamodb",
+          "redshift",
+          "cloudformation",
+          "eks",
+          "ecs",
+          "rds",
+          "sagemaker",
+          "aws cloud"
+        ],
+        "description": "Amazon Web Services cloud platform"
+      },
+      "gcp": {
+        "keywords": [
+          "gcp",
+          "google cloud",
+          "google cloud platform",
+          "bigquery",
+          "cloud functions",
+          "gke",
+          "cloud run",
+          "dataflow",
+          "pub/sub",
+          "vertex ai",
+          "cloud storage"
+        ],
+        "description": "Google Cloud Platform"
       }
     },
     "technologies": {
       "headless_cms": {
-        "keywords": ["headless cms", "headless content", "contentful", "sanity", "strapi", "prismic", "hygraph", "decoupled cms"],
+        "keywords": [
+          "headless cms",
+          "headless content",
+          "contentful",
+          "sanity",
+          "strapi",
+          "prismic",
+          "hygraph",
+          "decoupled cms"
+        ],
         "description": "Headless content management systems"
       },
       "composable": {
-        "keywords": ["composable", "composable commerce", "composable architecture", "mach", "microservices", "api-first", "cloud-native", "headless"],
+        "keywords": [
+          "composable",
+          "composable commerce",
+          "composable architecture",
+          "mach",
+          "microservices",
+          "api-first",
+          "cloud-native",
+          "headless"
+        ],
         "description": "Composable/MACH architecture"
       },
       "blockchain": {
-        "keywords": ["blockchain", "web3", "cryptocurrency", "crypto", "defi", "nft", "smart contract", "ethereum", "solidity"],
+        "keywords": [
+          "blockchain",
+          "web3",
+          "cryptocurrency",
+          "crypto",
+          "defi",
+          "nft",
+          "smart contract",
+          "ethereum",
+          "solidity"
+        ],
         "description": "Blockchain and Web3"
       },
       "ai_ml": {
-        "keywords": ["artificial intelligence", "machine learning", "deep learning", "neural network", "nlp", "computer vision", "generative ai", "llm", "large language model", "chatgpt", "gpt"],
+        "keywords": [
+          "artificial intelligence",
+          "machine learning",
+          "deep learning",
+          "neural network",
+          "nlp",
+          "computer vision",
+          "generative ai",
+          "llm",
+          "large language model",
+          "chatgpt",
+          "gpt"
+        ],
         "description": "AI and machine learning"
       },
       "data_engineering": {
-        "keywords": ["data engineering", "data pipeline", "etl", "data lake", "data warehouse", "data platform", "big data", "kafka", "airflow"],
+        "keywords": [
+          "data engineering",
+          "data pipeline",
+          "etl",
+          "data lake",
+          "data warehouse",
+          "data platform",
+          "big data",
+          "kafka",
+          "airflow"
+        ],
         "description": "Data engineering and pipelines"
       },
       "devops": {
-        "keywords": ["devops", "ci/cd", "continuous integration", "continuous deployment", "kubernetes", "docker", "terraform", "infrastructure as code", "iac"],
+        "keywords": [
+          "devops",
+          "ci/cd",
+          "continuous integration",
+          "continuous deployment",
+          "kubernetes",
+          "docker",
+          "terraform",
+          "infrastructure as code",
+          "iac"
+        ],
         "description": "DevOps and infrastructure"
       },
       "mobile": {
-        "keywords": ["mobile app", "ios", "android", "react native", "flutter", "mobile development", "app development"],
+        "keywords": [
+          "mobile app",
+          "ios",
+          "android",
+          "react native",
+          "flutter",
+          "mobile development",
+          "app development"
+        ],
         "description": "Mobile app development"
       },
       "iot": {
-        "keywords": ["iot", "internet of things", "connected devices", "sensors", "embedded", "edge computing", "smart devices"],
+        "keywords": [
+          "iot",
+          "internet of things",
+          "connected devices",
+          "sensors",
+          "embedded",
+          "edge computing",
+          "smart devices"
+        ],
         "description": "Internet of Things"
       },
       "ar_vr": {
-        "keywords": ["ar", "vr", "augmented reality", "virtual reality", "mixed reality", "xr", "metaverse", "spatial computing"],
+        "keywords": [
+          "ar",
+          "vr",
+          "augmented reality",
+          "virtual reality",
+          "mixed reality",
+          "xr",
+          "metaverse",
+          "spatial computing"
+        ],
         "description": "AR/VR and spatial computing"
       },
       "voice": {
-        "keywords": ["voice assistant", "alexa skills", "google assistant", "conversational ai", "speech recognition", "voice ui", "vui", "voice interface", "smart speaker"],
+        "keywords": [
+          "voice assistant",
+          "alexa skills",
+          "google assistant",
+          "conversational ai",
+          "speech recognition",
+          "voice ui",
+          "vui",
+          "voice interface",
+          "smart speaker"
+        ],
         "description": "Voice and conversational interfaces"
       }
     }

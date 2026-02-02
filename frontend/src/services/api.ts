@@ -230,6 +230,13 @@ export interface TopMatch {
   gemini_score?: number;
 }
 
+export interface GeminiStats {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  failure_reasons: string[];
+}
+
 export interface SearchResult {
   success: boolean;
   jobs_fetched: number;
@@ -241,6 +248,22 @@ export interface SearchResult {
   top_matches: TopMatch[];
   fetched_jobs: TopMatch[];
   sheets_url?: string;
+  gemini_stats?: GeminiStats;
+}
+
+export interface GeminiConfigStatus {
+  enabled: boolean;
+  matcher_enabled: boolean;
+  has_api_key: boolean;
+  mode: string;
+  model?: string;
+}
+
+export interface GeminiHealthResponse {
+  available: boolean;
+  model?: string;
+  latency_ms?: number;
+  error?: string;
 }
 
 export interface SearchDefaults {
@@ -644,6 +667,22 @@ class ApiClient {
     return this.fetch<SearchDefaults>('/search/defaults');
   }
 
+  /**
+   * Get Gemini configuration status.
+   * Used to show warnings if Gemini is not properly configured.
+   */
+  async getGeminiConfigStatus(): Promise<GeminiConfigStatus> {
+    return this.fetch<GeminiConfigStatus>('/search/config/gemini-status');
+  }
+
+  /**
+   * Check Gemini API health/availability.
+   * Used for pre-search validation.
+   */
+  async checkGeminiHealth(): Promise<GeminiHealthResponse> {
+    return this.fetch<GeminiHealthResponse>('/search/health/gemini');
+  }
+
   // Analytics endpoints
 
   async getAnalyticsSummary(): Promise<SummaryMetrics> {
@@ -973,6 +1012,31 @@ export function useSearchDefaults() {
   return useQuery({
     queryKey: ['search-defaults'],
     queryFn: () => api.getSearchDefaults(),
+  });
+}
+
+/**
+ * Hook for Gemini configuration status.
+ * Returns config state to show warnings if Gemini is misconfigured.
+ */
+export function useGeminiConfigStatus() {
+  return useQuery({
+    queryKey: ['gemini-config-status'],
+    queryFn: () => api.getGeminiConfigStatus(),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
+ * Hook for Gemini health check.
+ * Used to validate API availability before searches.
+ */
+export function useGeminiHealth(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['gemini-health'],
+    queryFn: () => api.checkGeminiHealth(),
+    enabled: options?.enabled ?? true,
+    staleTime: 30 * 1000, // 30 seconds
   });
 }
 

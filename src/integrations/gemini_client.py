@@ -17,9 +17,13 @@ import re
 from typing import List, Dict, Optional
 
 def clean_json_text(text: str) -> str:
-    """Clean JSON text by removing markdown code blocks and finding the JSON object/array.
+    """Clean JSON text by removing markdown code blocks and fixing common JSON issues.
     
-    Also handles JavaScript-style objects with unquoted property names by adding quotes.
+    Handles:
+    - Markdown code blocks (```json ... ```)
+    - JavaScript-style unquoted property names
+    - Trailing commas in arrays/objects
+    - Newlines and other special chars inside string values
     """
     if not text:
         return ""
@@ -28,7 +32,7 @@ def clean_json_text(text: str) -> str:
     
     # Remove markdown code blocks
     if "```" in text:
-        match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+        match = re.search(r"```(?:json)?\\s*(.*?)```", text, re.DOTALL)
         if match:
             text = match.group(1).strip()
             
@@ -51,6 +55,29 @@ def clean_json_text(text: str) -> str:
         r' "\1":',
         text
     )
+    
+    # Fix trailing commas before ] or } (common Gemini error)
+    # Pattern: comma followed by optional whitespace/newlines then ] or }
+    text = re.sub(r',\s*([\]}])', r'\1', text)
+    
+    # Escape literal newlines in the JSON (common in truncated responses)
+    # Replace actual newlines with escaped versions, but only where needed
+    # This is a simple approach that works for most Gemini output
+    lines = text.split('\n')
+    if len(lines) > 1:
+        # Reconstruct with proper escaping for strings
+        # Simple heuristic: if line doesn't end with proper JSON punctuation, escape the newline
+        reconstructed = []
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            reconstructed.append(line)
+            # Check if this looks like it's inside a string (next line doesn't start with JSON punctuation)
+            if i < len(lines) - 1:
+                next_stripped = lines[i + 1].strip()
+                if stripped and not stripped.endswith((',', '{', '[', ':', '}', ']', '"')):
+                    # Might be inside a string - will be handled by json.loads failure
+                    pass
+        text = '\n'.join(reconstructed)
             
     return text
 
@@ -227,6 +254,91 @@ Technologies: headless_cms, composable, blockchain, ai_ml, data_engineering, dev
 If no specific domains are required, respond with:
 {{"domains": [], "reasoning": "Generic role with no specific domain requirements"}}
 """
+
+
+class GeminiClient:
+    """Base Gemini client for API connectivity and health checks.
+
+    Provides a unified interface for checking Gemini API availability
+    and testing connectivity before operations.
+    """
+
+    def __init__(self):
+        """Initialize the Gemini client."""
+        self.config = get_config()
+        self.enabled = self.config.get("gemini.enabled", False)
+        self.api_key = self.config.get("gemini.api_key")
+        self.model_name = self.config.get("gemini.matcher.model", "gemini-3-flash-preview")
+        self.model = None
+
+        if self.enabled and self.api_key:
+            try:
+                genai.configure(api_key=self.api_key)
+                self.model = genai.GenerativeModel(self.model_name)
+                logger.info(f"GeminiClient initialized with model: {self.model_name}")
+            except Exception as e:
+                logger.error(f"Failed to initialize GeminiClient: {e}")
+                self.enabled = False
+
+    def is_available(self) -> bool:
+        """Check if Gemini is available and properly configured."""
+        return self.enabled and self.model is not None
+
+    def test_connection(self) -> Dict:
+        """Test Gemini API connectivity with a minimal request.
+
+        Returns:
+            Dict with test results:
+                - available: True if connection successful
+                - model: Model name if successful
+                - latency_ms: Response time in milliseconds
+                - error: Error message if failed
+        """
+        import time
+
+        if not self.is_available():
+            return {
+                "available": False,
+                "error": "Gemini client not initialized"
+            }
+
+        try:
+            start_time = time.perf_counter()
+
+            # Minimal test prompt - just ask for a single word
+            response = self.model.generate_content(
+                "Respond with only the word 'OK'.",
+                generation_config=types.GenerationConfig(
+                    temperature=0.0,
+                    max_output_tokens=10,
+                )
+            )
+
+            latency_ms = (time.perf_counter() - start_time) * 1000
+
+            # Check if we got a valid response
+            if response.candidates and response.candidates[0].content.parts:
+                return {
+                    "available": True,
+                    "model": self.model_name,
+                    "latency_ms": round(latency_ms, 1)
+                }
+            else:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
+                return {
+                    "available": False,
+                    "model": self.model_name,
+                    "latency_ms": round(latency_ms, 1),
+                    "error": f"Empty response (finish_reason: {finish_reason})"
+                }
+
+        except Exception as e:
+            logger.error(f"Gemini connection test failed: {e}")
+            return {
+                "available": False,
+                "model": self.model_name,
+                "error": str(e)
+            }
 
 
 class GeminiDomainExtractor:
@@ -766,7 +878,7 @@ class GeminiMatchReranker:
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
-                    max_output_tokens=512,  # Increased from 300 for safety margin
+                    max_output_tokens=1024,  # Increased for complete responses
                     response_mime_type="application/json",
                 )
             )

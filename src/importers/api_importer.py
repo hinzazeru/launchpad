@@ -106,6 +106,7 @@ class ApifyJobImporter:
         company_name: Optional[str] = None,
         search_radius: Optional[str] = None,
         split_calls: bool = True,
+        progress_callback: Optional[callable] = None,
     ) -> List[Dict]:
         """Asynchronously search for LinkedIn jobs using Apify with parallel execution support.
 
@@ -121,6 +122,9 @@ class ApifyJobImporter:
             company_name: Filter by specific company
             search_radius: Search radius
             split_calls: Whether to split the request into parallel calls
+            progress_callback: Optional async callback for progress updates.
+                               Signature: async def callback(message: str, sub_progress: float)
+                               sub_progress is 0.0-1.0 within the fetching stage
 
         Returns:
             List of job posting dictionaries
@@ -128,6 +132,8 @@ class ApifyJobImporter:
         # If mock mode is enabled, load from file
         if self.use_mock_data:
             print(f"[MOCK MODE] Using mock data (ignoring search parameters)")
+            if progress_callback:
+                await progress_callback("Loading mock data...", 0.5)
             return self._load_mock_data()
 
         # Base input configuration
@@ -174,24 +180,52 @@ class ApifyJobImporter:
         else:
             chunks.append({"start": 0, "limit": max_results})
 
-        # Execute parallel calls
+        num_chunks = len(chunks)
+        
+        # Report starting parallel calls
+        if progress_callback:
+            await progress_callback(f"Starting {num_chunks} parallel API call(s)...", 0.1)
+
+        # Execute parallel calls with progress tracking
+        completed_chunks = 0
+        all_jobs = []
+        
+        async def execute_with_tracking(input_data: Dict, chunk_index: int) -> List[Dict]:
+            """Execute a chunk and track completion."""
+            nonlocal completed_chunks
+            result = await self._execute_apify_run_async(input_data)
+            completed_chunks += 1
+            if progress_callback:
+                progress = 0.1 + (0.8 * completed_chunks / num_chunks)
+                await progress_callback(
+                    f"API call {completed_chunks}/{num_chunks} complete ({len(result) if isinstance(result, list) else 0} jobs)",
+                    progress
+                )
+            return result
+        
         tasks = []
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             input_copy = base_input.copy()
             input_copy["max_jobs"] = chunk["limit"]
             input_copy["start"] = chunk["start"]  # Assuming 'start' works for pagination
             
-            tasks.append(self._execute_apify_run_async(input_copy))
+            tasks.append(execute_with_tracking(input_copy, i))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
+        # Report processing results
+        if progress_callback:
+            await progress_callback("Processing API responses...", 0.95)
+        
         # Combine results
-        all_jobs = []
         for res in results:
             if isinstance(res, Exception):
                 print(f"Apify chunk failed: {res}")
             elif isinstance(res, list):
                 all_jobs.extend(res)
+        
+        if progress_callback:
+            await progress_callback(f"Fetched {len(all_jobs)} total jobs", 1.0)
                 
         return all_jobs
 

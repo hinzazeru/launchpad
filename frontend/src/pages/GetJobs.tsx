@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, useResumes, useSearchDefaults } from '@/services/api';
-import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage } from '@/services/api';
+import { api, useResumes, useSearchDefaults, useGeminiConfigStatus } from '@/services/api';
+import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage, GeminiStats } from '@/services/api';
 import { useSearchStore } from '@/stores/searchStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,8 @@ import {
   ArrowRight,
   RefreshCw,
   Calendar,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScheduleList, ScheduleForm } from '@/components/schedules';
@@ -334,6 +336,7 @@ export function GetJobs() {
   const toast = useToastActions();
   const { data: resumesData, isLoading: resumesLoading } = useResumes();
   const { data: defaults } = useSearchDefaults();
+  const { data: geminiConfig } = useGeminiConfigStatus();
 
   // Form state
   const [keyword, setKeyword] = useState('');
@@ -372,6 +375,19 @@ export function GetJobs() {
     }
   }, [defaults?.location]);
 
+  // Show warning toast when Gemini fallbacks occur
+  useEffect(() => {
+    if (result?.gemini_stats && result.gemini_stats.failed > 0) {
+      const stats = result.gemini_stats;
+      const reasonsText = stats.failure_reasons.length > 0
+        ? ` (${stats.failure_reasons.map(r => r.replace(/_/g, ' ')).join(', ')})`
+        : '';
+      toast.warning(
+        'AI Matching Fallback',
+        `${stats.failed} of ${stats.attempted} jobs used NLP fallback${reasonsText}`
+      );
+    }
+  }, [result?.gemini_stats]);
 
   const handleSearch = useCallback(async () => {
     if (!keyword.trim()) {
@@ -463,6 +479,34 @@ export function GetJobs() {
 
           {/* Manual Search Tab Content */}
           <TabsContent value="manual" className="mt-6">
+
+            {/* Gemini Config Warning Banner */}
+            {geminiConfig && !geminiConfig.enabled && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex items-center gap-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3"
+              >
+                <Info className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                <div className="text-sm text-blue-700 dark:text-blue-300">
+                  <span className="font-medium">AI matching is disabled.</span>{' '}
+                  Job matches will use NLP-only scoring. Enable Gemini in config for richer insights.
+                </div>
+              </motion.div>
+            )}
+            {geminiConfig && geminiConfig.enabled && !geminiConfig.has_api_key && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex items-center gap-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3"
+              >
+                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0" />
+                <div className="text-sm text-amber-700 dark:text-amber-300">
+                  <span className="font-medium">Gemini API key not configured.</span>{' '}
+                  Matches will fall back to NLP scoring. Add your API key in config.yaml.
+                </div>
+              </motion.div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column: Search Form */}
