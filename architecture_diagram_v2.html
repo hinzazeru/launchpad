@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+
+        // Modern, clean theme
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#e0e7ff',       // Light Indigo for Core
+                primaryTextColor: '#1e1b4b',   // Dark Indigo text
+                primaryBorderColor: '#4338ca', // Indigo border
+
+                secondaryColor: '#f0fdf4',     // Light Green for Services 
+                tertiaryColor: '#fef2f2',      // Light Red for External
+
+                mainBkg: '#ffffff',
+                nodeBorder: '#64748b',         // Slate border default
+
+                lineColor: '#64748b',          // Slate lines
+                fontFamily: 'Inter, system-ui, sans-serif',
+                fontSize: '16px'
+            },
+            flowchart: {
+                curve: 'basis',
+                padding: 40,
+                nodeSpacing: 60,
+                rankSpacing: 80
+            }
+        });
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: white;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #diagram {
+            padding: 40px;
+            background: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="diagram" class="mermaid">
+        graph TD
+        %% Define styles
+        classDef user fill:#3b82f6,stroke:#1d4ed8,color:white,stroke-width:0px,rx:20,ry:20,font-weight:bold;
+        classDef client fill:#eff6ff,stroke:#60a5fa,color:#1e3a8a,stroke-width:2px,rx:10,ry:10;
+        classDef api fill:#f8fafc,stroke:#94a3b8,color:#334155,stroke-width:2px,rx:5,ry:5,stroke-dasharray: 5 5;
+        classDef core fill:#f5f3ff,stroke:#8b5cf6,color:#4c1d95,stroke-width:3px,rx:10,ry:10,font-weight:bold;
+        classDef db fill:#f0fdfa,stroke:#0d9488,color:#134e4a,stroke-width:2px,rx:5,ry:5;
+        classDef ext fill:#fff1f2,stroke:#f43f5e,color:#881337,stroke-width:2px,rx:5,ry:5;
+
+        %% Nodes
+        User([👤 User])
+
+        subgraph ClientLayer ["Device Layer"]
+        direction LR
+        Web["🖥️ Web App"]
+        Bot["🤖 Telegram"]
+        end
+
+        subgraph Processing ["Application Logic"]
+        Gateway("⚡ API Gateway")
+        Engine("🧠 AI Matching Engine")
+        Importer("📥 Job Importer")
+        end
+
+        DB[("🗄️ Database")]
+
+        subgraph External ["External Services"]
+        direction LR
+        Gemini["✨ Gemini AI"]
+        Sources["🌐 LinkedIn / Web"]
+        Email["📧 Email"]
+        end
+
+        %% Connections
+        User ==> Web & Bot
+
+        Web --> Gateway
+        Bot --> Gateway
+
+        Gateway --> Engine
+        Gateway --> Importer
+
+        Engine <==> DB
+            Importer ==> DB
+
+            Engine <--> Gemini
+                Importer <--> Sources
+                    Engine --> Email
+
+                    %% Apply Styles
+                    class User user;
+                    class Web,Bot client;
+                    class Gateway api;
+                    class Engine,Importer core;
+                    class DB db;
+                    class Gemini,Sources,Email ext;
+
+    </div>
+</body>
+
+</html>

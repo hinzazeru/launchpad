@@ -118,10 +118,10 @@ function SavedBulletCard({
 
 export function SavedBullets() {
     const [searchTerm, setSearchTerm] = useState('');
-    const [roleFilter, setRoleFilter] = useState<string>('');
+    const [roleFilter, setRoleFilter] = useState<string>('__all__');
 
     const { data: bulletsData, isLoading } = useLikedBullets({
-        role_filter: roleFilter || undefined,
+        role_filter: roleFilter === '__all__' ? undefined : roleFilter,
     });
     const { data: uniqueRoles } = useUniqueRoles();
     const deleteMutation = useDeleteLikedBullet();
@@ -152,10 +152,10 @@ export function SavedBullets() {
 
     const clearFilters = () => {
         setSearchTerm('');
-        setRoleFilter('');
+        setRoleFilter('__all__');
     };
 
-    const hasFilters = searchTerm || roleFilter;
+    const hasFilters = searchTerm || roleFilter !== '__all__';
 
     if (isLoading) {
         return (
@@ -197,7 +197,7 @@ export function SavedBullets() {
                             </div>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All Roles</SelectItem>
+                            <SelectItem value="__all__">All Roles</SelectItem>
                             {uniqueRoles?.map(role => (
                                 <SelectItem key={role} value={role}>{role}</SelectItem>
                             ))}

@@ -1,0 +1,216 @@
+{
+  "config": {
+    "related_weight": 0.7,
+    "transferable_weight": 0.4
+  },
+  "relationships": {
+    "ecommerce": {
+      "related": ["b2b", "adtech", "martech", "logistics"],
+      "transferable": ["fintech", "b2b_saas", "media", "real_estate"]
+    },
+    "fintech": {
+      "related": ["banking", "financial_services", "investment_management", "asset_management"],
+      "transferable": ["ecommerce", "b2b_saas", "insurance"]
+    },
+    "banking": {
+      "related": ["fintech", "financial_services", "investment_management", "asset_management"],
+      "transferable": ["insurance", "real_estate", "government"]
+    },
+    "investment_management": {
+      "related": ["asset_management", "financial_services", "fintech", "banking"],
+      "transferable": ["insurance", "b2b_saas"]
+    },
+    "asset_management": {
+      "related": ["investment_management", "financial_services", "fintech", "banking"],
+      "transferable": ["insurance", "b2b_saas"]
+    },
+    "financial_services": {
+      "related": ["banking", "fintech", "investment_management", "asset_management"],
+      "transferable": ["insurance", "real_estate", "government"]
+    },
+    "b2b": {
+      "related": ["b2b_saas", "ecommerce"],
+      "transferable": ["martech", "adtech", "hr_tech"]
+    },
+    "b2b_saas": {
+      "related": ["b2b", "devops", "ai_ml"],
+      "transferable": ["ecommerce", "martech", "hr_tech", "cybersecurity"]
+    },
+    "healthcare": {
+      "related": ["edtech", "government", "nonprofit"],
+      "transferable": ["insurance", "b2b_saas", "ai_ml"]
+    },
+    "edtech": {
+      "related": ["healthcare", "nonprofit", "media"],
+      "transferable": ["b2b_saas", "government"]
+    },
+    "adtech": {
+      "related": ["martech", "media", "ecommerce"],
+      "transferable": ["b2b_saas", "data_engineering"]
+    },
+    "martech": {
+      "related": ["adtech", "media", "ecommerce"],
+      "transferable": ["b2b_saas", "data_engineering"]
+    },
+    "logistics": {
+      "related": ["ecommerce", "automotive", "travel"],
+      "transferable": ["b2b_saas", "real_estate", "construction"]
+    },
+    "real_estate": {
+      "related": ["construction", "fintech", "government"],
+      "transferable": ["banking", "logistics", "b2b_saas"]
+    },
+    "gaming": {
+      "related": ["media", "ar_vr", "mobile"],
+      "transferable": ["adtech", "ecommerce", "ai_ml"]
+    },
+    "media": {
+      "related": ["gaming", "adtech", "martech", "edtech"],
+      "transferable": ["ecommerce", "b2b_saas"]
+    },
+    "cybersecurity": {
+      "related": ["devops", "government", "fintech"],
+      "transferable": ["b2b_saas", "banking", "healthcare"]
+    },
+    "hr_tech": {
+      "related": ["b2b_saas", "b2b", "legal_tech"],
+      "transferable": ["government", "healthcare", "edtech"]
+    },
+    "legal_tech": {
+      "related": ["hr_tech", "government", "financial_services"],
+      "transferable": ["b2b_saas", "real_estate"]
+    },
+    "construction": {
+      "related": ["real_estate", "logistics", "government"],
+      "transferable": ["b2b_saas", "iot"]
+    },
+    "travel": {
+      "related": ["logistics", "media", "ecommerce"],
+      "transferable": ["b2b_saas", "mobile"]
+    },
+    "automotive": {
+      "related": ["logistics", "iot", "ai_ml"],
+      "transferable": ["manufacturing", "energy", "mobile"]
+    },
+    "agriculture": {
+      "related": ["logistics", "iot", "government"],
+      "transferable": ["data_engineering", "ai_ml"]
+    },
+    "energy": {
+      "related": ["government", "iot", "automotive"],
+      "transferable": ["construction", "data_engineering"]
+    },
+    "government": {
+      "related": ["nonprofit", "healthcare", "legal_tech"],
+      "transferable": ["b2b_saas", "cybersecurity", "fintech"]
+    },
+    "nonprofit": {
+      "related": ["government", "healthcare", "edtech"],
+      "transferable": ["b2b_saas", "martech"]
+    },
+    "salesforce": {
+      "related": ["hubspot", "servicenow", "zendesk"],
+      "transferable": ["b2b_saas", "martech", "hr_tech"]
+    },
+    "shopify": {
+      "related": ["ecommerce", "stripe", "adobe"],
+      "transferable": ["b2b_saas", "martech"]
+    },
+    "sap": {
+      "related": ["oracle", "workday", "servicenow"],
+      "transferable": ["b2b_saas", "fintech", "logistics"]
+    },
+    "oracle": {
+      "related": ["sap", "workday", "servicenow"],
+      "transferable": ["b2b_saas", "fintech", "data_engineering"]
+    },
+    "workday": {
+      "related": ["sap", "oracle", "hr_tech"],
+      "transferable": ["b2b_saas", "financial_services"]
+    },
+    "adobe": {
+      "related": ["shopify", "martech", "hubspot"],
+      "transferable": ["ecommerce", "media", "b2b_saas"]
+    },
+    "hubspot": {
+      "related": ["salesforce", "martech", "zendesk"],
+      "transferable": ["b2b_saas", "adtech"]
+    },
+    "stripe": {
+      "related": ["fintech", "shopify", "ecommerce"],
+      "transferable": ["b2b_saas", "banking"]
+    },
+    "twilio": {
+      "related": ["b2b_saas", "mobile", "voice"],
+      "transferable": ["martech", "adtech"]
+    },
+    "zendesk": {
+      "related": ["salesforce", "hubspot", "servicenow"],
+      "transferable": ["b2b_saas", "hr_tech"]
+    },
+    "servicenow": {
+      "related": ["salesforce", "sap", "zendesk"],
+      "transferable": ["b2b_saas", "devops", "cybersecurity"]
+    },
+    "atlassian": {
+      "related": ["devops", "b2b_saas", "servicenow"],
+      "transferable": ["ai_ml", "data_engineering"]
+    },
+    "snowflake": {
+      "related": ["databricks", "data_engineering", "aws", "gcp"],
+      "transferable": ["b2b_saas", "ai_ml", "fintech"]
+    },
+    "databricks": {
+      "related": ["snowflake", "data_engineering", "ai_ml", "aws", "gcp"],
+      "transferable": ["b2b_saas", "fintech"]
+    },
+    "aws": {
+      "related": ["gcp", "devops", "data_engineering"],
+      "transferable": ["b2b_saas", "ai_ml", "cybersecurity"]
+    },
+    "gcp": {
+      "related": ["aws", "devops", "data_engineering"],
+      "transferable": ["b2b_saas", "ai_ml", "cybersecurity"]
+    },
+    "headless_cms": {
+      "related": ["composable", "ecommerce", "media"],
+      "transferable": ["b2b_saas", "martech"]
+    },
+    "composable": {
+      "related": ["headless_cms", "ecommerce", "devops"],
+      "transferable": ["b2b_saas", "ai_ml"]
+    },
+    "blockchain": {
+      "related": ["fintech", "cybersecurity"],
+      "transferable": ["banking", "gaming", "b2b_saas"]
+    },
+    "ai_ml": {
+      "related": ["data_engineering", "devops", "databricks"],
+      "transferable": ["b2b_saas", "fintech", "healthcare", "automotive"]
+    },
+    "data_engineering": {
+      "related": ["ai_ml", "devops", "snowflake", "databricks"],
+      "transferable": ["b2b_saas", "fintech", "adtech"]
+    },
+    "devops": {
+      "related": ["data_engineering", "aws", "gcp", "cybersecurity"],
+      "transferable": ["b2b_saas", "ai_ml", "fintech"]
+    },
+    "mobile": {
+      "related": ["gaming", "ar_vr", "iot"],
+      "transferable": ["ecommerce", "b2b_saas", "media"]
+    },
+    "iot": {
+      "related": ["mobile", "automotive", "energy", "agriculture"],
+      "transferable": ["devops", "ai_ml", "logistics"]
+    },
+    "ar_vr": {
+      "related": ["gaming", "mobile", "media"],
+      "transferable": ["ecommerce", "edtech", "real_estate"]
+    },
+    "voice": {
+      "related": ["ai_ml", "mobile", "twilio"],
+      "transferable": ["b2b_saas", "healthcare", "automotive"]
+    }
+  }
+}

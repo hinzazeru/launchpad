@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useJobs } from '@/services/api';
 import type { Job } from '@/services/api';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
     Search as SearchIcon,
@@ -138,11 +140,10 @@ function RadialScore({
                             <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-border/50">
                                 <span className="font-semibold text-foreground">Score Breakdown</span>
                                 {breakdown.match_engine && (
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                                        breakdown.match_engine === 'gemini'
-                                            ? 'bg-violet-500/15 text-violet-500'
-                                            : 'bg-blue-500/15 text-blue-500'
-                                    }`}>
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${breakdown.match_engine === 'gemini'
+                                        ? 'bg-violet-500/15 text-violet-500'
+                                        : 'bg-blue-500/15 text-blue-500'
+                                        }`}>
                                         {breakdown.match_engine === 'gemini' ? 'AI' : 'NLP'}
                                     </span>
                                 )}
@@ -298,8 +299,8 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                 {/* Score indicator strip */}
                 <div
                     className={`absolute left-0 top-0 bottom-0 w-1 ${job.match_score >= 75 ? 'bg-gradient-to-b from-emerald-500 to-emerald-400' :
-                            job.match_score >= 60 ? 'bg-gradient-to-b from-amber-500 to-amber-400' :
-                                'bg-gradient-to-b from-red-500 to-red-400'
+                        job.match_score >= 60 ? 'bg-gradient-to-b from-amber-500 to-amber-400' :
+                            'bg-gradient-to-b from-red-500 to-red-400'
                         }`}
                 />
 
@@ -344,11 +345,10 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                         {/* AI/NLP Engine Badge */}
                                         {job.match_engine && (
                                             <span
-                                                className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${
-                                                    job.match_engine === 'gemini'
-                                                        ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/30'
-                                                        : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
-                                                }`}
+                                                className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${job.match_engine === 'gemini'
+                                                    ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/30'
+                                                    : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                                                    }`}
                                                 title={job.match_engine === 'gemini' ? 'AI-powered matching with Gemini' : 'NLP-based matching'}
                                             >
                                                 {job.match_engine === 'gemini' ? (
@@ -620,11 +620,10 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                                     <div className="space-y-1">
                                                         {job.skill_gaps_detailed?.map((gap, i) => (
                                                             <div key={i} className="flex items-center gap-2 text-sm">
-                                                                <span className={`px-2 py-0.5 text-[11px] font-medium rounded-md border ${
-                                                                    gap.importance === 'must_have'
-                                                                        ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                                                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                                                                }`}>
+                                                                <span className={`px-2 py-0.5 text-[11px] font-medium rounded-md border ${gap.importance === 'must_have'
+                                                                    ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                                                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                                                    }`}>
                                                                     {gap.skill}
                                                                 </span>
                                                                 {gap.transferable_from && (
@@ -714,10 +713,14 @@ function JobCard({ job, index }: { job: Job; index: number }) {
 }
 
 export function JobMatches() {
-    const [minScore, setMinScore] = useState(0);
+    // Read URL params for initial filter values
+    const [searchParams] = useSearchParams();
+    const initialMinScore = Number(searchParams.get('minScore')) || 0;
+
+    const [minScore, setMinScore] = useState(initialMinScore);
     const [maxScore, setMaxScore] = useState(100);
     const [search, setSearch] = useState('');
-    const [recency, setRecency] = useState<string>('7');
+    const [recency, setRecency] = useState<string>('all'); // Default to 'all' when coming from Analytics
     const [sortOrder, setSortOrder] = useState<string>('score_desc');
 
     const sortBy = sortOrder.startsWith('date') ? 'date' : 'score';
@@ -991,20 +994,6 @@ export function JobMatches() {
                     />
                 </div>
 
-                {/* Recency */}
-                <Select value={recency} onValueChange={setRecency}>
-                    <SelectTrigger className="w-[140px] bg-background/50">
-                        <SelectValue placeholder="Period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="1">Last 24 Hours</SelectItem>
-                        <SelectItem value="3">Last 3 Days</SelectItem>
-                        <SelectItem value="7">Last 7 Days</SelectItem>
-                        <SelectItem value="14">Last 14 Days</SelectItem>
-                        <SelectItem value="30">Last Month</SelectItem>
-                        <SelectItem value="all">All Time</SelectItem>
-                    </SelectContent>
-                </Select>
 
                 {/* Sort */}
                 <Select value={sortOrder} onValueChange={setSortOrder}>
@@ -1019,6 +1008,32 @@ export function JobMatches() {
                     </SelectContent>
                 </Select>
             </motion.div>
+
+            {/* Time Period Filter Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground mr-1">Show:</span>
+                {[
+                    { value: '1', label: '24h' },
+                    { value: '3', label: '3 days' },
+                    { value: '7', label: '7 days' },
+                    { value: '14', label: '14 days' },
+                    { value: '30', label: '30 days' },
+                    { value: 'all', label: 'All time' },
+                ].map((option) => (
+                    <Button
+                        key={option.value}
+                        variant={recency === option.value ? 'default' : 'outline'}
+                        size="sm"
+                        className={`h-7 px-3 text-xs ${recency === option.value
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background/50 hover:bg-muted'
+                            }`}
+                        onClick={() => setRecency(option.value)}
+                    >
+                        {option.label}
+                    </Button>
+                ))}
+            </div>
 
             {/* Job Cards */}
             <div className="space-y-3">

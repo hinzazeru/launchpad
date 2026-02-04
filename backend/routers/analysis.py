@@ -4,7 +4,7 @@ Provides endpoints for analyzing resumes against jobs,
 generating AI suggestions, and exporting tailored resumes.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -16,12 +16,13 @@ import threading
 
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy import func, or_
 
 from src.targeting.role_analyzer import RoleAnalyzer
 from src.targeting.bullet_rewriter import BulletRewriter
 from src.resume.parser import ResumeParser
 from src.database.db import SessionLocal
-from src.database.models import JobPosting, MatchResult
+from src.database.models import JobPosting, MatchResult, Resume
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,43 @@ class ExportResponse(BaseModel):
     filename: str
     download_url: str
     changes_made: int
+
+
+# History endpoint models
+
+class RoleSummary(BaseModel):
+    """Summary of a role in an analysis."""
+    company: str
+    title: str
+    bullet_count: int
+    has_suggestions: bool
+
+
+class AnalysisHistoryItem(BaseModel):
+    """A single analysis history entry."""
+    match_id: int
+    job_id: int
+    job_title: str
+    job_company: str
+    job_location: Optional[str] = None
+    job_url: Optional[str] = None
+    resume_id: int
+    match_score: float
+    ai_match_score: Optional[float] = None
+    match_engine: str
+    generated_date: datetime
+    has_bullet_suggestions: bool
+    roles_summary: List[RoleSummary]
+    ai_strengths_count: int
+    ai_concerns_count: int
+
+
+class AnalysisHistoryResponse(BaseModel):
+    """Response for analysis history listing."""
+    items: List[AnalysisHistoryItem]
+    total: int
+    skip: int
+    limit: int
 
 
 # Endpoints
@@ -514,3 +552,244 @@ async def gemini_status():
         "available": rewriter.is_available(),
         "message": "Ready" if rewriter.is_available() else "Not configured - add gemini.api_key to config.yaml"
     }
+
+
+@router.get("/history", response_model=AnalysisHistoryResponse)
+async def get_analysis_history(
+    search: Optional[str] = Query(None, description="Search job title"),
+    resume_id: Optional[int] = Query(None, description="Filter by resume ID"),
+    date_from: Optional[datetime] = Query(None, description="Filter by date from"),
+    date_to: Optional[datetime] = Query(None, description="Filter by date to"),
+    min_score: Optional[float] = Query(None, ge=0, le=100, description="Minimum match score"),
+    max_score: Optional[float] = Query(None, ge=0, le=100, description="Maximum match score"),
+    has_ai_suggestions: Optional[bool] = Query(None, description="Filter by AI suggestions present"),
+    sort_by: str = Query("date", pattern="^(date|score)$", description="Sort by date or score"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order"),
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(20, ge=1, le=100, description="Page size"),
+):
+    """Get analysis history with filtering and pagination.
+
+    Returns list of previously completed analyses with their
+    AI-generated bullet suggestions status.
+    """
+    session = SessionLocal()
+    try:
+        # Build base query with join to JobPosting
+        query = session.query(MatchResult).join(
+            JobPosting, MatchResult.job_id == JobPosting.id
+        )
+
+        # Apply filters
+        if search:
+            query = query.filter(
+                or_(
+                    JobPosting.title.ilike(f"%{search}%"),
+                    JobPosting.company.ilike(f"%{search}%")
+                )
+            )
+
+        if resume_id is not None:
+            query = query.filter(MatchResult.resume_id == resume_id)
+
+        if date_from:
+            query = query.filter(MatchResult.generated_date >= date_from)
+
+        if date_to:
+            query = query.filter(MatchResult.generated_date <= date_to)
+
+        if min_score is not None:
+            query = query.filter(MatchResult.match_score >= min_score)
+
+        if max_score is not None:
+            query = query.filter(MatchResult.match_score <= max_score)
+
+        if has_ai_suggestions is not None:
+            if has_ai_suggestions:
+                # Has bullet suggestions (not null and not empty)
+                query = query.filter(
+                    MatchResult.bullet_suggestions.isnot(None),
+                    MatchResult.bullet_suggestions != {}
+                )
+            else:
+                # Does not have bullet suggestions
+                query = query.filter(
+                    or_(
+                        MatchResult.bullet_suggestions.is_(None),
+                        MatchResult.bullet_suggestions == {}
+                    )
+                )
+
+        # Get total count before pagination
+        total = query.count()
+
+        # Apply sorting
+        if sort_by == "date":
+            order_col = MatchResult.generated_date
+        else:
+            order_col = MatchResult.match_score
+
+        if sort_order == "desc":
+            query = query.order_by(order_col.desc())
+        else:
+            query = query.order_by(order_col.asc())
+
+        # Apply pagination and eager load job posting
+        query = query.options(joinedload(MatchResult.job_posting))
+        results = query.offset(skip).limit(limit).all()
+
+        # Build response items
+        items = []
+        for match in results:
+            job = match.job_posting
+
+            # Parse bullet_suggestions to build roles_summary
+            roles_summary = []
+            has_suggestions = False
+
+            if match.bullet_suggestions:
+                has_suggestions = True
+                for role_key, suggestions in match.bullet_suggestions.items():
+                    if '_' in role_key:
+                        parts = role_key.rsplit('_', 1)
+                        company = parts[0] if len(parts) > 1 else role_key
+                        title = parts[1] if len(parts) > 1 else ''
+                    else:
+                        company = role_key
+                        title = ''
+
+                    bullet_count = len(suggestions) if isinstance(suggestions, list) else 0
+                    roles_summary.append(RoleSummary(
+                        company=company,
+                        title=title,
+                        bullet_count=bullet_count,
+                        has_suggestions=bullet_count > 0
+                    ))
+
+            # Count AI insights
+            ai_strengths_count = len(match.ai_strengths) if match.ai_strengths else 0
+            ai_concerns_count = len(match.ai_concerns) if match.ai_concerns else 0
+
+            items.append(AnalysisHistoryItem(
+                match_id=match.id,
+                job_id=match.job_id,
+                job_title=job.title,
+                job_company=job.company,
+                job_location=job.location,
+                job_url=job.url,
+                resume_id=match.resume_id,
+                match_score=match.match_score,
+                ai_match_score=match.ai_match_score,
+                match_engine=match.match_engine or 'nlp',
+                generated_date=match.generated_date,
+                has_bullet_suggestions=has_suggestions,
+                roles_summary=roles_summary,
+                ai_strengths_count=ai_strengths_count,
+                ai_concerns_count=ai_concerns_count
+            ))
+
+        return AnalysisHistoryResponse(
+            items=items,
+            total=total,
+            skip=skip,
+            limit=limit
+        )
+
+    finally:
+        session.close()
+
+
+# Bullet suggestions detail models
+
+class BulletSuggestionDetail(BaseModel):
+    """Detail of a single bullet with its AI suggestions."""
+    index: int
+    original: str
+    score: Optional[float] = None
+    analysis: Optional[str] = None
+    suggestions: List[str] = []
+
+
+class RoleBulletSuggestions(BaseModel):
+    """All bullet suggestions for a single role."""
+    role_key: str
+    company: str
+    title: str
+    bullets: List[BulletSuggestionDetail]
+
+
+class MatchSuggestionsResponse(BaseModel):
+    """Response with all bullet suggestions for a match."""
+    match_id: int
+    job_title: str
+    job_company: str
+    roles: List[RoleBulletSuggestions]
+    total_bullets: int
+    total_with_suggestions: int
+
+
+@router.get("/history/{match_id}/suggestions", response_model=MatchSuggestionsResponse)
+async def get_match_suggestions(match_id: int):
+    """Get bullet suggestions detail for a specific analysis match.
+
+    Returns all saved AI bullet suggestions organized by role.
+    """
+    session = SessionLocal()
+    try:
+        match = session.query(MatchResult).options(
+            joinedload(MatchResult.job_posting)
+        ).filter(MatchResult.id == match_id).first()
+
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        job = match.job_posting
+        roles: List[RoleBulletSuggestions] = []
+        total_bullets = 0
+        total_with_suggestions = 0
+
+        if match.bullet_suggestions:
+            for role_key, suggestions_list in match.bullet_suggestions.items():
+                # Parse role key
+                if '_' in role_key:
+                    parts = role_key.rsplit('_', 1)
+                    company = parts[0] if len(parts) > 1 else role_key
+                    title = parts[1] if len(parts) > 1 else ''
+                else:
+                    company = role_key
+                    title = ''
+
+                bullets: List[BulletSuggestionDetail] = []
+                if isinstance(suggestions_list, list):
+                    for sugg in suggestions_list:
+                        total_bullets += 1
+                        has_sugg = len(sugg.get('suggestions', [])) > 0
+                        if has_sugg:
+                            total_with_suggestions += 1
+
+                        bullets.append(BulletSuggestionDetail(
+                            index=sugg.get('index', 0),
+                            original=sugg.get('original', ''),
+                            score=sugg.get('score'),
+                            analysis=sugg.get('analysis'),
+                            suggestions=sugg.get('suggestions', [])
+                        ))
+
+                roles.append(RoleBulletSuggestions(
+                    role_key=role_key,
+                    company=company,
+                    title=title,
+                    bullets=bullets
+                ))
+
+        return MatchSuggestionsResponse(
+            match_id=match.id,
+            job_title=job.title,
+            job_company=job.company,
+            roles=roles,
+            total_bullets=total_bullets,
+            total_with_suggestions=total_with_suggestions
+        )
+
+    finally:
+        session.close()

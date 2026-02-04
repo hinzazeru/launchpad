@@ -214,7 +214,7 @@ class GeminiMatcher:
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
-                    max_output_tokens=1024,
+                    max_output_tokens=2048,  # Increased to prevent truncation of complex responses
                     response_mime_type="application/json",
                 )
             )

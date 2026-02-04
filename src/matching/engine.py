@@ -44,8 +44,10 @@ Configuration (config.yaml):
       min_match_score: 0.6  # Minimum score threshold
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from src.matching.skills_matcher import SkillsMatcher
@@ -145,6 +147,26 @@ class JobMatcher:
 
         # Get engine version from config
         self.engine_version = self.config.get_engine_version()
+
+        # Load domain relationships for partial credit scoring
+        self.domain_relationships = self._load_domain_relationships()
+
+    def _load_domain_relationships(self) -> Dict:
+        """Load domain relationships for partial credit scoring.
+
+        Returns:
+            Dict with 'config' and 'relationships' keys
+        """
+        rel_path = Path(__file__).parent.parent.parent / "data" / "domain_relationships.json"
+        try:
+            if rel_path.exists():
+                with open(rel_path) as f:
+                    data = json.load(f)
+                    logger.debug(f"Loaded domain relationships with {len(data.get('relationships', {}))} domains")
+                    return data
+        except Exception as e:
+            logger.warning(f"Failed to load domain_relationships.json: {e}")
+        return {"config": {}, "relationships": {}}
 
     def preload_resume_skills(self, resume_skills: List[str]) -> int:
         """Pre-cache resume skill embeddings for faster matching.
@@ -324,7 +346,12 @@ class JobMatcher:
         resume_domains: List[str],
         job_domains: List[str]
     ) -> Tuple[float, List[str], List[str]]:
-        """Calculate domain expertise alignment score.
+        """Calculate domain expertise alignment score with relationship support.
+
+        Uses domain relationships for partial credit:
+        - Exact match: 100% credit
+        - Related domain: 70% credit (configurable)
+        - Transferable domain: 40% credit (configurable)
 
         Args:
             resume_domains: List of domains from resume (e.g., ["fintech", "b2b_saas"])
@@ -333,28 +360,62 @@ class JobMatcher:
         Returns:
             Tuple of (score, matching_domains, missing_domains):
                 - score: 0.0-1.0 representing domain alignment
-                - matching_domains: List of domains that match
-                - missing_domains: List of required domains not in resume
+                - matching_domains: List of matched domains (with ~ for related, * for transferable)
+                - missing_domains: List of required domains with no credit
 
         Scoring logic:
             - If job doesn't require specific domains: 0.5 (neutral score)
             - If resume has all required domains: 1.0 (perfect match)
-            - Partial credit for partial overlap: overlap_count / required_count
+            - Related domains (e.g., fintech for banking job): 70% credit
+            - Transferable domains (e.g., ecommerce for fintech job): 40% credit
         """
         # Normalize domains to lowercase for comparison
         resume_set = {d.lower() for d in (resume_domains or [])}
         job_set = {d.lower() for d in (job_domains or [])}
 
-        # If job doesn't require specific domains, perfect score
+        # If job doesn't require specific domains, neutral score
         if not job_set:
             return 0.5, [], []
 
-        # Find matching and missing domains
-        matching = list(resume_set & job_set)
-        missing = list(job_set - resume_set)
+        # Get relationship config weights
+        rel_config = self.domain_relationships.get("config", {})
+        related_weight = rel_config.get("related_weight", 0.7)
+        transferable_weight = rel_config.get("transferable_weight", 0.4)
+        relationships = self.domain_relationships.get("relationships", {})
 
-        # Calculate score based on overlap
-        score = len(matching) / len(job_set) if job_set else 0.5
+        total_score = 0.0
+        matching = []
+        missing = []
+
+        for job_domain in job_set:
+            if job_domain in resume_set:
+                # Exact match - full credit
+                total_score += 1.0
+                matching.append(job_domain)
+            else:
+                # Check for related/transferable domains
+                job_rels = relationships.get(job_domain, {})
+                related = {r.lower() for r in job_rels.get("related", [])}
+                transferable = {t.lower() for t in job_rels.get("transferable", [])}
+
+                # Check for related domain match (higher credit)
+                related_matches = resume_set & related
+                if related_matches:
+                    total_score += related_weight
+                    # Mark with ~ to indicate related match
+                    matching.append(f"{job_domain}~{list(related_matches)[0]}")
+                # Check for transferable domain match (lower credit)
+                elif resume_set & transferable:
+                    transferable_matches = resume_set & transferable
+                    total_score += transferable_weight
+                    # Mark with * to indicate transferable match
+                    matching.append(f"{job_domain}*{list(transferable_matches)[0]}")
+                else:
+                    # No credit for this domain
+                    missing.append(job_domain)
+
+        # Calculate final score
+        score = total_score / len(job_set)
 
         return round(score, 3), matching, missing
 
@@ -599,23 +660,36 @@ class JobMatcher:
             else:
                 experience_alignment_text = f"Resume: {resume_years} years, Required: Not specified"
 
-            # Prepare AI-specific fields (if using Gemini matching)
-            ai_fields = {}
+            # Prepare matching fields - domain_score for all engines, AI fields for Gemini
+            match_fields = {
+                'match_engine': match.get('match_engine', 'nlp'),
+            }
+
+            # domain_score is saved for both NLP and Gemini matches
+            # NLP: stored as 0-1 in match dict, convert to 0-100 for DB
+            # Gemini: stored as 0-100 in ai_domain_score
             if match.get('match_engine') == 'gemini':
-                ai_fields = {
+                match_fields['domain_score'] = match.get('ai_domain_score')
+            else:
+                # NLP domain_score is 0-1, convert to 0-100 for consistency
+                nlp_domain_score = match.get('domain_score')
+                if nlp_domain_score is not None:
+                    match_fields['domain_score'] = nlp_domain_score * 100
+
+            # Additional AI-specific fields (only for Gemini matching)
+            if match.get('match_engine') == 'gemini':
+                match_fields.update({
                     'ai_match_score': match.get('ai_match_score'),
                     'skills_score': match.get('ai_skills_score'),
                     'experience_score': match.get('ai_experience_score'),
                     'seniority_fit': match.get('ai_seniority_fit'),
-                    'domain_score': match.get('ai_domain_score'),
                     'ai_strengths': match.get('ai_strengths'),
                     'ai_concerns': match.get('ai_concerns'),
                     'ai_recommendations': match.get('ai_recommendations'),
                     'skill_matches': match.get('skill_matches'),
                     'skill_gaps_detailed': match.get('skill_gaps_detailed'),
-                    'match_engine': 'gemini',
                     'match_confidence': match.get('match_confidence'),
-                }
+                })
 
             result = crud.create_match_result(
                 db=db_session,
@@ -628,7 +702,7 @@ class JobMatcher:
                 gemini_score=gemini_score,
                 gemini_reasoning=match.get('gemini_reasoning'),
                 missing_domains=match.get('missing_domains'),
-                **ai_fields
+                **match_fields
             )
             saved_results.append(result)
 

@@ -1,7 +1,6 @@
 {
+  "_comment": "Domain weights are configured in config.yaml under matching.weights.domains",
   "config": {
-    "domain_match_weight": 0.15,
-    "mismatch_penalty": 0.1,
     "required_keywords": [
       "must have",
       "required",

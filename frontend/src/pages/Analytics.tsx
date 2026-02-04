@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   useAnalyticsSummary,
@@ -25,6 +26,7 @@ import { RadialScore } from '@/components/RadialScore';
 
 export function Analytics() {
   const [activeTab, setActiveTab] = useState('analytics');
+  const navigate = useNavigate();
 
   // Fetch all analytics data
   const { data: summary, isLoading: summaryLoading, error: summaryError } = useAnalyticsSummary();
@@ -108,7 +110,13 @@ export function Analytics() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div
+              className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 cursor-pointer hover:bg-muted/50 hover:border-primary/30 transition-all"
+              onClick={() => navigate('/matches?minScore=70')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate('/matches?minScore=70')}
+            >
               <div className="p-2 rounded-md bg-emerald-500/10">
                 <Target className="w-4 h-4 text-emerald-500" />
               </div>

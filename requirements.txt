@@ -17,6 +17,7 @@ google-api-python-client==2.110.0
 
 # Gemini AI
 google-genai>=1.0.0
+json-repair>=0.30.0  # Fix malformed JSON from LLM responses
 
 # Configuration
 PyYAML==6.0.1

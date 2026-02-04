@@ -23,7 +23,11 @@ def clean_json_text(text: str) -> str:
     - Markdown code blocks (```json ... ```)
     - JavaScript-style unquoted property names
     - Trailing commas in arrays/objects
-    - Newlines and other special chars inside string values
+    - Unterminated strings (truncated responses)
+    - Missing commas between array/object elements
+    - Control characters within strings
+    
+    Falls back to json_repair library for complex cases.
     """
     if not text:
         return ""
@@ -32,7 +36,7 @@ def clean_json_text(text: str) -> str:
     
     # Remove markdown code blocks
     if "```" in text:
-        match = re.search(r"```(?:json)?\\s*(.*?)```", text, re.DOTALL)
+        match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
         if match:
             text = match.group(1).strip()
             
@@ -47,8 +51,52 @@ def clean_json_text(text: str) -> str:
         if start <= end:
             text = text[start : end + 1]
     
+    # Try parsing as-is first (fastest path)
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass  # Continue with repairs
+    
+    # Stage 1: Basic fixes
+    text = _apply_basic_json_fixes(text)
+    
+    # Try parsing after basic fixes
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass  # Continue with more aggressive repairs
+    
+    # Stage 2: Fix structural issues (unterminated strings, missing commas)
+    text = _fix_json_structure(text)
+    
+    # Try parsing after structural fixes
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass
+    
+    # Stage 3: Use json_repair library as fallback
+    try:
+        from json_repair import repair_json
+        repaired = repair_json(text, return_objects=False)
+        # Validate the repaired JSON
+        json.loads(repaired)
+        return repaired
+    except ImportError:
+        logger.warning("json_repair not installed, cannot auto-fix malformed JSON")
+    except Exception as e:
+        logger.debug(f"json_repair failed: {e}")
+    
+    # Return the best effort cleaned text
+    return text
+
+
+def _apply_basic_json_fixes(text: str) -> str:
+    """Apply basic JSON fixes that are safe and fast."""
     # Fix JavaScript-style unquoted property names: {key: "value"} -> {"key": "value"}
-    # This regex matches unquoted identifiers followed by : at the start of objects or after commas
     # Pattern: matches word characters (a-zA-Z0-9_) as keys that aren't already quoted
     text = re.sub(
         r'(?<=[{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:',
@@ -57,52 +105,141 @@ def clean_json_text(text: str) -> str:
     )
     
     # Fix trailing commas before ] or } (common Gemini error)
-    # Pattern: comma followed by optional whitespace/newlines then ] or }
     text = re.sub(r',\s*([\]}])', r'\1', text)
     
-    # Escape literal newlines in the JSON (common in truncated responses)
-    # Replace actual newlines with escaped versions, but only where needed
-    # This is a simple approach that works for most Gemini output
+    # Remove control characters that shouldn't be in JSON (except \n, \r, \t)
+    # These can cause parsing issues
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+    
+    return text
+
+
+def _fix_json_structure(text: str) -> str:
+    """Fix structural JSON issues like unterminated strings and missing commas."""
+    # Fix unterminated strings at end of lines
+    # Pattern: line ends with text after ": that doesn't end with ",
+    # This handles cases like: "reasoning": "The candidate has strong experience
     lines = text.split('\n')
-    if len(lines) > 1:
-        # Reconstruct with proper escaping for strings
-        # Simple heuristic: if line doesn't end with proper JSON punctuation, escape the newline
-        reconstructed = []
-        for i, line in enumerate(lines):
+    fixed_lines = []
+    in_string = False
+    
+    for i, line in enumerate(lines):
+        # Count unescaped quotes to track string state
+        quote_count = 0
+        j = 0
+        while j < len(line):
+            if line[j] == '"' and (j == 0 or line[j-1] != '\\'):
+                quote_count += 1
+            j += 1
+        
+        # If odd number of quotes, we have an unterminated string
+        if quote_count % 2 == 1:
+            # Check if this is likely a truncated string value
             stripped = line.rstrip()
-            reconstructed.append(line)
-            # Check if this looks like it's inside a string (next line doesn't start with JSON punctuation)
-            if i < len(lines) - 1:
-                next_stripped = lines[i + 1].strip()
-                if stripped and not stripped.endswith((',', '{', '[', ':', '}', ']', '"')):
-                    # Might be inside a string - will be handled by json.loads failure
-                    pass
-        text = '\n'.join(reconstructed)
-            
+            if not stripped.endswith(('"', ',', '{', '[', '}', ']', ':')):
+                # Try to close the string
+                # Look at next line to see if it continues
+                if i < len(lines) - 1:
+                    next_line = lines[i + 1].strip()
+                    # If next line starts with a new key or closing bracket, close this string
+                    if (next_line.startswith('"') or 
+                        next_line.startswith('}') or 
+                        next_line.startswith(']') or
+                        re.match(r'^"[^"]+"\s*:', next_line)):
+                        line = stripped + '"'
+                else:
+                    # Last line with unterminated string - close it
+                    line = stripped + '"'
+        
+        fixed_lines.append(line)
+    
+    text = '\n'.join(fixed_lines)
+    
+    # Fix missing commas between elements
+    # Pattern: "value"\n  "key": or "value"\n  } should have comma
+    # Look for: end of string/number/bool/null followed by newline and new element
+    text = re.sub(
+        r'("|\d|true|false|null)\s*\n(\s*"[^"]+"\s*:)',
+        r'\1,\n\2',
+        text
+    )
+    
+    # Fix missing commas in arrays: ["item1"\n  "item2"]
+    text = re.sub(
+        r'("|\d|true|false|null|\]|\})\s*\n(\s*"[^"]*"(?:\s*[,\]\}]|\s*$))',
+        r'\1,\n\2',
+        text
+    )
+    
+    # Fix missing commas between array elements on same line  
+    # Pattern: "item1" "item2" -> "item1", "item2"
+    text = re.sub(r'"\s+"(?=[^:]*(?:\]|,|$))', '", "', text)
+    
+    # Fix missing commas after closing brackets/braces
+    text = re.sub(
+        r'(\]|\})\s*\n(\s*"[^"]+"\s*:)',
+        r'\1,\n\2',
+        text
+    )
+    
+    # Ensure proper closing brackets
+    # Count brackets to see if we need to close any
+    open_braces = text.count('{') - text.count('}')
+    open_brackets = text.count('[') - text.count(']')
+    
+    if open_braces > 0 or open_brackets > 0:
+        # Need to close some brackets - add them at the end
+        text = text.rstrip()
+        # Close arrays first, then objects
+        text += ']' * open_brackets
+        text += '}' * open_braces
+    
     return text
 
 import google.generativeai as genai
 from google.generativeai import types
 
+from pathlib import Path
+
 from src.config import get_config
 
 logger = logging.getLogger(__name__)
 
-# Valid domain keys that can be extracted
-VALID_DOMAINS = [
-    # Industries
-    "ecommerce", "fintech", "banking", "investment_management", "asset_management",
-    "financial_services", "b2b", "b2b_saas", "healthcare", "edtech", "adtech",
-    "martech", "logistics", "real_estate", "gaming", "media", "cybersecurity",
-    "hr_tech", "legal_tech", "construction", "travel", "automotive", "agriculture",
-    "energy", "government", "nonprofit",
-    # Platforms
-    "salesforce", "shopify", "sap", "oracle", "workday", "adobe", "hubspot",
-    "stripe", "twilio", "zendesk", "servicenow", "atlassian", "snowflake", "databricks",
-    # Technologies
-    "headless_cms", "composable", "blockchain", "ai_ml", "data_engineering",
-    "devops", "mobile", "iot", "ar_vr", "voice"
-]
+
+def _load_valid_domains() -> List[str]:
+    """Load valid domains dynamically from domain_expertise.json.
+
+    This ensures VALID_DOMAINS stays in sync with the domain configuration file.
+    Falls back to a minimal default list if file not found.
+    """
+    config_path = Path(__file__).parent.parent.parent / "data" / "domain_expertise.json"
+
+    try:
+        with open(config_path) as f:
+            data = json.load(f)
+
+        domains = []
+        for category in data.get("domains", {}).values():
+            domains.extend(category.keys())
+
+        if domains:
+            logger.debug(f"Loaded {len(domains)} valid domains from domain_expertise.json")
+            return domains
+
+    except FileNotFoundError:
+        logger.warning(f"domain_expertise.json not found at {config_path}, using defaults")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse domain_expertise.json: {e}, using defaults")
+
+    # Fallback to minimal default list
+    return [
+        "ecommerce", "fintech", "banking", "b2b_saas", "healthcare",
+        "ai_ml", "devops", "salesforce", "stripe"
+    ]
+
+
+# Valid domain keys that can be extracted (loaded from domain_expertise.json)
+VALID_DOMAINS = _load_valid_domains()
 
 JOB_SUMMARY_PROMPT = """Summarize this job posting in 2-3 concise sentences. Focus on:
 1. The core responsibilities and what the person will actually DO
@@ -350,9 +487,9 @@ class GeminiDomainExtractor:
         self.enabled = self.config.get("gemini.enabled", False)
         # Use cheaper/faster non-thinking model for extraction by default
         self.model_name = self.config.get("gemini.extractor.model", "gemini-2.0-flash")
-        # Token limits (lower for non-thinking models like gemini-2.5-flash)
-        self.domain_max_tokens = self.config.get("gemini.extractor.domain_max_tokens", 300)
-        self.summary_max_tokens = self.config.get("gemini.extractor.summary_max_tokens", 200)
+        # Token limits - increased to prevent truncation issues
+        self.domain_max_tokens = self.config.get("gemini.extractor.domain_max_tokens", 500)
+        self.summary_max_tokens = self.config.get("gemini.extractor.summary_max_tokens", 300)
         self.api_key = self.config.get("gemini.api_key")
         self.client = None
 
@@ -878,7 +1015,7 @@ class GeminiMatchReranker:
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
-                    max_output_tokens=1024,  # Increased for complete responses
+                    max_output_tokens=2048,  # Increased to prevent truncation
                     response_mime_type="application/json",
                 )
             )

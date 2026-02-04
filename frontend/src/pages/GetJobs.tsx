@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, useResumes, useSearchDefaults, useGeminiConfigStatus } from '@/services/api';
-import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage, GeminiStats } from '@/services/api';
+import { api, useResumes, useSearchDefaults, useGeminiConfigStatus, useSuggestedKeywords } from '@/services/api';
+import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage } from '@/services/api';
 import { useSearchStore } from '@/stores/searchStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -337,6 +337,7 @@ export function GetJobs() {
   const { data: resumesData, isLoading: resumesLoading } = useResumes();
   const { data: defaults } = useSearchDefaults();
   const { data: geminiConfig } = useGeminiConfigStatus();
+  const { data: suggestedKeywords } = useSuggestedKeywords();
 
   // Form state
   const [keyword, setKeyword] = useState('');
@@ -526,14 +527,29 @@ export function GetJobs() {
                     <label className="text-sm font-medium">
                       Keyword <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      placeholder="e.g., Product Manager, Senior Developer"
-                      value={keyword}
-                      onChange={(e) => setKeyword(e.target.value)}
-                      disabled={isSearching}
-                    />
+                    <div className="relative">
+                      <Input
+                        placeholder="e.g., Product Manager, Senior Developer"
+                        value={keyword}
+                        onChange={(e) => setKeyword(e.target.value)}
+                        disabled={isSearching}
+                        list="keyword-suggestions"
+                        autoComplete="off"
+                      />
+                      <datalist id="keyword-suggestions">
+                        {suggestedKeywords?.suggestions.map((s) => (
+                          <option key={s.keyword} value={s.keyword}>
+                            {s.source === 'scheduled' ? '(Recent)' : ''} {s.keyword}
+                          </option>
+                        ))}
+                      </datalist>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Tip: Add "Remote" at the end to search for remote jobs
+                      {suggestedKeywords?.suggestions.length ? (
+                        <>Type or select from your recent searches</>
+                      ) : (
+                        <>Tip: Add "Remote" at the end to search for remote jobs</>
+                      )}
                     </p>
                   </div>
 

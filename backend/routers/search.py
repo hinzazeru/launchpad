@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from src.config import get_config
 from src.database.db import SessionLocal
-from src.database.models import Resume, JobPosting, MatchResult
+from src.database.models import Resume, JobPosting, MatchResult, ScheduledSearch
 from src.importers.api_importer import ApifyJobImporter
 from src.matching.engine import JobMatcher
 from src.integrations.gemini_client import get_gemini_reranker
@@ -133,6 +133,106 @@ async def get_search_defaults():
         work_arrangement=config.get("search.default_work_arrangement"),
         posted_when=config.get("search.default_posted_when", "Past 24 hours")
     )
+
+
+class SuggestedKeyword(BaseModel):
+    """A suggested search keyword with usage count."""
+    keyword: str
+    count: int
+    source: str  # "scheduled" or "job_titles"
+
+
+class SuggestedKeywordsResponse(BaseModel):
+    """Response with suggested keywords for search."""
+    suggestions: List[SuggestedKeyword]
+
+
+@router.get("/suggested-keywords", response_model=SuggestedKeywordsResponse)
+async def get_suggested_keywords(limit: int = 7):
+    """Get suggested keywords based on past searches and common job titles.
+
+    Combines:
+    1. Keywords from scheduled searches (high priority)
+    2. Most common job titles from imported jobs
+
+    Args:
+        limit: Maximum number of suggestions to return (default: 7)
+
+    Returns:
+        List of suggested keywords with counts
+    """
+    from sqlalchemy import func
+
+    db = SessionLocal()
+    suggestions = []
+    seen_keywords = set()
+
+    try:
+        # 1. Get keywords from scheduled searches (most relevant)
+        scheduled_keywords = (
+            db.query(
+                ScheduledSearch.keyword,
+                func.count(ScheduledSearch.id).label('count')
+            )
+            .group_by(func.lower(ScheduledSearch.keyword))
+            .order_by(func.count(ScheduledSearch.id).desc())
+            .limit(limit)
+            .all()
+        )
+
+        for kw, count in scheduled_keywords:
+            normalized = kw.strip()
+            if normalized.lower() not in seen_keywords:
+                suggestions.append(SuggestedKeyword(
+                    keyword=normalized,
+                    count=count,
+                    source="scheduled"
+                ))
+                seen_keywords.add(normalized.lower())
+
+        # 2. Get most common job titles from imported jobs (if we need more)
+        if len(suggestions) < limit:
+            remaining = limit - len(suggestions)
+
+            # Get common job titles, normalizing variations
+            common_titles = (
+                db.query(
+                    JobPosting.title,
+                    func.count(JobPosting.id).label('count')
+                )
+                .group_by(func.lower(JobPosting.title))
+                .order_by(func.count(JobPosting.id).desc())
+                .limit(remaining + 10)  # Get extra to filter out duplicates
+                .all()
+            )
+
+            for title, count in common_titles:
+                if len(suggestions) >= limit:
+                    break
+
+                # Normalize the title for comparison
+                normalized = title.strip()
+                normalized_lower = normalized.lower()
+
+                # Skip if already in suggestions or too similar
+                if normalized_lower in seen_keywords:
+                    continue
+
+                # Skip very long titles (likely specific job posts, not search terms)
+                if len(normalized) > 50:
+                    continue
+
+                suggestions.append(SuggestedKeyword(
+                    keyword=normalized,
+                    count=count,
+                    source="job_titles"
+                ))
+                seen_keywords.add(normalized_lower)
+
+        return SuggestedKeywordsResponse(suggestions=suggestions)
+
+    finally:
+        db.close()
 
 
 @router.post("/jobs")

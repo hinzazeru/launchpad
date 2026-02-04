@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BulletEditor } from '@/components/BulletEditor';
 import { ExportButton } from '@/components/ExportButton';
 import type { BulletSelection } from '@/components/ExportButton';
 import { AnalysisResultSkeleton } from '@/components/ui/skeleton';
 import { PageTransition, FadeIn, ExpandableSection } from '@/components/AnimatedComponents';
 import { useToastActions } from '@/components/ui/toast';
+import { AnalysisHistory } from '@/components/AnalysisHistory';
 
 import {
   Search,
@@ -31,6 +33,7 @@ import {
   Bot,
   Lightbulb,
   XCircle,
+  History,
 } from 'lucide-react';
 
 import { useDebounce } from '@/hooks/use-debounce';
@@ -267,6 +270,10 @@ function RoleCard({
 export function Dashboard() {
   const toast = useToastActions();
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'analysis' | 'history'>('analysis');
+  const [preloadedJob, setPreloadedJob] = useState<{ jobId: number; resumeId: number } | null>(null);
+
   // State
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [selectedResumeFilename, setSelectedResumeFilename] = useState<string>('');
@@ -360,7 +367,32 @@ export function Dashboard() {
     }
   }, [analysisResult]);
 
+  // Handle selecting analysis from history
+  function handleSelectFromHistory(jobId: number, _resumeId: number) {
+    // Set the job ID to preload
+    setSelectedJobId(jobId.toString());
+    // Clear previous analysis
+    setAnalysisResult(null);
+    setRoleSuggestions({});
+    // Switch to analysis tab
+    setActiveTab('analysis');
+    // Store preload request
+    setPreloadedJob({ jobId, resumeId: _resumeId });
+  }
 
+  // Auto-trigger analysis when preloaded from history
+  useEffect(() => {
+    if (preloadedJob && activeTab === 'analysis' && selectedJobId === preloadedJob.jobId.toString()) {
+      // Find job and resume from loaded data
+      const job = jobs.find(j => j.id === preloadedJob.jobId);
+      if (job && resumes.length > 0 && selectedResumeFilename) {
+        // Clear preload state after handling
+        setPreloadedJob(null);
+        // Auto-run analysis is not ideal UX - let user click analyze
+        // They can see the job is preselected
+      }
+    }
+  }, [preloadedJob, activeTab, selectedJobId, jobs, resumes, selectedResumeFilename]);
 
   // Run analysis
   async function runAnalysis() {
@@ -631,10 +663,24 @@ export function Dashboard() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
-            Select a job and resume to analyze alignment
+            Analyze your resume against job postings
           </motion.p>
         </div>
 
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'analysis' | 'history')}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="analysis" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              New Analysis
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="w-4 h-4" />
+              History
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="analysis" className="mt-0">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Selection */}
           <div className="lg:col-span-1 space-y-4">
@@ -1080,7 +1126,13 @@ export function Dashboard() {
             )}
           </div>
         </div>
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-0">
+            <AnalysisHistory onSelectAnalysis={handleSelectFromHistory} />
+          </TabsContent>
+        </Tabs>
       </div>
-    </PageTransition >
+    </PageTransition>
   );
 }

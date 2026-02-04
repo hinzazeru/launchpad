@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, useResumes, useUploadResume, useDeleteResume } from '@/services/api';
+import { api, useResumes, useUploadResume, useDeleteResume, useSuggestedDomains } from '@/services/api';
 import type { ResumeMetadata, ResumePreview } from '@/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
   X,
   ChevronDown,
   Sparkles,
+  Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,6 +109,7 @@ function ResumePreviewModal({
   onClose: () => void;
 }) {
   const [expandedRoles, setExpandedRoles] = useState<Set<number>>(new Set([0]));
+  const { data: domainData, isLoading: domainsLoading } = useSuggestedDomains(filename);
 
   const toggleRole = (index: number) => {
     setExpandedRoles(prev => {
@@ -119,6 +121,13 @@ function ResumePreviewModal({
       }
       return next;
     });
+  };
+
+  // Helper to get confidence color
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 0.8) return 'bg-green-100 text-green-800 border-green-200';
+    if (confidence >= 0.6) return 'bg-blue-100 text-blue-800 border-blue-200';
+    return 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
   return (
@@ -183,6 +192,52 @@ function ResumePreviewModal({
                 </div>
               </motion.div>
             )}
+
+            {/* Suggested Domains */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.07 }}
+              className="mb-6"
+            >
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Suggested Domains
+              </h3>
+              {domainsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Analyzing resume for domain expertise...
+                </div>
+              ) : domainData?.suggestions && domainData.suggestions.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {domainData.suggestions.slice(0, 8).map((domain) => (
+                      <div
+                        key={domain.domain}
+                        className={cn(
+                          'px-3 py-1.5 rounded-full text-xs font-medium border',
+                          getConfidenceColor(domain.confidence)
+                        )}
+                        title={`${domain.description}\n${domain.evidence}`}
+                      >
+                        {domain.domain.replace(/_/g, ' ')}
+                        <span className="ml-1 opacity-70">
+                          {Math.round(domain.confidence * 100)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Domains detected from your resume. Update your profile domains in Settings to improve job matching.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No specific domains detected. Add domain keywords to your resume for better job matching.
+                </p>
+              )}
+            </motion.div>
 
             {/* Experience */}
             <motion.div

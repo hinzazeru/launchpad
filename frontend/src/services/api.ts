@@ -102,6 +102,20 @@ export interface ResumePreview {
   source_format: string;
 }
 
+export interface DomainSuggestion {
+  domain: string;
+  confidence: number;
+  category: string;
+  evidence: string;
+  description: string;
+}
+
+export interface SuggestedDomainsResponse {
+  filename: string;
+  suggestions: DomainSuggestion[];
+  total: number;
+}
+
 export interface BulletScore {
   text: string;
   score: number;
@@ -153,6 +167,80 @@ export interface ExportResponse {
 export interface GeminiStatus {
   available: boolean;
   message: string;
+}
+
+// Analysis history types
+
+export interface AnalysisRoleSummary {
+  company: string;
+  title: string;
+  bullet_count: number;
+  has_suggestions: boolean;
+}
+
+export interface AnalysisHistoryItem {
+  match_id: number;
+  job_id: number;
+  job_title: string;
+  job_company: string;
+  job_location?: string;
+  job_url?: string;
+  resume_id: number;
+  match_score: number;
+  ai_match_score?: number;
+  match_engine: 'nlp' | 'gemini';
+  generated_date: string;
+  has_bullet_suggestions: boolean;
+  roles_summary: AnalysisRoleSummary[];
+  ai_strengths_count: number;
+  ai_concerns_count: number;
+}
+
+export interface AnalysisHistoryFilters {
+  search?: string;
+  resume_id?: number;
+  date_from?: string;
+  date_to?: string;
+  min_score?: number;
+  max_score?: number;
+  has_ai_suggestions?: boolean;
+  sort_by?: 'date' | 'score';
+  sort_order?: 'asc' | 'desc';
+  skip?: number;
+  limit?: number;
+}
+
+export interface AnalysisHistoryResponse {
+  items: AnalysisHistoryItem[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+// Match suggestions detail types
+
+export interface BulletSuggestionDetail {
+  index: number;
+  original: string;
+  score?: number;
+  analysis?: string;
+  suggestions: string[];
+}
+
+export interface RoleBulletSuggestions {
+  role_key: string;
+  company: string;
+  title: string;
+  bullets: BulletSuggestionDetail[];
+}
+
+export interface MatchSuggestionsResponse {
+  match_id: number;
+  job_title: string;
+  job_company: string;
+  roles: RoleBulletSuggestions[];
+  total_bullets: number;
+  total_with_suggestions: number;
 }
 
 export interface JobStats {
@@ -273,6 +361,16 @@ export interface SearchDefaults {
   experience_level?: string;
   work_arrangement?: string;
   posted_when: string;
+}
+
+export interface SuggestedKeyword {
+  keyword: string;
+  count: number;
+  source: 'scheduled' | 'job_titles';
+}
+
+export interface SuggestedKeywordsResponse {
+  suggestions: SuggestedKeyword[];
 }
 
 // Analytics types
@@ -556,6 +654,10 @@ class ApiClient {
     return this.fetch<ResumePreview>(`/resumes/${encodeURIComponent(filename)}/preview`);
   }
 
+  async getSuggestedDomains(filename: string): Promise<SuggestedDomainsResponse> {
+    return this.fetch<SuggestedDomainsResponse>(`/resumes/${encodeURIComponent(filename)}/suggested-domains`);
+  }
+
   async uploadResume(file: File, name: string): Promise<{ success: boolean; filename: string; message: string }> {
     const formData = new FormData();
     formData.append('file', file);
@@ -626,6 +728,28 @@ class ApiClient {
     return this.fetch<GeminiStatus>('/analysis/gemini-status');
   }
 
+  async getAnalysisHistory(params?: AnalysisHistoryFilters): Promise<AnalysisHistoryResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.resume_id !== undefined) searchParams.set('resume_id', String(params.resume_id));
+    if (params?.date_from) searchParams.set('date_from', params.date_from);
+    if (params?.date_to) searchParams.set('date_to', params.date_to);
+    if (params?.min_score !== undefined) searchParams.set('min_score', String(params.min_score));
+    if (params?.max_score !== undefined) searchParams.set('max_score', String(params.max_score));
+    if (params?.has_ai_suggestions !== undefined) searchParams.set('has_ai_suggestions', String(params.has_ai_suggestions));
+    if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
+    if (params?.sort_order) searchParams.set('sort_order', params.sort_order);
+    if (params?.skip !== undefined) searchParams.set('skip', String(params.skip));
+    if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
+
+    const query = searchParams.toString();
+    return this.fetch<AnalysisHistoryResponse>(`/analysis/history${query ? `?${query}` : ''}`);
+  }
+
+  async getMatchSuggestions(matchId: number): Promise<MatchSuggestionsResponse> {
+    return this.fetch<MatchSuggestionsResponse>(`/analysis/history/${matchId}/suggestions`);
+  }
+
   getDownloadUrl(filename: string): string {
     return `${API_BASE}/analysis/download/${encodeURIComponent(filename)}`;
   }
@@ -665,6 +789,10 @@ class ApiClient {
 
   async getSearchDefaults(): Promise<SearchDefaults> {
     return this.fetch<SearchDefaults>('/search/defaults');
+  }
+
+  async getSuggestedKeywords(limit: number = 7): Promise<SuggestedKeywordsResponse> {
+    return this.fetch<SuggestedKeywordsResponse>(`/search/suggested-keywords?limit=${limit}`);
   }
 
   /**
@@ -912,6 +1040,14 @@ export function useUploadResume() {
   });
 }
 
+export function useSuggestedDomains(filename: string | null) {
+  return useQuery({
+    queryKey: ['suggested-domains', filename],
+    queryFn: () => (filename ? api.getSuggestedDomains(filename) : Promise.resolve(null)),
+    enabled: !!filename,
+  });
+}
+
 export function useAnalyzeResume() {
   return useMutation({
     mutationFn: (params: Parameters<ApiClient['analyzeResume']>[0]) => api.analyzeResume(params),
@@ -927,6 +1063,24 @@ export function useGenerateSuggestions() {
 export function useExportResume() {
   return useMutation({
     mutationFn: (params: Parameters<ApiClient['exportResume']>[0]) => api.exportResume(params),
+  });
+}
+
+export function useAnalysisHistory(params?: AnalysisHistoryFilters) {
+  return useQuery({
+    queryKey: ['analysis-history', params],
+    queryFn: () => api.getAnalysisHistory(params),
+    placeholderData: (previousData) => previousData,
+    staleTime: 30 * 1000, // 30 seconds
+  });
+}
+
+export function useMatchSuggestions(matchId: number | null) {
+  return useQuery({
+    queryKey: ['match-suggestions', matchId],
+    queryFn: () => (matchId ? api.getMatchSuggestions(matchId) : Promise.resolve(null)),
+    enabled: matchId !== null,
+    staleTime: 5 * 60 * 1000, // 5 minutes - suggestions rarely change
   });
 }
 
@@ -1012,6 +1166,14 @@ export function useSearchDefaults() {
   return useQuery({
     queryKey: ['search-defaults'],
     queryFn: () => api.getSearchDefaults(),
+  });
+}
+
+export function useSuggestedKeywords() {
+  return useQuery({
+    queryKey: ['suggested-keywords'],
+    queryFn: () => api.getSuggestedKeywords(7),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 }
 

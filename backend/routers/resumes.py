@@ -74,6 +74,22 @@ class ResumeUploadResponse(BaseModel):
     message: str
 
 
+class DomainSuggestion(BaseModel):
+    """A suggested domain based on resume content."""
+    domain: str
+    confidence: float
+    category: str
+    evidence: str
+    description: str
+
+
+class SuggestedDomainsResponse(BaseModel):
+    """Response for suggested domains endpoint."""
+    filename: str
+    suggestions: List[DomainSuggestion]
+    total: int
+
+
 @router.get("", response_model=ResumeListResponse)
 async def list_resumes():
     """List all saved resumes from the library."""
@@ -209,6 +225,52 @@ async def preview_resume(filename: str):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse resume: {str(e)}")
+
+
+@router.get("/{filename}/suggested-domains", response_model=SuggestedDomainsResponse)
+async def get_suggested_domains(filename: str):
+    """Get AI-suggested domains from resume content.
+
+    Analyzes the resume text and suggests domains based on
+    keyword matches from the domain expertise taxonomy.
+    """
+    file_path = RESUME_LIBRARY_DIR / filename
+    validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    with open(file_path) as f:
+        content = f.read()
+
+    try:
+        # For JSON resumes, extract the text content
+        if filename.endswith(".json"):
+            structure = parser.parse_auto(content)
+            text_content = structure.raw_text
+        else:
+            text_content = content
+
+        # Extract domain suggestions
+        suggestions = parser.extract_domains(text_content)
+
+        return SuggestedDomainsResponse(
+            filename=filename,
+            suggestions=[
+                DomainSuggestion(
+                    domain=s['domain'],
+                    confidence=s['confidence'],
+                    category=s['category'],
+                    evidence=s['evidence'],
+                    description=s['description']
+                )
+                for s in suggestions
+            ],
+            total=len(suggestions)
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to extract domains: {str(e)}")
 
 
 @router.post("", response_model=ResumeUploadResponse)

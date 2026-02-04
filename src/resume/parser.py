@@ -314,6 +314,85 @@ class ResumeParser:
             raw_text=block_text
         )
 
+    def extract_domains(self, text: str) -> List[Dict]:
+        """Extract suggested domains from resume text.
+
+        Scans the resume text for domain keywords and suggests relevant domains
+        based on the candidate's experience.
+
+        Args:
+            text: Resume text content
+
+        Returns:
+            List of domain suggestions, each with:
+                - domain: Domain name (e.g., "fintech", "ecommerce")
+                - confidence: Confidence score (0.0-1.0)
+                - evidence: Where/why this domain was detected
+        """
+        from src.matching.skill_extractor import load_domain_expertise
+
+        if not text:
+            return []
+
+        expertise_data = load_domain_expertise()
+        domains = expertise_data.get("domains", {})
+
+        text_lower = text.lower()
+        suggestions = []
+        found_domains: Dict[str, Dict] = {}  # domain -> {count, keywords}
+
+        # Search through all domain categories
+        for category, category_domains in domains.items():
+            for domain_name, domain_data in category_domains.items():
+                keywords = domain_data.get("keywords", [])
+                matched_keywords = []
+
+                for keyword in keywords:
+                    keyword_lower = keyword.lower()
+                    # Use word boundary matching
+                    pattern = r'\b' + re.escape(keyword_lower) + r'\b'
+                    matches = re.findall(pattern, text_lower)
+
+                    if matches:
+                        matched_keywords.append(keyword)
+
+                if matched_keywords:
+                    if domain_name in found_domains:
+                        found_domains[domain_name]['count'] += len(matched_keywords)
+                        found_domains[domain_name]['keywords'].extend(matched_keywords)
+                    else:
+                        found_domains[domain_name] = {
+                            'count': len(matched_keywords),
+                            'keywords': matched_keywords,
+                            'category': category,
+                            'description': domain_data.get('description', '')
+                        }
+
+        # Build suggestions with confidence scores
+        for domain_name, data in found_domains.items():
+            # Confidence based on number of matching keywords
+            keyword_count = len(set(data['keywords']))  # Unique keywords
+            if keyword_count >= 3:
+                confidence = 0.9
+            elif keyword_count >= 2:
+                confidence = 0.75
+            else:
+                confidence = 0.6
+
+            suggestions.append({
+                'domain': domain_name,
+                'confidence': confidence,
+                'category': data['category'],
+                'evidence': f"Found keywords: {', '.join(set(data['keywords'])[:3])}",
+                'description': data['description']
+            })
+
+        # Sort by confidence descending
+        suggestions.sort(key=lambda x: x['confidence'], reverse=True)
+
+        return suggestions
+
+
 # Factory for easy import
 def get_parser():
     return ResumeParser()
