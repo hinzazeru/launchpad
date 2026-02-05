@@ -55,7 +55,7 @@ from src.config import get_config
 from src.database.db import SessionLocal
 from src.database.models import Resume, JobPosting, MatchResult
 from src.database import crud
-from src.importers.api_importer import ApifyJobImporter
+from src.importers.provider_factory import get_job_provider
 from src.matching.engine import JobMatcher
 from src.integrations.sheets_connector import SheetsConnector
 from src.integrations.gemini_client import GeminiMatchReranker
@@ -87,7 +87,7 @@ class JobScheduler:
         }
 
         # Initialize components
-        self.importer = ApifyJobImporter()
+        self.provider = get_job_provider()
         self.matcher = JobMatcher()  # Pre-caches skill dictionary embeddings
         self.sheets_connector = SheetsConnector()
         self.gemini_reranker = GeminiMatchReranker()  # LLM-based match re-ranking
@@ -260,7 +260,7 @@ class JobScheduler:
 
         jobs = []
         try:
-            jobs = self.importer.search_jobs(
+            jobs = self.provider.search_jobs(
                 keywords=actual_keyword,
                 location=search_location,
                 max_results=self.max_results,
@@ -294,7 +294,7 @@ class JobScheduler:
         logger.info("[Stage 3/6] Importing jobs to database...")
         imported_count = 0
         try:
-            imported_count = self.importer.import_jobs(jobs)
+            imported_count = self.provider.import_jobs(jobs)
             logger.info(f"[Stage 3] SUCCESS: Imported {imported_count} new jobs")
         except Exception as e:
             logger.error(f"[Stage 3] FAILED: Database import error: {e}", exc_info=True)

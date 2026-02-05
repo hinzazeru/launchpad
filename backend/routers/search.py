@@ -3,22 +3,25 @@
 Provides endpoints for triggering job searches with real-time progress via SSE.
 """
 
+import asyncio
 import json
 import logging
 import time as time_module
+import uuid
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Dict, Any, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from src.config import get_config
 from src.database.db import SessionLocal
-from src.database.models import Resume, JobPosting, MatchResult, ScheduledSearch
-from src.importers.api_importer import ApifyJobImporter
+from src.database.models import Resume, JobPosting, MatchResult, ScheduledSearch, SearchJob
+from src.importers.provider_factory import get_job_provider
 from src.matching.engine import JobMatcher
 from src.integrations.gemini_client import get_gemini_reranker
 from src.resume.parser import ResumeParser
@@ -461,8 +464,8 @@ async def search_jobs(request: JobSearchRequest):
             ))
         
         try:
-            importer = ApifyJobImporter()
-            jobs = await importer.search_jobs_async(
+            provider = get_job_provider()
+            jobs = await provider.search_jobs_async(
                 keywords=actual_keyword,
                 location=search_location,
                 job_type=request.job_type,
@@ -492,7 +495,7 @@ async def search_jobs(request: JobSearchRequest):
             seen_raw = {}
             for job in jobs:
                 try:
-                    norm = importer.normalize_apify_job(job)
+                    norm = provider.normalize_job(job)
                     title = norm.get('title', '').strip().lower()
                     company = norm.get('company', '').strip().lower()
                     dedup_key = (title, company)
@@ -544,7 +547,7 @@ async def search_jobs(request: JobSearchRequest):
 
         jobs_imported = 0
         try:
-            jobs_imported = importer.import_jobs(jobs)
+            jobs_imported = provider.import_jobs(jobs)
         except Exception as e:
             logger.warning(f"Import failed (continuing): {e}")
 
@@ -653,7 +656,7 @@ async def search_jobs(request: JobSearchRequest):
                 if matches and gemini_reranker and gemini_reranker.is_available():
                     try:
                         with perf_logger.time('gemini_rerank'):
-                            matches, _ = gemini_reranker.rerank_matches(
+                            matches = gemini_reranker.rerank_matches(
                                 matches=matches,
                                 resume_skills=resume.skills or [],
                                 experience_years=resume.experience_years or 0,
@@ -734,8 +737,8 @@ async def search_jobs(request: JobSearchRequest):
 
         all_matches.sort(key=get_blended_score, reverse=True)
 
-        # Count high matches (>=70%)
-        high_matches = len([m for m in all_matches if get_blended_score(m) >= 0.70])
+        # Count high matches (>=85%)
+        high_matches = len([m for m in all_matches if get_blended_score(m) >= 0.85])
 
         yield send_progress(SearchProgress(
             stage=SearchStage.MATCHING,
@@ -850,17 +853,17 @@ async def search_jobs(request: JobSearchRequest):
                 location=match.get('location'),
                 url=match.get('url'),
                 score=round(get_blended_score(match) * 100, 1),
-                gemini_score=round(match.get('gemini_score', 0) * 100, 1) if match.get('gemini_score') else None
+                gemini_score=round(match.get('gemini_score', 0), 1) if match.get('gemini_score') else None
             ))
 
         # Build fetched jobs preview (already deduplicated after fetch)
         fetched_jobs = []
         if jobs:
             try:
-                norm_importer = importer if importer else ApifyJobImporter()
+                norm_importer = importer if importer else get_job_provider()
                 for job in jobs:
                     try:
-                        norm = norm_importer.normalize_apify_job(job)
+                        norm = norm_importer.normalize_job(job)
                         fetched_jobs.append(TopMatch(
                             title=norm.get('title', 'Unknown'),
                             company=norm.get('company', 'Unknown'),
@@ -1028,3 +1031,595 @@ async def check_gemini_health():
             available=False,
             error=str(e)
         )
+
+
+# ========================================================================
+# Background Job Queue Endpoints (Resilient to disconnections)
+# ========================================================================
+
+from backend.schemas.search import (
+    SearchJobCreate,
+    SearchJobStartResponse,
+    SearchJobProgress,
+    SearchJobListResponse
+)
+
+
+def get_db():
+    """Dependency to get database session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@router.post("/jobs/start", response_model=SearchJobStartResponse)
+async def start_search_job(
+    request: JobSearchRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Start a job search in the background.
+
+    Returns immediately with a search_id that can be polled for progress.
+    This endpoint is resilient to browser disconnections - results are
+    persisted to the database and can be retrieved later.
+    """
+    # Generate unique search ID
+    search_id = str(uuid.uuid4())
+
+    # Validate resume file
+    file_path = RESUME_LIBRARY_DIR / request.resume_filename
+    try:
+        validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
+    except HTTPException:
+        raise HTTPException(status_code=403, detail="Access denied - invalid resume path")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"Resume file not found: {request.resume_filename}")
+
+    # Create SearchJob record
+    search_job = SearchJob(
+        search_id=search_id,
+        status='pending',
+        stage='initializing',
+        progress=0,
+        message='Search queued',
+        keyword=request.keyword,
+        location=request.location,
+        job_type=request.job_type,
+        experience_level=request.experience_level,
+        work_arrangement=request.work_arrangement,
+        max_results=request.max_results,
+        resume_filename=request.resume_filename,
+        export_to_sheets=request.export_to_sheets,
+        trigger_source='manual',
+        expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.add(search_job)
+    db.commit()
+
+    # Start background task
+    background_tasks.add_task(execute_search_job, search_id)
+
+    logger.info(f"Started search job {search_id} for keyword '{request.keyword}'")
+
+    return SearchJobStartResponse(
+        search_id=search_id,
+        status='pending',
+        message='Search started in background'
+    )
+
+
+@router.get("/jobs/{search_id}/status", response_model=SearchJobProgress)
+async def get_search_status(search_id: str, db: Session = Depends(get_db)):
+    """Get the current progress of a search job.
+
+    Poll this endpoint every 2-3 seconds to get updates.
+    Once status is 'completed' or 'failed', polling can stop.
+    """
+    search_job = db.query(SearchJob).filter(SearchJob.search_id == search_id).first()
+
+    if not search_job:
+        raise HTTPException(status_code=404, detail="Search job not found")
+
+    return SearchJobProgress(
+        search_id=search_job.search_id,
+        status=search_job.status,
+        stage=search_job.stage,
+        progress=search_job.progress,
+        message=search_job.message,
+        jobs_found=search_job.jobs_found,
+        jobs_imported=search_job.jobs_imported,
+        matches_found=search_job.matches_found,
+        high_matches=search_job.high_matches,
+        exported_count=search_job.exported_count,
+        result=search_job.result if search_job.status == 'completed' else None,
+        error=search_job.error if search_job.status == 'failed' else None,
+        created_at=search_job.created_at,
+        updated_at=search_job.updated_at or search_job.created_at
+    )
+
+
+@router.get("/jobs/recent", response_model=SearchJobListResponse)
+async def list_recent_search_jobs(limit: int = 10, db: Session = Depends(get_db)):
+    """List recent search jobs for recovery after disconnection."""
+    jobs = db.query(SearchJob).order_by(SearchJob.created_at.desc()).limit(limit).all()
+
+    return SearchJobListResponse(
+        jobs=[
+            SearchJobProgress(
+                search_id=job.search_id,
+                status=job.status,
+                stage=job.stage,
+                progress=job.progress,
+                message=job.message,
+                jobs_found=job.jobs_found,
+                jobs_imported=job.jobs_imported,
+                matches_found=job.matches_found,
+                high_matches=job.high_matches,
+                exported_count=job.exported_count,
+                result=job.result if job.status == 'completed' else None,
+                error=job.error if job.status == 'failed' else None,
+                created_at=job.created_at,
+                updated_at=job.updated_at or job.created_at
+            )
+            for job in jobs
+        ],
+        total=len(jobs)
+    )
+
+
+def execute_search_job(search_id: str):
+    """Execute the search pipeline in background.
+
+    This function runs the full search pipeline and updates the SearchJob
+    record with progress at each stage. Results are persisted to the database.
+
+    Called via BackgroundTasks - runs in a thread pool.
+    """
+    # Run the async function in an event loop
+    asyncio.run(_execute_search_job_async(search_id))
+
+
+async def _execute_search_job_async(search_id: str):
+    """Async implementation of the search pipeline."""
+    db = SessionLocal()
+    start_time = time_module.perf_counter()
+    config = get_config()
+
+    try:
+        search_job = db.query(SearchJob).filter(SearchJob.search_id == search_id).first()
+        if not search_job:
+            logger.error(f"Search job {search_id} not found")
+            return
+
+        def update_progress(stage: str, progress: int, message: str, **kwargs):
+            """Update progress in database."""
+            search_job.stage = stage
+            search_job.progress = progress
+            search_job.message = message
+            for key, value in kwargs.items():
+                if hasattr(search_job, key) and value is not None:
+                    setattr(search_job, key, value)
+            search_job.updated_at = datetime.utcnow()
+            db.commit()
+
+        # Update status to running
+        search_job.status = 'running'
+        update_progress('initializing', 0, 'Starting search...')
+
+        # ================================================================
+        # STAGE 1: Initialize (0-10%)
+        # ================================================================
+        file_path = RESUME_LIBRARY_DIR / search_job.resume_filename
+
+        update_progress('initializing', 5, 'Loading resume...')
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                resume_content = f.read()
+
+            parser = ResumeParser()
+            parsed = parser.parse_auto(resume_content)
+
+            # Extract skills and domains
+            flat_skills = []
+            resume_domains = []
+            for category_name, category_skills in parsed.skills.items():
+                if category_name.lower() == 'domains':
+                    resume_domains = list(category_skills)
+                else:
+                    flat_skills.extend(category_skills)
+
+            # Map domains
+            domain_expertise_path = Path(__file__).parent.parent.parent / "data" / "domain_expertise.json"
+            mapped_domains = []
+            if domain_expertise_path.exists():
+                try:
+                    with open(domain_expertise_path, 'r') as f:
+                        domain_config = json.load(f)
+                    domain_lookup = {}
+                    for category in ['industries', 'platforms', 'technologies']:
+                        if category in domain_config.get('domains', {}):
+                            for domain_key, domain_data in domain_config['domains'][category].items():
+                                domain_lookup[domain_key.lower()] = domain_key
+                                for keyword in domain_data.get('keywords', []):
+                                    domain_lookup[keyword.lower()] = domain_key
+                    for domain_name in resume_domains:
+                        domain_lower = domain_name.lower().replace(' ', '_')
+                        if domain_lower in domain_lookup:
+                            mapped_domains.append(domain_lookup[domain_lower])
+                    mapped_domains = list(dict.fromkeys(mapped_domains))
+                except Exception as e:
+                    logger.warning(f"Failed to load domain expertise config: {e}")
+
+            # Calculate experience years
+            import re
+            experience_years = 0.0
+            for role in parsed.roles:
+                duration = role.duration.lower()
+                year_match = re.findall(r'20\d{2}', duration)
+                if len(year_match) >= 2:
+                    try:
+                        years = int(year_match[-1]) - int(year_match[0])
+                        experience_years += max(0, years)
+                    except ValueError:
+                        pass
+                elif 'year' in duration:
+                    num_match = re.search(r'(\d+)', duration)
+                    if num_match:
+                        experience_years += float(num_match.group(1))
+
+            # Create resume object
+            class ParsedResume:
+                def __init__(self, skills, experience_years, domains=None, job_titles=None):
+                    self.id = 0
+                    self.skills = skills
+                    self.experience_years = experience_years
+                    self.domains = domains or []
+                    self.job_titles = job_titles or []
+
+            recent_titles = [role.title for role in parsed.roles[:5]] if parsed.roles else []
+            resume = ParsedResume(
+                skills=flat_skills,
+                experience_years=experience_years,
+                domains=mapped_domains,
+                job_titles=recent_titles
+            )
+
+            update_progress('initializing', 10,
+                           f"Resume loaded: {len(flat_skills)} skills, {experience_years:.0f} years exp")
+
+        except Exception as e:
+            logger.error(f"Failed to parse resume: {e}", exc_info=True)
+            search_job.status = 'failed'
+            search_job.error = f"Could not parse resume: {str(e)}"
+            db.commit()
+            return
+
+        # ================================================================
+        # STAGE 2: Fetch jobs from Apify (10-40%)
+        # ================================================================
+        update_progress('fetching', 15, f"Fetching jobs for '{search_job.keyword}'...")
+
+        keyword = search_job.keyword.strip()
+        is_remote_search = keyword.lower().endswith("remote")
+
+        if is_remote_search:
+            actual_keyword = keyword[:-6].strip()
+            search_location = "United States"
+            work_arrangement = "Remote"
+        else:
+            actual_keyword = keyword
+            search_location = search_job.location
+            work_arrangement = search_job.work_arrangement
+
+        jobs = []
+        importer = None
+
+        try:
+            importer = ApifyJobImporter()
+            jobs = await importer.search_jobs_async(
+                keywords=actual_keyword,
+                location=search_location,
+                job_type=search_job.job_type,
+                max_results=search_job.max_results,
+                experience_level=search_job.experience_level,
+                work_arrangement=work_arrangement,
+                split_calls=True
+            )
+        except Exception as e:
+            logger.error(f"Apify fetch failed: {e}", exc_info=True)
+            search_job.status = 'failed'
+            search_job.error = f"Apify API error: {str(e)}"
+            db.commit()
+            return
+
+        # Deduplicate
+        if jobs and importer:
+            seen_raw = {}
+            for job in jobs:
+                try:
+                    norm = importer.normalize_apify_job(job)
+                    title = norm.get('title', '').strip().lower()
+                    company = norm.get('company', '').strip().lower()
+                    dedup_key = (title, company)
+                    if dedup_key not in seen_raw:
+                        seen_raw[dedup_key] = job
+                except Exception:
+                    continue
+            jobs = list(seen_raw.values())
+
+        jobs_fetched = len(jobs) if jobs else 0
+        update_progress('fetching', 40, f"Found {jobs_fetched} jobs", jobs_found=jobs_fetched)
+
+        if not jobs:
+            search_job.status = 'completed'
+            search_job.result = SearchResult(
+                success=True, jobs_fetched=0, jobs_imported=0, jobs_matched=0,
+                high_matches=0, exported_to_sheets=0, duration_seconds=0,
+                top_matches=[], fetched_jobs=[]
+            ).model_dump()
+            update_progress('completed', 100, 'No jobs found matching criteria',
+                           jobs_found=0, jobs_imported=0, matches_found=0, high_matches=0)
+            return
+
+        # ================================================================
+        # STAGE 3: Import jobs (40-50%)
+        # ================================================================
+        update_progress('importing', 42, 'Importing jobs to database...', jobs_found=jobs_fetched)
+
+        jobs_imported = 0
+        try:
+            jobs_imported = importer.import_jobs(jobs)
+        except Exception as e:
+            logger.warning(f"Import failed (continuing): {e}")
+
+        update_progress('importing', 50, f"Imported {jobs_imported} new jobs",
+                       jobs_found=jobs_fetched, jobs_imported=jobs_imported)
+
+        # ================================================================
+        # STAGE 4: Match jobs (50-80%)
+        # ================================================================
+        update_progress('matching', 52, 'Matching jobs against resume...',
+                       jobs_found=jobs_fetched, jobs_imported=jobs_imported)
+
+        all_matches = []
+        gemini_stats = None
+
+        try:
+            db_session = SessionLocal()
+            try:
+                from sqlalchemy import or_
+
+                query = db_session.query(JobPosting).filter(
+                    JobPosting.title.ilike(f"%{actual_keyword}%")
+                )
+
+                is_remote_request = is_remote_search or work_arrangement == "Remote"
+                if not is_remote_request and search_location:
+                    location_filter = search_location.split(',')[-1].strip()
+                    query = query.filter(JobPosting.location.ilike(f"%{location_filter}%"))
+
+                max_job_age_days = config.get("matching.max_job_age_days", 7)
+                if max_job_age_days and max_job_age_days > 0:
+                    cutoff_date = datetime.now() - timedelta(days=max_job_age_days)
+                    query = query.filter(
+                        or_(
+                            JobPosting.posting_date >= cutoff_date,
+                            (JobPosting.posting_date.is_(None)) & (JobPosting.import_date >= cutoff_date)
+                        )
+                    )
+
+                all_jobs = query.all()
+
+                # Filter low quality
+                min_description_length = 200
+                all_jobs = [j for j in all_jobs if j.description and len(j.description) >= min_description_length]
+
+                # Deduplicate
+                seen_jobs = {}
+                for job in all_jobs:
+                    dedup_key = (job.title.strip().lower(), job.company.strip().lower())
+                    if dedup_key not in seen_jobs or (job.posting_date and (
+                        not seen_jobs[dedup_key].posting_date or
+                        job.posting_date > seen_jobs[dedup_key].posting_date
+                    )):
+                        seen_jobs[dedup_key] = job
+                all_jobs = list(seen_jobs.values())
+
+                update_progress('matching', 55, f"Analyzing {len(all_jobs)} jobs...",
+                               jobs_found=jobs_fetched, jobs_imported=jobs_imported)
+
+                # Run matching
+                matcher = JobMatcher(mode="auto")
+                matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
+
+                update_progress('matching', 65, f"Found {len(matches)} matches, running AI analysis...",
+                               jobs_found=jobs_fetched, jobs_imported=jobs_imported, matches_found=len(matches))
+
+                # Gemini re-ranking
+                gemini_reranker = get_gemini_reranker()
+                if matches and gemini_reranker and gemini_reranker.is_available():
+                    try:
+                        matches = gemini_reranker.rerank_matches(
+                            matches=matches,
+                            resume_skills=resume.skills or [],
+                            experience_years=resume.experience_years or 0,
+                            resume_domains=resume.domains or []
+                        )
+                    except Exception as rerank_error:
+                        logger.warning(f"Gemini re-ranking failed: {rerank_error}")
+
+                # Save matches
+                resume_id_for_save = resume.id
+                if resume_id_for_save == 0:
+                    db_resume = db_session.query(Resume).first()
+                    if db_resume:
+                        resume_id_for_save = db_resume.id
+
+                if matches and resume_id_for_save > 0:
+                    try:
+                        matcher.save_match_results(
+                            db_session=db_session,
+                            resume_id=resume_id_for_save,
+                            match_results=matches
+                        )
+                        db_session.commit()
+                    except Exception as save_error:
+                        logger.warning(f"Failed to save matches: {save_error}")
+                        db_session.rollback()
+
+                all_matches = matches
+
+            finally:
+                db_session.close()
+
+        except Exception as e:
+            logger.error(f"Matching failed: {e}", exc_info=True)
+            search_job.status = 'failed'
+            search_job.error = str(e)
+            db.commit()
+            return
+
+        # Sort matches
+        ai_weight = config.get("matching.gemini_rerank.blend_weights.ai", 0.75)
+        nlp_weight = config.get("matching.gemini_rerank.blend_weights.nlp", 0.25)
+
+        def get_blended_score(match):
+            if match.get('match_engine') == 'gemini':
+                return match.get('overall_score', 0)
+            nlp_score = match.get('overall_score', 0)
+            ai_score = match.get('gemini_score')
+            if ai_score is not None:
+                return (ai_score * ai_weight) + (nlp_score * nlp_weight)
+            return nlp_score
+
+        all_matches.sort(key=get_blended_score, reverse=True)
+        high_matches = len([m for m in all_matches if get_blended_score(m) >= 0.85])
+
+        update_progress('matching', 80, f"Matching complete: {high_matches} high-quality matches",
+                       jobs_found=jobs_fetched, jobs_imported=jobs_imported,
+                       matches_found=len(all_matches), high_matches=high_matches)
+
+        # ================================================================
+        # STAGE 5: Export (80-95%)
+        # ================================================================
+        exported_count = 0
+        sheets_url = None
+
+        if search_job.export_to_sheets and all_matches:
+            update_progress('exporting', 82, 'Exporting to Google Sheets...',
+                           jobs_found=jobs_fetched, jobs_imported=jobs_imported,
+                           matches_found=len(all_matches), high_matches=high_matches)
+
+            try:
+                from src.integrations.sheets_connector import SheetsConnector
+                sheets = SheetsConnector()
+
+                if sheets.enabled:
+                    try:
+                        sheets.cleanup_old_matches(days=7)
+                    except Exception:
+                        pass
+
+                    exported_count = sheets.export_matches_batch(all_matches)
+                    spreadsheet_id = config.get("sheets.spreadsheet_id")
+                    if spreadsheet_id:
+                        sheets_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+
+                    update_progress('exporting', 95, f"Exported {exported_count} matches to Sheets",
+                                   jobs_found=jobs_fetched, jobs_imported=jobs_imported,
+                                   matches_found=len(all_matches), high_matches=high_matches,
+                                   exported_count=exported_count)
+            except Exception as e:
+                logger.warning(f"Sheets export failed: {e}")
+                update_progress('exporting', 95, f"Sheets export failed: {str(e)}",
+                               exported_count=0)
+        else:
+            update_progress('exporting', 95, 'Skipping Sheets export', exported_count=0)
+
+        # ================================================================
+        # STAGE 6: Complete (100%)
+        # ================================================================
+        duration = time_module.perf_counter() - start_time
+
+        # Build top matches
+        top_matches = []
+        for match in all_matches[:5]:
+            top_matches.append(TopMatch(
+                title=match.get('job_title', 'Unknown'),
+                company=match.get('company', 'Unknown'),
+                location=match.get('location'),
+                url=match.get('url'),
+                score=round(get_blended_score(match) * 100, 1),
+                gemini_score=round(match.get('gemini_score', 0), 1) if match.get('gemini_score') else None
+            ))
+
+        # Build fetched jobs preview
+        fetched_jobs = []
+        if jobs and importer:
+            for job in jobs:
+                try:
+                    norm = importer.normalize_apify_job(job)
+                    fetched_jobs.append(TopMatch(
+                        title=norm.get('title', 'Unknown'),
+                        company=norm.get('company', 'Unknown'),
+                        location=norm.get('location'),
+                        url=norm.get('url'),
+                        score=0.0,
+                        gemini_score=None
+                    ))
+                except Exception:
+                    continue
+
+        # Build gemini stats
+        gemini_stats_response = None
+        if gemini_stats:
+            gemini_stats_response = GeminiStatsResponse(
+                attempted=gemini_stats.attempted,
+                succeeded=gemini_stats.succeeded,
+                failed=gemini_stats.failed,
+                failure_reasons=gemini_stats.failure_reasons
+            )
+
+        # Build final result
+        result = SearchResult(
+            success=True,
+            jobs_fetched=jobs_fetched,
+            jobs_imported=jobs_imported,
+            jobs_matched=len(all_matches),
+            high_matches=high_matches,
+            exported_to_sheets=exported_count,
+            duration_seconds=round(duration, 1),
+            top_matches=top_matches,
+            fetched_jobs=fetched_jobs,
+            sheets_url=sheets_url,
+            gemini_stats=gemini_stats_response
+        )
+
+        # Save to database
+        search_job.status = 'completed'
+        search_job.result = result.model_dump()
+        update_progress('completed', 100, f"Search complete in {duration:.1f}s",
+                       jobs_found=jobs_fetched, jobs_imported=jobs_imported,
+                       matches_found=len(all_matches), high_matches=high_matches,
+                       exported_count=exported_count)
+
+        logger.info(f"Search job {search_id} completed: {high_matches} high matches in {duration:.1f}s")
+
+    except Exception as e:
+        logger.error(f"Search job {search_id} failed: {e}", exc_info=True)
+        try:
+            search_job = db.query(SearchJob).filter(SearchJob.search_id == search_id).first()
+            if search_job:
+                search_job.status = 'failed'
+                search_job.stage = 'error'
+                search_job.error = str(e)
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()

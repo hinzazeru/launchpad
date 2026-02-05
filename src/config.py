@@ -125,6 +125,32 @@ class Config:
         """
         return self.get("apify.actor_id", "vulnv/linkedin-jobs-scraper")
 
+    def get_brightdata_api_key(self) -> str:
+        """Get Bright Data API key from config.
+
+        Returns:
+            Bright Data API key
+
+        Raises:
+            ValueError: If API key is not configured
+        """
+        api_key = self.get("brightdata.api_key")
+        if not api_key or api_key == "YOUR_BRIGHTDATA_API_KEY_HERE":
+            raise ValueError(
+                "Bright Data API key is not configured. "
+                "Please set 'brightdata.api_key' in config.yaml"
+            )
+        return api_key
+
+    def get_job_provider(self) -> str:
+        """Get configured job provider.
+
+        Returns:
+            Job provider name ('apify', 'brightdata', or 'auto')
+            Defaults to 'apify' for backward compatibility
+        """
+        return self.get("job_provider.provider", "apify")
+
     def get_database_url(self) -> str:
         """Get database URL from config.
 

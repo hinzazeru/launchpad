@@ -265,7 +265,7 @@ class WebAppScheduler:
         
         from src.config import get_config
         from src.database.models import Resume, JobPosting, MatchResult
-        from src.importers.api_importer import ApifyJobImporter
+        from src.importers.provider_factory import get_job_provider
         from src.matching.engine import JobMatcher
         from src.integrations.gemini_client import get_gemini_reranker
         from src.resume.parser import ResumeParser
@@ -349,8 +349,8 @@ class WebAppScheduler:
                     search_location = schedule.location or "Canada"
                     work_arrangement = schedule.work_arrangement
                 
-                importer = ApifyJobImporter()
-                jobs = await importer.search_jobs_async(
+                provider = get_job_provider()
+                jobs = await provider.search_jobs_async(
                     keywords=actual_keyword,
                     location=search_location,
                     job_type=schedule.job_type,
@@ -365,7 +365,7 @@ class WebAppScheduler:
                     seen_raw = {}
                     for job in jobs:
                         try:
-                            norm = importer.normalize_apify_job(job)
+                            norm = provider.normalize_job(job)
                             title = norm.get('title', '').strip().lower()
                             company = norm.get('company', '').strip().lower()
                             dedup_key = (title, company)
@@ -389,7 +389,7 @@ class WebAppScheduler:
             # STAGE 3: Import jobs to database
             # ====================================================================
             with perf_logger.time('import'):
-                jobs_imported = importer.import_jobs(jobs)
+                jobs_imported = provider.import_jobs(jobs)
                 result['jobs_imported'] = jobs_imported
             
             # ====================================================================
@@ -442,7 +442,7 @@ class WebAppScheduler:
                 if matches and gemini_reranker and gemini_reranker.is_available():
                     try:
                         with perf_logger.time('gemini_rerank'):
-                            matches, _ = gemini_reranker.rerank_matches(
+                            matches = gemini_reranker.rerank_matches(
                                 matches=matches,
                                 resume_skills=resume.skills or [],
                                 experience_years=resume.experience_years or 0,
@@ -485,7 +485,7 @@ class WebAppScheduler:
                 matches.sort(key=get_blended_score, reverse=True)
                 
                 result['jobs_matched'] = len(matches)
-                result['high_matches'] = len([m for m in matches if get_blended_score(m) >= 0.70])
+                result['high_matches'] = len([m for m in matches if get_blended_score(m) >= 0.85])
                 result['top_matches'] = [
                     {
                         'title': m.get('job_title', 'Unknown'),
@@ -583,7 +583,7 @@ class WebAppScheduler:
             message_lines = [
                 f"🔔 Scheduled Search Complete: \"{schedule.name}\"",
                 "",
-                f"Found {high_matches} high-quality matches (70%+):"
+                f"Found {high_matches} high-quality matches (85%+):"
             ]
             
             for i, match in enumerate(top_matches[:3], 1):

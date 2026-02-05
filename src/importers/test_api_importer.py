@@ -3,7 +3,7 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
-from src.importers.api_importer import ApifyJobImporter, create_apify_importer
+from src.importers.apify_provider import ApifyJobProvider, ApifyJobImporter, create_apify_importer
 
 
 @pytest.fixture

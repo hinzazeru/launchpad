@@ -11,6 +11,26 @@ apify:
   api_key: "YOUR_APIFY_API_KEY_HERE"  # Get from https://console.apify.com/account/integrations
   actor_id: "vulnv/linkedin-jobs-scraper"  # Default actor to use
 
+# Job Data Provider Configuration
+job_provider:
+  # Provider to use for fetching LinkedIn jobs
+  # Options:
+  #   "apify" - Use Apify LinkedIn scraper (original)
+  #   "brightdata" - Use Bright Data LinkedIn Jobs API
+  #   "auto" - Try Bright Data first, fall back to Apify if not configured
+  provider: "apify"
+
+# Bright Data API Configuration
+brightdata:
+  api_key: "YOUR_BRIGHTDATA_API_KEY_HERE"  # Get from https://brightdata.com/cp/api_keys
+  
+  # Request settings
+  poll_interval_seconds: 5   # How often to check for results (seconds)
+  poll_timeout_seconds: 300  # Max wait time for results (5 minutes)
+  
+  # Dataset ID (don't change unless using different dataset)
+  dataset_id: "gd_lpfll7v5hcqtkxl6l"
+
 # Default Job Search Criteria
 search:
   default_location: "United States"
