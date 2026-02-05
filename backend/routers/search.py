@@ -1320,7 +1320,7 @@ async def _execute_search_job_async(search_id: str):
         importer = None
 
         try:
-            importer = ApifyJobImporter()
+            importer = get_job_provider()
             jobs = await importer.search_jobs_async(
                 keywords=actual_keyword,
                 location=search_location,
