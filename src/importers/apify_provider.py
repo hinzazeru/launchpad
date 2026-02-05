@@ -483,7 +483,7 @@ class ApifyJobProvider(JobProvider):
         try:
             for job in jobs:
                 # Normalize the job data
-                normalized_job = self.normalize_apify_job(job)
+                normalized_job = self.normalize_job(job)
                 normalized_job = normalize_job_data(normalized_job)
 
                 # Create deduplication key (normalized title + company)

@@ -4,7 +4,7 @@
 import sys
 from datetime import datetime
 from src.database.db import SessionLocal, init_db
-from src.importers.api_importer import ApifyJobImporter
+from src.importers.provider_factory import get_job_provider
 from src.database import crud
 
 def main():
@@ -18,7 +18,7 @@ def main():
 
     # Fetch jobs
     print("\nStep 1: Fetching jobs from Apify...")
-    importer = ApifyJobImporter()
+    importer = get_job_provider()
 
     raw_jobs = importer.search_jobs(
         keywords="Product Manager",
@@ -38,7 +38,7 @@ def main():
     for i, raw_job in enumerate(raw_jobs, 1):
         try:
             # Normalize
-            normalized = importer.normalize_apify_job(raw_job)
+            normalized = importer.normalize_job(raw_job)
 
             # Debug: Print first job details
             if i == 1:

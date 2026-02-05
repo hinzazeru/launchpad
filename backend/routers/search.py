@@ -1342,7 +1342,7 @@ async def _execute_search_job_async(search_id: str):
             seen_raw = {}
             for job in jobs:
                 try:
-                    norm = importer.normalize_apify_job(job)
+                    norm = importer.normalize_job(job)
                     title = norm.get('title', '').strip().lower()
                     company = norm.get('company', '').strip().lower()
                     dedup_key = (title, company)
@@ -1563,7 +1563,7 @@ async def _execute_search_job_async(search_id: str):
         if jobs and importer:
             for job in jobs:
                 try:
-                    norm = importer.normalize_apify_job(job)
+                    norm = importer.normalize_job(job)
                     fetched_jobs.append(TopMatch(
                         title=norm.get('title', 'Unknown'),
                         company=norm.get('company', 'Unknown'),

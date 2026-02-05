@@ -6,7 +6,7 @@ from datetime import datetime
 from src.database.db import SessionLocal, init_db
 from src.resume.parser import parse_resume
 from src.resume.storage import save_resume_from_file
-from src.importers.api_importer import ApifyJobImporter
+from src.importers.provider_factory import get_job_provider
 from src.importers.validators import validate_job_posting, normalize_job_data
 from src.database import crud
 from src.database.models import JobPosting
@@ -79,7 +79,7 @@ def main():
     print("\nThis may take 30-60 seconds...")
 
     try:
-        importer = ApifyJobImporter()
+        importer = get_job_provider()
 
         raw_jobs = importer.search_jobs(
             keywords="Product Manager",
@@ -97,7 +97,7 @@ def main():
 
         for raw_job in raw_jobs:
             # Normalize
-            normalized = importer.normalize_apify_job(raw_job)
+            normalized = importer.normalize_job(raw_job)
             normalized = normalize_job_data(normalized)
 
             # Validate
