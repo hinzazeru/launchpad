@@ -1024,15 +1024,27 @@ class GeminiMatchReranker:
             if not response.candidates or not response.candidates[0].content.parts:
                 finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
 
-                # Handle specific finish reasons
+                # Handle specific finish reasons with enhanced logging
+                job_title = match.get('job_title', 'Unknown')
+                company = match.get('company', 'Unknown')
+                
                 if finish_reason == 2:  # MAX_TOKENS
-                    logger.warning(f"Gemini response truncated (MAX_TOKENS) for match evaluation: {match.get('job_title', 'Unknown')}")
+                    logger.warning(
+                        f"❌ GEMINI FALLBACK → NLP | Reason: MAX_TOKENS (response truncated) | "
+                        f"Job: '{job_title}' @ {company}"
+                    )
                     return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
                 elif finish_reason == 3:  # SAFETY
-                    logger.warning(f"Gemini response blocked by safety filter for: {match.get('job_title', 'Unknown')}")
+                    logger.warning(
+                        f"❌ GEMINI FALLBACK → NLP | Reason: SAFETY (content filter) | "
+                        f"Job: '{job_title}' @ {company}"
+                    )
                     return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
                 else:
-                    logger.warning(f"Gemini returned no content for match evaluation. Finish reason: {finish_reason}")
+                    logger.warning(
+                        f"❌ GEMINI FALLBACK → NLP | Reason: UNKNOWN (finish_reason={finish_reason}) | "
+                        f"Job: '{job_title}' @ {company}"
+                    )
                     return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
 
             # Extract text parts only (ignore thought_signature and other non-text parts)
@@ -1042,7 +1054,12 @@ class GeminiMatchReranker:
                     text_parts.append(part.text)
 
             if not text_parts:
-                logger.warning(f"Gemini response has no text parts for: {match.get('job_title', 'Unknown')}")
+                job_title = match.get('job_title', 'Unknown')
+                company = match.get('company', 'Unknown')
+                logger.warning(
+                    f"❌ GEMINI FALLBACK → NLP | Reason: NO_TEXT_PARTS (response has no text) | "
+                    f"Job: '{job_title}' @ {company}"
+                )
                 return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
 
             response_text = "".join(text_parts)
@@ -1064,13 +1081,23 @@ class GeminiMatchReranker:
             }
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Gemini re-rank response: {e}")
+            job_title = match.get('job_title', 'Unknown')
+            company = match.get('company', 'Unknown')
+            logger.error(
+                f"❌ GEMINI FALLBACK → NLP | Reason: JSON_PARSE_ERROR ({str(e)[:100]}) | "
+                f"Job: '{job_title}' @ {company}"
+            )
             if 'response_text' in locals():
                 logger.debug(f"Raw response text (first 500 chars): {response_text[:500] if response_text else 'EMPTY'}")
                 logger.debug(f"Cleaned text (first 500 chars): {cleaned[:500] if 'cleaned' in locals() and cleaned else 'EMPTY'}")
             return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
         except Exception as e:
-            logger.error(f"Gemini re-ranking error for {match.get('job_title', 'Unknown')}: {e}")
+            job_title = match.get('job_title', 'Unknown')
+            company = match.get('company', 'Unknown')
+            logger.error(
+                f"❌ GEMINI FALLBACK → NLP | Reason: EXCEPTION ({type(e).__name__}: {str(e)[:100]}) | "
+                f"Job: '{job_title}' @ {company}"
+            )
             return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
 
 
