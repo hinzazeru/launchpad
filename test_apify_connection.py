@@ -11,7 +11,7 @@ Usage:
 import sys
 from datetime import datetime
 from src.config import get_config
-from src.importers.api_importer import ApifyJobImporter
+from src.importers.apify_provider import ApifyJobImporter
 
 
 def test_apify_connection():
@@ -135,7 +135,7 @@ def test_apify_connection():
     print("Step 5: Testing job data normalization...")
 
     try:
-        normalized = importer.normalize_apify_job(jobs[0])
+        normalized = importer.normalize_job(jobs[0])
         print(f"   ✓ Normalization successful")
         print(f"   ✓ Normalized fields: title, company, location, description, url, posting_date")
         print(f"   ✓ Skills extracted: {len(normalized.get('required_skills', []))} skills")

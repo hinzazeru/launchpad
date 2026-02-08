@@ -126,7 +126,7 @@
 | **Bullet Router** | `backend/routers/bullets.py` | Manages saved/liked bullet rewrites |
 | **Telegram Bot** | `src/bot/telegram_bot.py` | Command handling, user interaction |
 | **Job Scheduler** | `src/scheduler/job_scheduler.py` | Automated background scheduling |
-| **API Importer** | `src/importers/api_importer.py` | Fetch jobs from Apify |
+| **API Importer** | `src/importers/apify_provider.py` | Fetch jobs from Apify |
 | **Job Matcher** | `src/matching/engine.py` | Orchestrate matching (dual-mode) |
 | **AI Matcher** | `src/matching/gemini_matcher.py` | Gemini-based AI matching |
 | **Match Types** | `src/matching/requirements.py` | Data structures for AI results |

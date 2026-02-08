@@ -77,7 +77,7 @@ def test_apify_importer_reads_config_key():
         assert importer.api_key == 'config_test_key'
 
 
-@patch('src.importers.api_importer.ApifyClient')
+@patch('src.importers.apify_provider.ApifyClient')
 def test_search_jobs_success(mock_apify_client, mock_apify_response):
     """Test successful job search."""
     # Setup mocks
@@ -105,7 +105,7 @@ def test_search_jobs_success(mock_apify_client, mock_apify_response):
     mock_actor.call.assert_called_once()
 
 
-@patch('src.importers.api_importer.ApifyClient')
+@patch('src.importers.apify_provider.ApifyClient')
 def test_search_jobs_with_parameters(mock_apify_client):
     """Test job search with all parameters."""
     # Setup mock
@@ -148,7 +148,7 @@ def test_search_jobs_with_parameters(mock_apify_client):
     assert run_input['postedWhen'] == 'Past 24 hours'  # Default value
 
 
-@patch('src.importers.api_importer.ApifyClient')
+@patch('src.importers.apify_provider.ApifyClient')
 @patch('time.sleep')
 def test_search_jobs_retry_logic(mock_sleep, mock_apify_client):
     """Test retry logic on API failures."""
@@ -180,7 +180,7 @@ def test_search_jobs_retry_logic(mock_sleep, mock_apify_client):
     assert mock_sleep.call_count == 2  # Sleep between retries
 
 
-@patch('src.importers.api_importer.ApifyClient')
+@patch('src.importers.apify_provider.ApifyClient')
 def test_search_jobs_max_retries_exceeded(mock_apify_client):
     """Test that max retries raises exception."""
     # Setup mock to always fail
@@ -214,7 +214,7 @@ def test_normalize_apify_job_standard_fields():
     }
 
     importer = ApifyJobImporter(api_key='test_key')
-    normalized = importer.normalize_apify_job(raw_job)
+    normalized = importer.normalize_job(raw_job)
 
     assert normalized['title'] == 'Product Manager'
     assert normalized['company'] == 'TechCorp'
@@ -239,7 +239,7 @@ def test_normalize_apify_job_missing_fields():
     }
 
     importer = ApifyJobImporter(api_key='test_key')
-    normalized = importer.normalize_apify_job(raw_job)
+    normalized = importer.normalize_job(raw_job)
 
     assert normalized['title'] == 'Senior PM'
     assert normalized['company'] == 'StartupInc'
@@ -272,7 +272,7 @@ def test_normalize_apify_job_seniority_mapping():
             'company_name': 'Corp',
             'job_seniority_level': seniority,
         }
-        normalized = importer.normalize_apify_job(raw_job)
+        normalized = importer.normalize_job(raw_job)
         assert normalized.get('experience_required') == expected_years
 
 
@@ -284,13 +284,13 @@ def test_normalize_apify_job_missing_posting_date():
     }
 
     importer = ApifyJobImporter(api_key='test_key')
-    normalized = importer.normalize_apify_job(raw_job)
+    normalized = importer.normalize_job(raw_job)
 
     assert 'posting_date' in normalized
     assert isinstance(normalized['posting_date'], datetime)
 
 
-@patch('src.importers.api_importer.ApifyClient')
+@patch('src.importers.apify_provider.ApifyClient')
 def test_fetch_and_validate_jobs(mock_apify_client, mock_apify_response):
     """Test fetching and validating jobs."""
     # Setup mocks
@@ -321,7 +321,7 @@ def test_fetch_and_validate_jobs(mock_apify_client, mock_apify_response):
     assert all('company' in job for job in valid_jobs)
 
 
-@patch('src.importers.api_importer.ApifyClient')
+@patch('src.importers.apify_provider.ApifyClient')
 def test_fetch_and_validate_jobs_with_freshness(mock_apify_client, mock_old_job):
     """Test freshness validation filters old jobs."""
     # Setup mocks with old job
