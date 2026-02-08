@@ -579,32 +579,37 @@ async def search_jobs(request: JobSearchRequest):
         try:
             db_session = SessionLocal()
             try:
-                # Query jobs matching keyword and location
-                query = db_session.query(JobPosting).filter(
-                    JobPosting.title.ilike(f"%{actual_keyword}%")
-                )
-
-                # Apply location filter for non-remote searches
-                # Skip location filter if user selected Remote (via keyword OR dropdown)
-                is_remote_request = is_remote_search or work_arrangement == "Remote"
-                if not is_remote_request and search_location:
-                    location_filter = search_location.split(',')[-1].strip()
-                    query = query.filter(JobPosting.location.ilike(f"%{location_filter}%"))
-
-                # Apply freshness filter
-                max_job_age_days = config.get("matching.max_job_age_days", 7)
-                if max_job_age_days and max_job_age_days > 0:
-                    from sqlalchemy import or_
-                    cutoff_date = datetime.now() - timedelta(days=max_job_age_days)
-                    query = query.filter(
-                        or_(
-                            JobPosting.posting_date >= cutoff_date,
-                            (JobPosting.posting_date.is_(None)) & (JobPosting.import_date >= cutoff_date)
+                # IMPORTANT: Only match against jobs fetched in THIS session
+                # Convert raw fetched jobs to JobPosting-like objects for matching
+                # This prevents wasting Gemini resources on old jobs in the database
+                
+                # Normalize and convert fetched jobs to JobPosting objects
+                fetched_job_objects = []
+                for raw_job in jobs:
+                    try:
+                        normalized = provider.normalize_job(raw_job)
+                        
+                        # Query DB to get the full JobPosting object (if it was imported)
+                        # This gets domain extractions, summaries, etc. from the import stage
+                        from src.database.crud import get_job_by_title_company
+                        db_job = get_job_by_title_company(
+                            db_session,
+                            normalized.get('title', ''),
+                            normalized.get('company', '')
                         )
-                    )
-
-                all_jobs = query.all()
-
+                        
+                        if db_job:
+                            fetched_job_objects.append(db_job)
+                        else:
+                            # Job wasn't imported (duplicate or invalid) - skip it
+                            continue
+                            
+                    except Exception as e:
+                        logger.warning(f"Failed to process fetched job for matching: {e}")
+                        continue
+                
+                all_jobs = fetched_job_objects
+                
                 # Filter out low-quality jobs (sparse descriptions)
                 min_description_length = 200
                 quality_jobs = [
@@ -615,20 +620,6 @@ async def search_jobs(request: JobSearchRequest):
                 if filtered_count > 0:
                     logger.info(f"Filtered {filtered_count} jobs with descriptions < {min_description_length} chars")
                 all_jobs = quality_jobs
-
-                # Deduplicate by (title, company) - keep the most recent posting
-                seen_jobs = {}
-                for job in all_jobs:
-                    dedup_key = (job.title.strip().lower(), job.company.strip().lower())
-                    if dedup_key not in seen_jobs or (job.posting_date and (
-                        not seen_jobs[dedup_key].posting_date or
-                        job.posting_date > seen_jobs[dedup_key].posting_date
-                    )):
-                        seen_jobs[dedup_key] = job
-                deduped_count = len(all_jobs) - len(seen_jobs)
-                if deduped_count > 0:
-                    logger.info(f"Removed {deduped_count} duplicate jobs")
-                all_jobs = list(seen_jobs.values())
 
                 yield send_progress(SearchProgress(
                     stage=SearchStage.MATCHING,

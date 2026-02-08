@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, useResumes, useSearchDefaults, useGeminiConfigStatus, useSuggestedKeywords } from '@/services/api';
-import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage } from '@/services/api';
+import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage, SearchJobProgress } from '@/services/api';
 import { useSearchStore } from '@/stores/searchStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -355,8 +355,9 @@ export function GetJobs() {
     progress,
     result,
     error,
+    activeSearchId,
     startSearch,
-    updateProgress,
+    updateFromJobProgress,
     setResult,
     setError,
     reset: resetSearch,
@@ -390,6 +391,36 @@ export function GetJobs() {
     }
   }, [result?.gemini_stats]);
 
+  // Resume polling if there's an active search from before (recovery after disconnection)
+  useEffect(() => {
+    if (activeSearchId && !result) {
+      // There's an active search - resume polling
+      const controller = new AbortController();
+      setAbortController(controller);
+
+      api.pollSearchJobUntilComplete(
+        activeSearchId,
+        (jobProgress: SearchJobProgress) => {
+          updateFromJobProgress(jobProgress);
+        },
+        2000,
+        controller.signal
+      ).then((searchResult) => {
+        setResult(searchResult);
+        toast.success('Search Complete', `Found ${searchResult.high_matches} high-quality matches`);
+      }).catch((err) => {
+        if (err.message !== 'Search cancelled') {
+          setError(err.message);
+          toast.error('Error', err.message);
+        }
+      }).finally(() => {
+        setAbortController(null);
+      });
+
+      return () => controller.abort();
+    }
+  }, [activeSearchId]); // Only run when activeSearchId changes (on mount if persisted)
+
   const handleSearch = useCallback(async () => {
     if (!keyword.trim()) {
       toast.error('Error', 'Please enter a keyword');
@@ -409,9 +440,6 @@ export function GetJobs() {
     const controller = new AbortController();
     setAbortController(controller);
 
-    // Start search via store
-    startSearch();
-
     const params: JobSearchParams = {
       keyword: keyword.trim(),
       location: location || defaults?.location || 'United States',
@@ -424,12 +452,24 @@ export function GetJobs() {
     };
 
     try {
-      const searchResult = await api.searchJobs(params, (p) => {
-        updateProgress(p);
-        if (p.stage === 'error') {
-          setError(p.error || 'Search failed');
-        }
-      }, controller.signal);
+      // Start background search job (returns immediately with search_id)
+      const { search_id } = await api.startSearchJob(params);
+
+      // Update store with search ID (persisted for recovery)
+      startSearch(search_id);
+
+      // Poll for completion (resilient to disconnections)
+      const searchResult = await api.pollSearchJobUntilComplete(
+        search_id,
+        (jobProgress: SearchJobProgress) => {
+          updateFromJobProgress(jobProgress);
+          if (jobProgress.stage === 'error') {
+            setError(jobProgress.error || 'Search failed');
+          }
+        },
+        2000, // Poll every 2 seconds
+        controller.signal
+      );
 
       setResult(searchResult);
       toast.success(
@@ -437,8 +477,8 @@ export function GetJobs() {
         `Found ${searchResult.high_matches} high-quality matches`
       );
     } catch (err) {
-      // Don't show error for aborted requests
-      if (err instanceof Error && err.name === 'AbortError') {
+      // Don't show error for aborted/cancelled requests
+      if (err instanceof Error && (err.name === 'AbortError' || err.message === 'Search cancelled')) {
         return;
       }
       const message = err instanceof Error ? err.message : 'Search failed';
@@ -447,7 +487,7 @@ export function GetJobs() {
     } finally {
       setAbortController(null);
     }
-  }, [keyword, location, jobType, experienceLevel, workArrangement, maxResults, selectedResume, exportToSheets, defaults, toast, abortController, setAbortController, startSearch, updateProgress, setResult, setError]);
+  }, [keyword, location, jobType, experienceLevel, workArrangement, maxResults, selectedResume, exportToSheets, defaults, toast, abortController, setAbortController, startSearch, updateFromJobProgress, setResult, setError]);
 
   const handleReset = useCallback(() => {
     resetSearch();
