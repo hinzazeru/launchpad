@@ -265,3 +265,62 @@ class APICallMetric(Base):
 
     def __repr__(self):
         return f"<APICallMetric(id={self.id}, type='{self.call_type}', duration={self.duration_ms}ms)>"
+
+
+class SearchJob(Base):
+    """Model for tracking background job search execution.
+
+    This model enables the background job queue architecture where:
+    - POST /search/jobs returns immediately with a search_id
+    - Backend runs search in background, persists progress here
+    - Frontend polls GET /search/jobs/{search_id} for updates
+    - Results are always retrievable, even after browser disconnection
+    """
+    __tablename__ = "search_jobs"
+    __table_args__ = (
+        Index('ix_search_jobs_status_created', 'status', 'created_at'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    search_id = Column(String(36), unique=True, nullable=False, index=True)  # UUID
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Status tracking
+    status = Column(String(20), default='pending', index=True)  # pending, running, completed, failed
+    stage = Column(String(20), default='initializing')  # initializing, fetching, importing, matching, exporting, completed, error
+    progress = Column(Integer, default=0)  # 0-100
+    message = Column(String(500), nullable=True)
+
+    # Request parameters (stored for reference)
+    keyword = Column(String(200), nullable=False)
+    location = Column(String(200), nullable=True)
+    job_type = Column(String(50), nullable=True)
+    experience_level = Column(String(50), nullable=True)
+    work_arrangement = Column(String(50), nullable=True)
+    max_results = Column(Integer, default=25)
+    resume_filename = Column(String(255), nullable=False)
+    export_to_sheets = Column(Boolean, default=True)
+
+    # Progress counters
+    jobs_found = Column(Integer, nullable=True)
+    jobs_imported = Column(Integer, nullable=True)
+    matches_found = Column(Integer, nullable=True)
+    high_matches = Column(Integer, nullable=True)
+    exported_count = Column(Integer, nullable=True)
+
+    # Final results (JSON blob when completed)
+    result = Column(JSON, nullable=True)  # Full SearchResult dict
+
+    # Error tracking
+    error = Column(Text, nullable=True)
+
+    # Trigger tracking
+    trigger_source = Column(String(20), default='manual')  # 'manual' or 'scheduled'
+    schedule_id = Column(Integer, ForeignKey("scheduled_searches.id"), nullable=True)
+
+    # Cleanup tracking
+    expires_at = Column(DateTime, nullable=True)  # For auto-cleanup after 24 hours
+
+    def __repr__(self):
+        return f"<SearchJob(id={self.id}, search_id='{self.search_id}', status='{self.status}', progress={self.progress}%)>"
