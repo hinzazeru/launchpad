@@ -50,10 +50,11 @@
             "Data Pipelines"
         ],
         "domains": [
-            "Financial Services",
-            "Investment Management",
-            "ESG Data",
-            "Regulatory and Compliance Data"
+            "financial_services",
+            "investment_management",
+            "b2b_saas",
+            "fintech",
+            "data_engineering"
         ]
     },
     "experience": [

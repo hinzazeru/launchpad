@@ -28,7 +28,7 @@ PRODUCTION = os.getenv("PRODUCTION", "false").lower() == "true"
 frontend_build = project_root / "frontend" / "dist"
 
 app = FastAPI(
-    title="Resume Targeter API",
+    title="LaunchPad 💸 API",
     description="API for analyzing resumes against job descriptions and generating AI-powered suggestions",
     version="1.0.0"
 )
@@ -122,7 +122,7 @@ else:
     @app.get("/")
     async def root():
         """Health check endpoint (dev mode only)."""
-        return {"status": "ok", "message": "Resume Targeter API", "mode": "development"}
+        return {"status": "ok", "message": "LaunchPad 💸 API", "mode": "development"}
 
 
 if __name__ == "__main__":

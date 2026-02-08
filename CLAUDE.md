@@ -1,10 +1,10 @@
-# AI Assistant Context - LinkedIn Job Matcher
+# AI Assistant Context - LaunchPad 💸
 
 This file provides context for AI assistants (Claude, GPT, Copilot, etc.) working on this codebase.
 
 ## Project Overview
 
-LinkedIn Job Matcher is a Python application that automates job discovery by:
+LaunchPad 💸 is a Python application that automates job discovery by:
 1. Fetching job postings from LinkedIn via Apify API
 2. **Dual-Mode Matching**: Jobs matched against resume using NLP (fast, free) or Gemini AI (accurate, rich insights)
 3. **Advanced AI Features**: AI-powered match analysis with strengths/concerns/recommendations, resume bullet rewrites, and persistent AI suggestions
@@ -78,9 +78,11 @@ frontend/src/
 
 10. **Role-Aligned Suggestions**: Saved AI suggestions are mapped to resume roles using a composite key (`Company_Title`), ensuring they attach to the correct experience even if resume order changes.
 
-11. **Global Search State (Zustand)**: The "Get Jobs" search state is managed via Zustand (`frontend/src/stores/searchStore.ts`) so searches persist across page navigation. A floating `SearchStatusIndicator` shows progress on all pages when a search is running.
+11. **Domain Keys vs Names**: Resume domains MUST use standardized keys from `data/domain_expertise.json` (e.g., `"financial_services"`, `"b2b_saas"`), NOT human-readable names (e.g., `"Financial Services"`). The matching engine compares domains by exact key match. Using names will cause skill gaps to be incorrectly reported in analytics.
 
-12. **Performance Logging**: All critical operations (Search, AI Analysis) are wrapped with `PerformanceLogger` contexts. Metrics are persisted to SQLite for the `/analytics/performance` dashboard.
+12. **Global Search State (Zustand)**: The "Get Jobs" search state is managed via Zustand (`frontend/src/stores/searchStore.ts`) so searches persist across page navigation. A floating `SearchStatusIndicator` shows progress on all pages when a search is running.
+
+13. **Performance Logging**: All critical operations (Search, AI Analysis) are wrapped with `PerformanceLogger` contexts. Metrics are persisted to SQLite for the `/analytics/performance` dashboard.
 
 ## Common Tasks
 

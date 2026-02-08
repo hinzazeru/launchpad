@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Resume Targeter Web App Startup Script
+# LaunchPad 💸 Web App Startup Script
 #
 # Usage:
 #   ./run_webapp.sh              # Development mode (backend + frontend)
@@ -176,7 +176,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help|-h)
-            echo "Resume Targeter Web App"
+            echo "LaunchPad 💸 Web App"
             echo ""
             echo "Usage: ./run_webapp.sh [OPTIONS]"
             echo ""
@@ -360,7 +360,7 @@ run_production() {
 main() {
     echo ""
     echo -e "${GREEN}╔═══════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║       Resume Targeter Web App         ║${NC}"
+    echo -e "${GREEN}║          LaunchPad 💸 Web App         ║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════╝${NC}"
     echo ""
 

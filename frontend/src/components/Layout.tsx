@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileText, Target, FolderOpen, Menu, X, Search, Briefcase, BarChart2, Settings } from 'lucide-react';
+import { Target, FolderOpen, Menu, X, Search, Briefcase, BarChart2, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ModeToggle } from '@/components/mode-toggle';
@@ -31,8 +31,7 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center justify-between h-14 sm:h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2">
-              <FileText className="h-7 w-7 sm:h-8 sm:w-8 text-primary" />
-              <span className="font-bold text-lg sm:text-xl text-foreground">Resume Targeter</span>
+              <span className="font-bold text-lg sm:text-xl text-foreground">LaunchPad 💸</span>
             </Link>
 
             {/* Desktop Navigation */}
@@ -117,7 +116,7 @@ export function Layout({ children }: LayoutProps) {
       <footer className="border-t border-border mt-auto bg-card/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-center text-xs sm:text-sm text-muted-foreground">
-            Resume Targeter — Optimize your resume for any job
+            LaunchPad 💸 — Optimize your resume for any job
           </p>
         </div>
       </footer>

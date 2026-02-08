@@ -333,3 +333,158 @@ class BrightDataJobProvider(JobProvider):
         normalized['source'] = 'brightdata'
 
         return normalized
+
+    def import_jobs(self, jobs: List[Dict]) -> int:
+        """Import jobs to the database after normalization.
+
+        Args:
+            jobs: List of job dictionaries from Bright Data
+
+        Returns:
+            Number of jobs successfully imported
+        """
+        from src.database.db import SessionLocal
+        from src.database.models import JobPosting
+        from src.database.crud import get_job_by_title_company
+        from src.importers.validators import normalize_job_data, validate_job_posting
+
+        # Try to initialize Gemini for domain extraction and requirements extraction
+        gemini_extractor = None
+        requirements_extractor = None
+        try:
+            from src.integrations.gemini_client import GeminiDomainExtractor, GeminiRequirementsExtractor
+            extractor = GeminiDomainExtractor()
+            if extractor.is_available():
+                gemini_extractor = extractor
+
+            # Also initialize requirements extractor if enabled
+            req_extractor = GeminiRequirementsExtractor()
+            if req_extractor.is_available():
+                requirements_extractor = req_extractor
+        except Exception:
+            pass  # Gemini not available, will use keyword extraction
+
+        session = SessionLocal()
+        imported_count = 0
+        new_job_postings = []  # Track newly created jobs for Gemini extraction
+        # Track jobs added in this batch to prevent duplicates
+        seen_in_batch = set()
+
+        try:
+            for job in jobs:
+                # Normalize the job data
+                normalized_job = self.normalize_job(job)
+                normalized_job = normalize_job_data(normalized_job)
+
+                # Create deduplication key (normalized title + company)
+                dedup_key = (
+                    normalized_job['title'].strip().lower(),
+                    normalized_job['company'].strip().lower()
+                )
+
+                # Check if already added in this batch
+                if dedup_key in seen_in_batch:
+                    continue
+
+                # Validate basic data structure only (no freshness check)
+                # All jobs from Bright Data are saved - freshness filtering happens during matching
+                is_valid, error = validate_job_posting(normalized_job, check_freshness=False)
+
+                if not is_valid:
+                    logger.debug(f"Skipping invalid job: {error}")
+                    continue
+
+                # Check if job already exists (by normalized title + company)
+                existing = get_job_by_title_company(
+                    session,
+                    normalized_job['title'],
+                    normalized_job['company']
+                )
+
+                if existing:
+                    continue  # Skip duplicates only
+
+                # Mark as seen in this batch
+                seen_in_batch.add(dedup_key)
+
+                # Create new job posting (with keyword domains as fallback)
+                job_posting = JobPosting(
+                    title=normalized_job['title'],
+                    company=normalized_job['company'],
+                    location=normalized_job.get('location', ''),
+                    description=normalized_job.get('description', ''),
+                    required_skills=normalized_job.get('required_skills', []),
+                    experience_required=normalized_job.get('experience_required', 0),
+                    posting_date=normalized_job.get('posting_date'),
+                    source=normalized_job.get('source', 'brightdata'),
+                    url=normalized_job.get('url', ''),
+                    salary=normalized_job.get('salary'),
+                    required_domains=normalized_job.get('required_domains'),
+                    domain_extraction_method='keyword' if normalized_job.get('required_domains') else None,
+                )
+
+                session.add(job_posting)
+                new_job_postings.append(job_posting)
+                imported_count += 1
+
+            # Commit to get job IDs
+            session.commit()
+
+            # Run Gemini extraction on newly imported jobs (domains + summaries)
+            if gemini_extractor and new_job_postings:
+                for job_posting in new_job_postings:
+                    # Extract domains
+                    try:
+                        result = gemini_extractor.extract_domains(
+                            description=job_posting.description or '',
+                            company=job_posting.company,
+                            title=job_posting.title
+                        )
+                        domains = result.get('domains', [])
+                        if domains or result.get('reasoning'):  # Gemini responded
+                            job_posting.required_domains = domains if domains else None
+                            job_posting.domain_extraction_method = 'llm'
+                    except Exception as e:
+                        logger.warning(f"Gemini domain extraction failed for {job_posting.title}: {e}")
+                        # Keep keyword extraction as fallback
+
+                    # Generate summary
+                    try:
+                        summary = gemini_extractor.summarize_job(
+                            description=job_posting.description or '',
+                            company=job_posting.company,
+                            title=job_posting.title
+                        )
+                        if summary:
+                            job_posting.ai_summary = summary
+                    except Exception as e:
+                        logger.warning(f"Gemini summary generation failed for {job_posting.title}: {e}")
+
+                # Commit Gemini-extracted data
+                session.commit()
+
+            # Run requirements extraction if enabled
+            if requirements_extractor and new_job_postings:
+                for job_posting in new_job_postings:
+                    try:
+                        requirements = requirements_extractor.extract_requirements(
+                            description=job_posting.description or '',
+                            title=job_posting.title
+                        )
+                        if requirements:
+                            job_posting.gemini_requirements = requirements
+                    except Exception as e:
+                        logger.warning(f"Gemini requirements extraction failed for {job_posting.title}: {e}")
+
+                # Commit requirements data
+                session.commit()
+
+            logger.info(f"Imported {imported_count} new jobs from Bright Data")
+            return imported_count
+
+        except Exception as e:
+            logger.error(f"Error importing jobs: {e}", exc_info=True)
+            session.rollback()
+            raise
+        finally:
+            session.close()

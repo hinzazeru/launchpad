@@ -190,7 +190,7 @@ async def get_job_stats(session: Session = Depends(get_db)):
 
     high_match = (
         session.query(MatchResult)
-        .filter(MatchResult.match_score >= 70)
+        .filter(MatchResult.match_score >= 85)
         .count()
     )
 

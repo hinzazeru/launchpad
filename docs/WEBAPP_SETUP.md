@@ -1,6 +1,6 @@
-# Resume Targeter Web App Setup Guide
+# LaunchPad 💸 Web App Setup Guide
 
-This guide covers setting up and running the Resume Targeter web application, which consists of a FastAPI backend and React frontend.
+This guide covers setting up and running the LaunchPad 💸 web application, which consists of a FastAPI backend and React frontend.
 
 ## Table of Contents
 
@@ -160,7 +160,7 @@ Example systemd service file:
 
 ```ini
 [Unit]
-Description=Resume Targeter Web App
+Description=LaunchPad 💸 Web App
 After=network.target
 
 [Service]

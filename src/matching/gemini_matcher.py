@@ -65,6 +65,13 @@ Key Responsibilities:
 - Be realistic - most candidates won't have every skill
 - Consider skill transferability (e.g., "React" skills transfer to "Vue")
 - Seniority mismatch (too senior OR too junior) should impact score
+- Write all text concisely without "the candidate" or third-person references
+- For skill_gaps, focus on ACTIONABLE, SPECIFIC skills the candidate could learn:
+  * ✅ INCLUDE: Specific tools (e.g., "Kubernetes", "GraphQL"), frameworks, technologies, certifications
+  * ✅ INCLUDE: Domain-specific skills (e.g., "Financial Modeling", "Clinical Trials")
+  * ❌ EXCLUDE: Overly broad categories (e.g., "Information Technology", "Software Development", "Business")
+  * ❌ EXCLUDE: Functional roles the candidate ALREADY has experience in (e.g., if candidate has been a PM for years, don't gap "Product Management")
+  * ❌ EXCLUDE: Generic soft skills unless specifically critical
 
 **Response format (JSON only, no markdown):**
 {{
@@ -106,6 +113,15 @@ Description:
 2. Experience Fit (25%): Is experience level appropriate for this role?
 3. Seniority Alignment (20%): Does career stage match the role?
 4. Domain Relevance (15%): Does candidate have relevant industry experience?
+
+**Important Guidelines:**
+- Write all text concisely without "the candidate" or third-person references
+- For skill_gaps, focus on ACTIONABLE, SPECIFIC skills the candidate could learn:
+  * ✅ INCLUDE: Specific tools (e.g., "Kubernetes", "GraphQL"), frameworks, technologies, certifications
+  * ✅ INCLUDE: Domain-specific skills (e.g., "Financial Modeling", "Clinical Trials")
+  * ❌ EXCLUDE: Overly broad categories (e.g., "Information Technology", "Software Development", "Business")
+  * ❌ EXCLUDE: Functional roles the candidate ALREADY has experience in (e.g., if candidate has been a PM for years, don't gap "Product Management")
+  * ❌ EXCLUDE: Generic soft skills unless specifically critical
 
 **Response format (JSON only, no markdown):**
 {{
@@ -219,8 +235,8 @@ class GeminiMatcher:
                 )
             )
 
-            # Parse response
-            result = self._parse_response(response, job_title)
+            # Parse response with candidate context for filtering
+            result = self._parse_response(response, job_title, recent_roles)
             if result:
                 return result
 
@@ -310,8 +326,19 @@ class GeminiMatcher:
             description=job_description
         )
 
-    def _parse_response(self, response, job_title: str) -> Optional[GeminiMatchResult]:
-        """Parse Gemini response into GeminiMatchResult."""
+    def _parse_response(
+        self,
+        response,
+        job_title: str,
+        candidate_titles: Optional[List[str]] = None
+    ) -> Optional[GeminiMatchResult]:
+        """Parse Gemini response into GeminiMatchResult.
+
+        Args:
+            response: Gemini API response
+            job_title: Job title for logging
+            candidate_titles: List of candidate's recent job titles for filtering gaps
+        """
         # Extract text from response
         if not response.candidates or not response.candidates[0].content.parts:
             finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
@@ -345,12 +372,19 @@ class GeminiMatcher:
                         context=m.get("context")
                     ))
 
-            # Build skill gaps
+            # Build skill gaps with post-processing filter
             skill_gaps = []
             for g in result.get("skill_gaps", []):
                 if isinstance(g, dict):
+                    gap_skill = g.get("skill", "").strip()
+
+                    # Filter out gaps that match candidate's proven functional expertise
+                    if candidate_titles and self._is_functional_role_gap(gap_skill, candidate_titles):
+                        logger.debug(f"Filtered skill gap '{gap_skill}' - candidate has proven experience")
+                        continue
+
                     skill_gaps.append(SkillGap(
-                        skill=g.get("skill", ""),
+                        skill=gap_skill,
                         importance=g.get("importance", "nice_to_have"),
                         transferable_from=g.get("transferable_from")
                     ))
@@ -377,6 +411,51 @@ class GeminiMatcher:
         except Exception as e:
             logger.error(f"Error processing Gemini match for {job_title}: {e}")
             return None
+
+    def _is_functional_role_gap(self, gap_skill: str, candidate_titles: List[str]) -> bool:
+        """Check if a skill gap is actually a functional role the candidate already has.
+        
+        Args:
+            gap_skill: The skill identified as a gap
+            candidate_titles: List of candidate's recent job titles
+            
+        Returns:
+            True if this gap should be filtered out (candidate has it), False otherwise
+        """
+        gap_lower = gap_skill.lower()
+        
+        # Define functional role mappings (gap keyword -> title keywords)
+        role_mappings = {
+            "product manag": ["product"],
+            "software eng": ["engineer", "developer", "software"],
+            "data scien": ["data scien"],
+            "data engineer": ["data eng"],
+            "data analy": ["data analy", "analyst"],
+            "machine learning eng": ["ml eng", "machine learning"],
+            "devops": ["devops", "sre", "site reliability"],
+            "frontend": ["frontend", "front-end", "front end"],
+            "backend": ["backend", "back-end", "back end"],
+            "full stack": ["full stack", "fullstack"],
+            "ui/ux": ["ui/ux", "ux design", "ui design"],
+            "graphic design": ["graphic design", "visual design"],
+            "marketing": ["marketing"],
+            "sales": ["sales"],
+            "business analy": ["business analy"],
+            "project manag": ["project manag"],
+            "program manag": ["program manag"],
+            "scrum master": ["scrum master", "agile coach"],
+        }
+        
+        # Check if gap matches any functional role the candidate has
+        for gap_keyword, title_keywords in role_mappings.items():
+            if gap_keyword in gap_lower:
+                # Check if candidate has this role in their titles
+                for title in candidate_titles:
+                    title_lower = title.lower()
+                    if any(keyword in title_lower for keyword in title_keywords):
+                        return True  # Filter this gap - candidate has it
+        
+        return False  # Keep this gap - it's legitimate
 
 
 def get_gemini_matcher() -> Optional[GeminiMatcher]:

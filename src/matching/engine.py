@@ -647,10 +647,8 @@ class JobMatcher:
             # Convert score from 0-1 to 0-100 format for database storage
             score_as_percentage = match['overall_score'] * 100
 
-            # Convert Gemini score from 0-1 to 0-100 (if present - for old re-ranker)
+            # gemini_score is already 0-100 from the reranker/matcher (if present)
             gemini_score = match.get('gemini_score')
-            if gemini_score is not None:
-                gemini_score = gemini_score * 100
 
             # Build experience alignment description (TEXT field, not float)
             resume_years = match.get('resume_years', 0)

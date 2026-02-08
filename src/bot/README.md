@@ -1,6 +1,6 @@
 # Bot Module
 
-Telegram bot for remote control of the LinkedIn Job Matcher.
+Telegram bot for remote control of LaunchPad 💸.
 
 ## Overview
 

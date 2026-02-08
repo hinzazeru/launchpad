@@ -248,7 +248,7 @@ class TelegramBot:
             return
 
         welcome_message = (
-            "👋 Welcome to LinkedIn Job Matcher Bot!\n\n"
+            "👋 Welcome to LaunchPad 💸 Bot!\n\n"
             "I help you control your job search automation remotely.\n\n"
             "Available commands:\n"
             "/help - Show all commands\n"
@@ -349,7 +349,7 @@ class TelegramBot:
                     .all()
 
                 # Get high-scoring matches (≥70%)
-                high_score_matches = [m for m in all_recent_matches if m.match_score >= 70]
+                high_score_matches = [m for m in all_recent_matches if m.match_score >= 85]
 
                 # Get blend weights for sorting
                 ai_weight = self.config.get("matching.gemini_rerank.blend_weights.ai", 0.75)
