@@ -26,6 +26,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { StageBreakdown } from './StageBreakdown';
 import { LatencyChart } from './LatencyChart';
+import { GeminiUsageChart } from './GeminiUsageChart';
 
 // Format date for display
 function formatDate(dateStr: string): string {
@@ -192,7 +193,7 @@ export function PerformanceTab() {
                         borderRadius: '6px',
                         fontSize: '12px',
                       }}
-                      formatter={(value) => [`${Number(value).toFixed(1)}s`, 'Duration']}
+                      formatter={(value: any) => [`${Number(value).toFixed(1)}s`, 'Duration']}
                     />
                     <Line
                       type="monotone"
@@ -209,6 +210,9 @@ export function PerformanceTab() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Gemini API Usage Chart */}
+      <GeminiUsageChart />
 
       {/* Stage Breakdown and API Latency */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -321,6 +325,6 @@ export function PerformanceTab() {
           </CardContent>
         </Card>
       </motion.div>
-    </div>
+    </div >
   );
 }

@@ -339,6 +339,36 @@ export interface SearchResult {
   gemini_stats?: GeminiStats;
 }
 
+// Background Job Queue Types (resilient to disconnections)
+
+export interface SearchJobStartResponse {
+  search_id: string;
+  status: string;
+  message: string;
+}
+
+export interface SearchJobProgress {
+  search_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  stage: SearchStage;
+  progress: number;
+  message?: string;
+  jobs_found?: number;
+  jobs_imported?: number;
+  matches_found?: number;
+  high_matches?: number;
+  exported_count?: number;
+  result?: SearchResult;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SearchJobListResponse {
+  jobs: SearchJobProgress[];
+  total: number;
+}
+
 export interface GeminiConfigStatus {
   enabled: boolean;
   matcher_enabled: boolean;
@@ -442,6 +472,36 @@ export interface PerformanceSummary {
 }
 
 // New performance analytics types
+
+export interface MatchingDistributionPoint {
+  date: string;
+  nlp_count: number;
+  gemini_count: number;
+}
+
+export interface MatchingDistribution {
+  points: MatchingDistributionPoint[];
+}
+
+export interface GeminiUsageDay {
+  date: string;
+  matching: number;
+  rerank: number;
+  suggestions: number;
+  total: number;
+}
+
+export interface GeminiUsageTotals {
+  matching: number;
+  rerank: number;
+  suggestions: number;
+  total: number;
+}
+
+export interface GeminiUsageResponse {
+  data: GeminiUsageDay[];
+  totals: GeminiUsageTotals;
+}
 
 export interface PerformanceTimelinePoint {
   date: string;
@@ -845,6 +905,14 @@ class ApiClient {
     return this.fetch<PerformanceBreakdown>(`/analytics/performance/breakdown?days=${days}`);
   }
 
+  async getMatchingDistribution(days: number = 30): Promise<MatchingDistribution> {
+    return this.fetch<MatchingDistribution>(`/analytics/matching-distribution?days=${days}`);
+  }
+
+  async getGeminiUsage(days: number = 30): Promise<GeminiUsageResponse> {
+    return this.fetch<GeminiUsageResponse>(`/analytics/gemini-usage?days=${days}`);
+  }
+
   async getApiLatency(days: number = 7): Promise<Record<string, ApiLatencyDetail>> {
     return this.fetch<Record<string, ApiLatencyDetail>>(`/analytics/performance/api-latency?days=${days}`);
   }
@@ -981,6 +1049,83 @@ class ApiClient {
     }
 
     return result;
+  }
+
+  // =========================================================================
+  // Background Job Queue Methods (resilient to disconnections)
+  // =========================================================================
+
+  /**
+   * Start a job search in the background.
+   * Returns immediately with a search_id for polling.
+   */
+  async startSearchJob(params: JobSearchParams): Promise<SearchJobStartResponse> {
+    return this.fetch<SearchJobStartResponse>('/search/jobs/start', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  /**
+   * Get the current progress of a search job.
+   * Poll this every 2-3 seconds until status is 'completed' or 'failed'.
+   */
+  async getSearchJobProgress(searchId: string): Promise<SearchJobProgress> {
+    return this.fetch<SearchJobProgress>(`/search/jobs/${searchId}/status`);
+  }
+
+  /**
+   * List recent search jobs (for recovery after disconnection).
+   */
+  async getRecentSearchJobs(limit: number = 10): Promise<SearchJobListResponse> {
+    return this.fetch<SearchJobListResponse>(`/search/jobs/recent?limit=${limit}`);
+  }
+
+  /**
+   * Poll for search job completion with automatic retry.
+   * This is the main method to use for resilient search execution.
+   *
+   * @param searchId The search ID returned from startSearchJob
+   * @param onProgress Callback for progress updates
+   * @param pollInterval Polling interval in ms (default: 2000)
+   * @param signal Optional AbortSignal for cancellation
+   * @returns Final search result
+   */
+  async pollSearchJobUntilComplete(
+    searchId: string,
+    onProgress: (progress: SearchJobProgress) => void,
+    pollInterval: number = 2000,
+    signal?: AbortSignal
+  ): Promise<SearchResult> {
+    while (true) {
+      // Check if aborted
+      if (signal?.aborted) {
+        throw new Error('Search cancelled');
+      }
+
+      const progress = await this.getSearchJobProgress(searchId);
+      onProgress(progress);
+
+      if (progress.status === 'completed' && progress.result) {
+        return progress.result;
+      }
+
+      if (progress.status === 'failed') {
+        throw new Error(progress.error || 'Search failed');
+      }
+
+      // Wait before next poll
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(resolve, pollInterval);
+        if (signal) {
+          const abortHandler = () => {
+            clearTimeout(timeout);
+            reject(new Error('Search cancelled'));
+          };
+          signal.addEventListener('abort', abortHandler, { once: true });
+        }
+      });
+    }
   }
 }
 
@@ -1178,6 +1323,37 @@ export function useSuggestedKeywords() {
 }
 
 /**
+ * Hook for polling search job progress.
+ * Automatically polls every 2 seconds until completed or failed.
+ */
+export function useSearchJobProgress(searchId: string | null, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['search-job', searchId],
+    queryFn: () => searchId ? api.getSearchJobProgress(searchId) : null,
+    enabled: (options?.enabled ?? true) && !!searchId,
+    refetchInterval: (query) => {
+      // Stop polling when completed or failed
+      const data = query.state.data;
+      if (data?.status === 'completed' || data?.status === 'failed') {
+        return false;
+      }
+      return 2000; // Poll every 2 seconds
+    },
+  });
+}
+
+/**
+ * Hook for getting recent search jobs (for recovery).
+ */
+export function useRecentSearchJobs(limit: number = 5) {
+  return useQuery({
+    queryKey: ['recent-search-jobs', limit],
+    queryFn: () => api.getRecentSearchJobs(limit),
+    staleTime: 30 * 1000, // 30 seconds
+  });
+}
+
+/**
  * Hook for Gemini configuration status.
  * Returns config state to show warnings if Gemini is misconfigured.
  */
@@ -1264,6 +1440,22 @@ export function usePerformanceBreakdown(days: number = 7) {
   return useQuery({
     queryKey: ['performance-breakdown', days],
     queryFn: () => api.getPerformanceBreakdown(days),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useMatchingDistribution(days: number = 30) {
+  return useQuery({
+    queryKey: ['matching-distribution', days],
+    queryFn: () => api.getMatchingDistribution(days),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useGeminiUsage(days: number = 30) {
+  return useQuery({
+    queryKey: ['gemini-usage', days],
+    queryFn: () => api.getGeminiUsage(days),
     staleTime: 5 * 60 * 1000,
   });
 }

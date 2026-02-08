@@ -144,6 +144,18 @@ class PerformanceBreakdown(BaseModel):
     stages: Dict[str, StageMetric]
 
 
+class MatchingDistributionPoint(BaseModel):
+    """A single point in the matching distribution timeline."""
+    date: str
+    nlp_count: int
+    gemini_count: int
+
+
+class MatchingDistribution(BaseModel):
+    """Matching distribution timeline data."""
+    points: List[MatchingDistributionPoint]
+
+
 class ApiLatencyDetail(BaseModel):
     """Detailed latency percentiles for an API type."""
     p50: float
@@ -168,6 +180,29 @@ class RecentSearch(BaseModel):
 class RecentSearchesResponse(BaseModel):
     """Response for recent searches endpoint."""
     searches: List[RecentSearch]
+
+
+class GeminiUsageDay(BaseModel):
+    """Daily Gemini API usage breakdown."""
+    date: str  # YYYY-MM-DD
+    matching: int
+    rerank: int
+    suggestions: int
+    total: int
+
+
+class GeminiUsageTotals(BaseModel):
+    """Total Gemini usage counts."""
+    matching: int
+    rerank: int
+    suggestions: int
+    total: int
+
+
+class GeminiUsageResponse(BaseModel):
+    """Response for Gemini usage endpoint."""
+    data: List[GeminiUsageDay]
+    totals: GeminiUsageTotals
 
 
 
@@ -461,6 +496,76 @@ async def get_score_distribution(session: Session = Depends(get_db)):
 
     _set_cached("score_distribution", result)
     return result
+
+
+@router.get("/matching-distribution", response_model=MatchingDistribution)
+async def get_matching_distribution(
+    days: int = 30,
+    session: Session = Depends(get_db)
+):
+    """Get daily breakdown of matches by engine (NLP vs Gemini).
+    
+    Returns daily counts of:
+    - nlp_count: Matches using only NLP
+    - gemini_count: Matches using/enhanced by Gemini
+    """
+    cache_key = f"matching_distribution_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        # Query counts grouped by date and whether gemini_score matches
+        # We'll fetch raw counts and aggregate in Python for simplicity
+        matches = (
+            session.query(
+                func.date(MatchResult.generated_date).label('date'),
+                MatchResult.gemini_score,
+                func.count(MatchResult.id).label('count')
+            )
+            .filter(MatchResult.generated_date >= cutoff)
+            .group_by(func.date(MatchResult.generated_date), MatchResult.gemini_score)
+            .all()
+        )
+
+        # Organize by date
+        daily_stats = {}
+        
+        # Initialize all days with 0
+        current = datetime.now().date()
+        for i in range(days):
+            date_str = str(current - timedelta(days=i))
+            daily_stats[date_str] = {"nlp": 0, "gemini": 0}
+
+        for row in matches:
+            date_str = str(row.date)
+            count = row.count
+            is_gemini = row.gemini_score is not None
+            
+            if date_str in daily_stats:
+                if is_gemini:
+                    daily_stats[date_str]["gemini"] += count
+                else:
+                    daily_stats[date_str]["nlp"] += count
+
+        points = [
+            MatchingDistributionPoint(
+                date=date,
+                nlp_count=stats["nlp"],
+                gemini_count=stats["gemini"]
+            )
+            for date, stats in sorted(daily_stats.items())
+        ]
+
+        result = MatchingDistribution(points=points)
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching matching distribution: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load matching distribution")
 
 
 @router.get("/performance/summary", response_model=PerformanceSummary)
@@ -781,3 +886,100 @@ async def get_recent_searches(
     except Exception as e:
         logger.error(f"Error fetching recent searches: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load recent searches")
+
+
+@router.get("/gemini-usage", response_model=GeminiUsageResponse)
+async def get_gemini_usage(
+    days: int = 30,
+    session: Session = Depends(get_db)
+):
+    """Get daily Gemini API usage breakdown by operation type.
+
+    Returns daily counts of:
+    - matching: Jobs matched using Gemini engine
+    - rerank: Gemini re-ranking API calls
+    - suggestions: Gemini bullet suggestion API calls
+    """
+    cache_key = f"gemini_usage_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        # Initialize daily stats for all days
+        daily_stats = {}
+        current = datetime.now().date()
+        for i in range(days):
+            date_str = str(current - timedelta(days=i))
+            daily_stats[date_str] = {"matching": 0, "rerank": 0, "suggestions": 0}
+
+        # Query 1: Matching engine usage from MatchResult
+        matching_by_day = (
+            session.query(
+                func.date(MatchResult.generated_date).label('date'),
+                func.count(MatchResult.id).label('count')
+            )
+            .filter(MatchResult.match_engine == 'gemini')
+            .filter(MatchResult.generated_date >= cutoff)
+            .group_by(func.date(MatchResult.generated_date))
+            .all()
+        )
+
+        for row in matching_by_day:
+            date_str = str(row.date)
+            if date_str in daily_stats:
+                daily_stats[date_str]["matching"] = row.count
+
+        # Query 2: API Calls (rerank + suggestions) from APICallMetric
+        api_calls_by_day = (
+            session.query(
+                func.date(APICallMetric.created_at).label('date'),
+                APICallMetric.call_type,
+                func.count(APICallMetric.id).label('count')
+            )
+            .filter(APICallMetric.call_type.in_(['gemini_rerank', 'gemini_suggestions']))
+            .filter(APICallMetric.created_at >= cutoff)
+            .group_by(func.date(APICallMetric.created_at), APICallMetric.call_type)
+            .all()
+        )
+
+        for row in api_calls_by_day:
+            date_str = str(row.date)
+            if date_str in daily_stats:
+                if row.call_type == 'gemini_rerank':
+                    daily_stats[date_str]["rerank"] = row.count
+                elif row.call_type == 'gemini_suggestions':
+                    daily_stats[date_str]["suggestions"] = row.count
+
+        # Build response data (oldest first)
+        data = []
+        totals = {"matching": 0, "rerank": 0, "suggestions": 0, "total": 0}
+
+        for date_str in sorted(daily_stats.keys()):
+            stats = daily_stats[date_str]
+            day_total = stats["matching"] + stats["rerank"] + stats["suggestions"]
+            data.append(GeminiUsageDay(
+                date=date_str,
+                matching=stats["matching"],
+                rerank=stats["rerank"],
+                suggestions=stats["suggestions"],
+                total=day_total
+            ))
+            totals["matching"] += stats["matching"]
+            totals["rerank"] += stats["rerank"]
+            totals["suggestions"] += stats["suggestions"]
+            totals["total"] += day_total
+
+        result = GeminiUsageResponse(
+            data=data,
+            totals=GeminiUsageTotals(**totals)
+        )
+
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching Gemini usage: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load Gemini usage data")

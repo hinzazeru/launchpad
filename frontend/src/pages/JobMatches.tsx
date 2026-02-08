@@ -319,7 +319,7 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                     match_confidence: job.match_confidence
                                 }}
                             />
-                            {job.gemini_score !== undefined && job.gemini_score > 0 && (
+                            {job.gemini_score !== undefined && job.gemini_score > 0 && job.gemini_score <= 100 && (
                                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                                     <Sparkles className="w-3 h-3 text-violet-500" />
                                     <span className="font-mono">{Math.round(job.gemini_score)}</span>
@@ -738,7 +738,7 @@ export function JobMatches() {
 
     // Stats
     const totalJobs = data?.jobs.length || 0;
-    const highMatches = data?.jobs.filter(j => j.match_score >= 70).length || 0;
+    const highMatches = data?.jobs.filter(j => j.match_score >= 85).length || 0;
     const avgScore = totalJobs > 0
         ? Math.round(data!.jobs.reduce((sum, j) => sum + j.match_score, 0) / totalJobs)
         : 0;
