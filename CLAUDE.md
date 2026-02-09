@@ -34,7 +34,7 @@ backend/
 │   ├── analysis.py          # AI Analysis endpoints
 │   ├── analytics.py         # Performance summaries
 └── ...
-├── importers/api_importer.py # Fetches jobs from Apify LinkedIn scraper
+├── importers/apify_provider.py # Fetches jobs from Apify LinkedIn scraper
 ├── integrations/
 │   ├── sheets_connector.py  # Google Sheets export
 │   └── gemini_client.py     # Gemini AI client (google-generativeai)
