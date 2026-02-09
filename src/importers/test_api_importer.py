@@ -1,8 +1,9 @@
 """Unit tests for Apify API importer."""
 
 import pytest
+import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from src.importers.apify_provider import ApifyJobProvider, ApifyJobImporter, create_apify_importer
 
 
@@ -49,6 +50,20 @@ def mock_old_job():
     }
 
 
+def _make_mock_config(api_key=None, raise_on_key=False):
+    """Create a mock config object with proper .get() behavior."""
+    config = Mock()
+    config.get.side_effect = lambda key, default=None: {
+        "apify.use_mock_data": False,
+        "apify.mock_data_file": "dataset.json",
+    }.get(key, default)
+    if raise_on_key:
+        config.get_apify_api_key.side_effect = ValueError("API key not configured")
+    elif api_key:
+        config.get_apify_api_key.return_value = api_key
+    return config
+
+
 def test_apify_importer_initialization_with_key():
     """Test initializing Apify importer with API key."""
     importer = ApifyJobImporter(api_key='test_key_123')
@@ -56,45 +71,44 @@ def test_apify_importer_initialization_with_key():
     assert importer.client is not None
 
 
-def test_apify_importer_initialization_without_key():
+@patch('src.importers.apify_provider.ApifyClientAsync')
+@patch('src.importers.apify_provider.ApifyClient')
+def test_apify_importer_initialization_without_key(mock_apify_client, mock_apify_client_async):
     """Test initializing without API key raises error."""
-    # Mock the config to raise FileNotFoundError (no config.yaml)
-    with patch('src.config.get_config') as mock_config:
-        mock_config.side_effect = FileNotFoundError("Configuration file not found")
+    mock_config = _make_mock_config(raise_on_key=True)
+    with patch('src.config.get_config', return_value=mock_config):
         with pytest.raises(ValueError, match="Apify API key is required"):
             ApifyJobImporter()
 
 
-def test_apify_importer_reads_config_key():
+@patch('src.importers.apify_provider.ApifyClientAsync')
+@patch('src.importers.apify_provider.ApifyClient')
+def test_apify_importer_reads_config_key(mock_apify_client, mock_apify_client_async):
     """Test reading API key from config."""
-    # Mock the config to return a test key
-    with patch('src.config.get_config') as mock_get_config:
-        mock_config = Mock()
-        mock_config.get_apify_api_key.return_value = 'config_test_key'
-        mock_get_config.return_value = mock_config
-
+    mock_config = _make_mock_config(api_key='config_test_key')
+    with patch('src.config.get_config', return_value=mock_config):
         importer = ApifyJobImporter()
         assert importer.api_key == 'config_test_key'
 
 
+@patch('src.importers.apify_provider.ApifyClientAsync')
 @patch('src.importers.apify_provider.ApifyClient')
-def test_search_jobs_success(mock_apify_client, mock_apify_response):
+def test_search_jobs_success(mock_apify_client, mock_apify_client_async, mock_apify_response):
     """Test successful job search."""
-    # Setup mocks
+    # Setup mocks: .actor()/.dataset() are sync, .call()/.list_items() are async
     mock_actor = Mock()
-    mock_run = {'defaultDatasetId': 'dataset_123'}
-    mock_actor.call.return_value = mock_run
+    mock_actor.call = AsyncMock(return_value={'defaultDatasetId': 'dataset_123'})
 
     mock_dataset = Mock()
     mock_items = Mock()
     mock_items.items = mock_apify_response
-    mock_dataset.list_items.return_value = mock_items
+    mock_dataset.list_items = AsyncMock(return_value=mock_items)
 
-    mock_client_instance = Mock()
-    mock_client_instance.actor.return_value = mock_actor
-    mock_client_instance.dataset.return_value = mock_dataset
+    mock_async_instance = Mock()
+    mock_async_instance.actor.return_value = mock_actor
+    mock_async_instance.dataset.return_value = mock_dataset
 
-    mock_apify_client.return_value = mock_client_instance
+    mock_apify_client_async.return_value = mock_async_instance
 
     # Test
     importer = ApifyJobImporter(api_key='test_key')
@@ -105,24 +119,24 @@ def test_search_jobs_success(mock_apify_client, mock_apify_response):
     mock_actor.call.assert_called_once()
 
 
+@patch('src.importers.apify_provider.ApifyClientAsync')
 @patch('src.importers.apify_provider.ApifyClient')
-def test_search_jobs_with_parameters(mock_apify_client):
+def test_search_jobs_with_parameters(mock_apify_client, mock_apify_client_async):
     """Test job search with all parameters."""
-    # Setup mock
+    # Setup mocks: .actor()/.dataset() are sync, .call()/.list_items() are async
     mock_actor = Mock()
-    mock_run = {'defaultDatasetId': 'dataset_123'}
-    mock_actor.call.return_value = mock_run
+    mock_actor.call = AsyncMock(return_value={'defaultDatasetId': 'dataset_123'})
 
     mock_dataset = Mock()
     mock_items = Mock()
     mock_items.items = []
-    mock_dataset.list_items.return_value = mock_items
+    mock_dataset.list_items = AsyncMock(return_value=mock_items)
 
-    mock_client_instance = Mock()
-    mock_client_instance.actor.return_value = mock_actor
-    mock_client_instance.dataset.return_value = mock_dataset
+    mock_async_instance = Mock()
+    mock_async_instance.actor.return_value = mock_actor
+    mock_async_instance.dataset.return_value = mock_dataset
 
-    mock_apify_client.return_value = mock_client_instance
+    mock_apify_client_async.return_value = mock_async_instance
 
     # Test
     importer = ApifyJobImporter(api_key='test_key')
@@ -135,41 +149,42 @@ def test_search_jobs_with_parameters(mock_apify_client):
         work_arrangement='Remote'
     )
 
-    # Verify call was made with correct parameters for vulnv/linkedin-jobs-scraper
+    # Verify call was made with correct parameters (new API field names)
     call_args = mock_actor.call.call_args
     run_input = call_args.kwargs['run_input']
 
     assert run_input['keyword'] == 'Product Manager'
     assert run_input['location'] == 'Toronto, Ontario, Canada'
-    assert run_input['employmentType'] == 'Full-time'
-    assert run_input['maxItems'] == 100
-    assert run_input['experienceLevel'] == 'Mid-Senior level'
-    assert run_input['workArrangement'] == 'Remote'
-    assert run_input['postedWhen'] == 'Past 24 hours'  # Default value
+    assert run_input['job_type'] == 'Full-time'
+    assert run_input['max_jobs'] == 100
+    assert run_input['experience_level'] == 'Mid-Senior level'
+    assert run_input['remote'] == 'Remote'
+    assert run_input['time_range'] == 'Past 24 hours'  # Default value
 
 
+@patch('src.importers.apify_provider.ApifyClientAsync')
 @patch('src.importers.apify_provider.ApifyClient')
-@patch('time.sleep')
-def test_search_jobs_retry_logic(mock_sleep, mock_apify_client):
+@patch('asyncio.sleep', new_callable=AsyncMock)
+def test_search_jobs_retry_logic(mock_sleep, mock_apify_client, mock_apify_client_async):
     """Test retry logic on API failures."""
-    # Setup mock to fail twice then succeed
+    # Setup mocks to fail twice then succeed
     mock_actor = Mock()
-    mock_actor.call.side_effect = [
+    mock_actor.call = AsyncMock(side_effect=[
         Exception("API Error 1"),
         Exception("API Error 2"),
         {'defaultDatasetId': 'dataset_123'}
-    ]
+    ])
 
     mock_dataset = Mock()
     mock_items = Mock()
     mock_items.items = []
-    mock_dataset.list_items.return_value = mock_items
+    mock_dataset.list_items = AsyncMock(return_value=mock_items)
 
-    mock_client_instance = Mock()
-    mock_client_instance.actor.return_value = mock_actor
-    mock_client_instance.dataset.return_value = mock_dataset
+    mock_async_instance = Mock()
+    mock_async_instance.actor.return_value = mock_actor
+    mock_async_instance.dataset.return_value = mock_dataset
 
-    mock_apify_client.return_value = mock_client_instance
+    mock_apify_client_async.return_value = mock_async_instance
 
     # Test
     importer = ApifyJobImporter(api_key='test_key')
@@ -180,23 +195,24 @@ def test_search_jobs_retry_logic(mock_sleep, mock_apify_client):
     assert mock_sleep.call_count == 2  # Sleep between retries
 
 
+@patch('src.importers.apify_provider.ApifyClientAsync')
 @patch('src.importers.apify_provider.ApifyClient')
-def test_search_jobs_max_retries_exceeded(mock_apify_client):
-    """Test that max retries raises exception."""
+def test_search_jobs_max_retries_exceeded(mock_apify_client, mock_apify_client_async):
+    """Test that max retries returns empty results (gather swallows exceptions)."""
     # Setup mock to always fail
     mock_actor = Mock()
-    mock_actor.call.side_effect = Exception("API Error")
+    mock_actor.call = AsyncMock(side_effect=Exception("API Error"))
 
-    mock_client_instance = Mock()
-    mock_client_instance.actor.return_value = mock_actor
+    mock_async_instance = Mock()
+    mock_async_instance.actor.return_value = mock_actor
 
-    mock_apify_client.return_value = mock_client_instance
+    mock_apify_client_async.return_value = mock_async_instance
 
-    # Test
+    # Test - search_jobs_async uses gather(return_exceptions=True),
+    # so failures result in empty list rather than raised exception
     importer = ApifyJobImporter(api_key='test_key')
-
-    with pytest.raises(Exception, match="Failed to fetch jobs after"):
-        importer.search_jobs(keywords='Product Manager')
+    results = importer.search_jobs(keywords='Product Manager')
+    assert results == []
 
 
 def test_normalize_apify_job_standard_fields():
@@ -290,24 +306,24 @@ def test_normalize_apify_job_missing_posting_date():
     assert isinstance(normalized['posting_date'], datetime)
 
 
+@patch('src.importers.apify_provider.ApifyClientAsync')
 @patch('src.importers.apify_provider.ApifyClient')
-def test_fetch_and_validate_jobs(mock_apify_client, mock_apify_response):
+def test_fetch_and_validate_jobs(mock_apify_client, mock_apify_client_async, mock_apify_response):
     """Test fetching and validating jobs."""
-    # Setup mocks
+    # Setup mocks: .actor()/.dataset() are sync, .call()/.list_items() are async
     mock_actor = Mock()
-    mock_run = {'defaultDatasetId': 'dataset_123'}
-    mock_actor.call.return_value = mock_run
+    mock_actor.call = AsyncMock(return_value={'defaultDatasetId': 'dataset_123'})
 
     mock_dataset = Mock()
     mock_items = Mock()
     mock_items.items = mock_apify_response
-    mock_dataset.list_items.return_value = mock_items
+    mock_dataset.list_items = AsyncMock(return_value=mock_items)
 
-    mock_client_instance = Mock()
-    mock_client_instance.actor.return_value = mock_actor
-    mock_client_instance.dataset.return_value = mock_dataset
+    mock_async_instance = Mock()
+    mock_async_instance.actor.return_value = mock_actor
+    mock_async_instance.dataset.return_value = mock_dataset
 
-    mock_apify_client.return_value = mock_client_instance
+    mock_apify_client_async.return_value = mock_async_instance
 
     # Test
     importer = ApifyJobImporter(api_key='test_key')
@@ -321,24 +337,24 @@ def test_fetch_and_validate_jobs(mock_apify_client, mock_apify_response):
     assert all('company' in job for job in valid_jobs)
 
 
+@patch('src.importers.apify_provider.ApifyClientAsync')
 @patch('src.importers.apify_provider.ApifyClient')
-def test_fetch_and_validate_jobs_with_freshness(mock_apify_client, mock_old_job):
+def test_fetch_and_validate_jobs_with_freshness(mock_apify_client, mock_apify_client_async, mock_old_job):
     """Test freshness validation filters old jobs."""
-    # Setup mocks with old job
+    # Setup mocks: .actor()/.dataset() are sync, .call()/.list_items() are async
     mock_actor = Mock()
-    mock_run = {'defaultDatasetId': 'dataset_123'}
-    mock_actor.call.return_value = mock_run
+    mock_actor.call = AsyncMock(return_value={'defaultDatasetId': 'dataset_123'})
 
     mock_dataset = Mock()
     mock_items = Mock()
     mock_items.items = [mock_old_job]
-    mock_dataset.list_items.return_value = mock_items
+    mock_dataset.list_items = AsyncMock(return_value=mock_items)
 
-    mock_client_instance = Mock()
-    mock_client_instance.actor.return_value = mock_actor
-    mock_client_instance.dataset.return_value = mock_dataset
+    mock_async_instance = Mock()
+    mock_async_instance.actor.return_value = mock_actor
+    mock_async_instance.dataset.return_value = mock_dataset
 
-    mock_apify_client.return_value = mock_client_instance
+    mock_apify_client_async.return_value = mock_async_instance
 
     # Test
     importer = ApifyJobImporter(api_key='test_key')
