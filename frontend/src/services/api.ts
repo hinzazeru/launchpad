@@ -1082,6 +1082,13 @@ class ApiClient {
   }
 
   /**
+   * Request cancellation of a running search job.
+   */
+  async cancelSearchJob(searchId: string): Promise<void> {
+    await this.fetch(`/search/jobs/${searchId}/cancel`, { method: 'POST' });
+  }
+
+  /**
    * Poll for search job completion with automatic retry.
    * This is the main method to use for resilient search execution.
    *
@@ -1111,6 +1118,9 @@ class ApiClient {
       }
 
       if (progress.status === 'failed') {
+        if (progress.stage === 'cancelled') {
+          throw new Error('Search cancelled');
+        }
         throw new Error(progress.error || 'Search failed');
       }
 

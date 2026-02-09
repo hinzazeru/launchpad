@@ -1,8 +1,8 @@
 """CRUD operations for database models."""
 
 from datetime import datetime
-from typing import List, Optional
-from sqlalchemy import func
+from typing import List, Optional, Set, Tuple
+from sqlalchemy import func, or_, and_, tuple_
 from sqlalchemy.orm import Session, joinedload
 from src.database.models import Resume, JobPosting, MatchResult, ApplicationTracking
 
@@ -225,6 +225,40 @@ def get_job_by_title_company(
         func.lower(func.trim(JobPosting.title)) == normalized_title,
         func.lower(func.trim(JobPosting.company)) == normalized_company
     ).first()
+
+
+def get_existing_job_keys(
+    db: Session, pairs: List[Tuple[str, str]], batch_size: int = 100
+) -> Set[Tuple[str, str]]:
+    """Check which (title, company) pairs already exist in the database.
+
+    Performs a bulk query instead of N individual lookups.
+    Chunks into batches to stay within SQLite OR-clause limits.
+
+    Args:
+        db: Database session
+        pairs: List of (title, company) tuples (already normalized/lowered)
+        batch_size: Max pairs per query batch
+
+    Returns:
+        Set of (normalized_title, normalized_company) tuples that exist
+    """
+    existing = set()
+    for i in range(0, len(pairs), batch_size):
+        batch = pairs[i:i + batch_size]
+        conditions = [
+            and_(
+                func.lower(func.trim(JobPosting.title)) == title,
+                func.lower(func.trim(JobPosting.company)) == company,
+            )
+            for title, company in batch
+        ]
+        rows = db.query(
+            func.lower(func.trim(JobPosting.title)),
+            func.lower(func.trim(JobPosting.company)),
+        ).filter(or_(*conditions)).all()
+        existing.update((r[0], r[1]) for r in rows)
+    return existing
 
 
 def delete_job_posting(db: Session, job_id: int) -> bool:

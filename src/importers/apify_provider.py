@@ -455,7 +455,7 @@ class ApifyJobProvider(JobProvider):
         """
         from src.database.db import SessionLocal
         from src.database.models import JobPosting
-        from src.database.crud import get_job_by_title_company
+        from src.database.crud import get_existing_job_keys
         from src.importers.validators import normalize_job_data, validate_job_posting
 
         # Try to initialize Gemini for domain extraction and requirements extraction
@@ -481,43 +481,41 @@ class ApifyJobProvider(JobProvider):
         seen_in_batch = set()
 
         try:
+            # Phase 1: Normalize all jobs and collect dedup keys
+            normalized_jobs = []
             for job in jobs:
-                # Normalize the job data
                 normalized_job = self.normalize_job(job)
                 normalized_job = normalize_job_data(normalized_job)
 
-                # Create deduplication key (normalized title + company)
                 dedup_key = (
                     normalized_job['title'].strip().lower(),
                     normalized_job['company'].strip().lower()
                 )
 
-                # Check if already added in this batch (prevents race condition with parallel chunks)
                 if dedup_key in seen_in_batch:
                     continue
 
-                # Validate basic data structure only (no freshness check)
-                # All jobs from Apify are saved - freshness filtering happens during matching
                 is_valid, error = validate_job_posting(normalized_job, check_freshness=False)
-
                 if not is_valid:
                     logger.debug(f"Skipping invalid job: {error}")
                     continue
 
-                # Check if job already exists (by normalized title + company)
-                existing = get_job_by_title_company(
-                    session,
-                    normalized_job['title'],
-                    normalized_job['company']
-                )
-
-                if existing:
-                    continue  # Skip duplicates only
-
-                # Mark as seen in this batch
                 seen_in_batch.add(dedup_key)
+                normalized_jobs.append((normalized_job, dedup_key))
 
-                # Create new job posting (with keyword domains as fallback)
+            # Phase 2: Bulk check for existing jobs (1 query instead of N)
+            if normalized_jobs:
+                all_keys = [dk for _, dk in normalized_jobs]
+                existing_keys = get_existing_job_keys(session, all_keys)
+                logger.debug(f"Bulk duplicate check: {len(all_keys)} candidates, {len(existing_keys)} already exist")
+            else:
+                existing_keys = set()
+
+            # Phase 3: Create job objects for new entries only
+            for normalized_job, dedup_key in normalized_jobs:
+                if dedup_key in existing_keys:
+                    continue
+
                 job_posting = JobPosting(
                     title=normalized_job['title'],
                     company=normalized_job['company'],
@@ -533,11 +531,12 @@ class ApifyJobProvider(JobProvider):
                     domain_extraction_method='keyword' if normalized_job.get('required_domains') else None,
                 )
 
-                session.add(job_posting)
                 new_job_postings.append(job_posting)
                 imported_count += 1
 
-            # Commit to get job IDs
+            # Bulk add and commit
+            if new_job_postings:
+                session.add_all(new_job_postings)
             session.commit()
 
             # Run Gemini extraction on newly imported jobs (domains + summaries)

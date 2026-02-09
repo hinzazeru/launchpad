@@ -24,6 +24,7 @@ from src.database.models import Resume, JobPosting, MatchResult, ScheduledSearch
 from src.importers.provider_factory import get_job_provider
 from src.matching.engine import JobMatcher
 from src.integrations.gemini_client import get_gemini_reranker
+from backend.services.matcher_service import get_job_matcher
 from src.resume.parser import ResumeParser
 
 logger = logging.getLogger(__name__)
@@ -630,7 +631,7 @@ async def search_jobs(request: JobSearchRequest):
                 ))
 
                 # Run matching (auto mode uses Gemini AI if available)
-                matcher = JobMatcher(mode="auto")
+                matcher = get_job_matcher()
                 matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
 
                 yield send_progress(SearchProgress(
@@ -1162,6 +1163,48 @@ async def list_recent_search_jobs(limit: int = 10, db: Session = Depends(get_db)
     )
 
 
+@router.post("/jobs/{search_id}/cancel")
+async def cancel_search_job(search_id: str, db: Session = Depends(get_db)):
+    """Request cancellation of a running search job.
+
+    The pipeline checks for cancellation between stages and will stop
+    at the next checkpoint, saving partial results.
+    """
+    search_job = db.query(SearchJob).filter(SearchJob.search_id == search_id).first()
+
+    if not search_job:
+        raise HTTPException(status_code=404, detail="Search job not found")
+
+    if search_job.status in ('completed', 'failed'):
+        raise HTTPException(status_code=400, detail=f"Search already {search_job.status}")
+
+    search_job.cancellation_requested = True
+    db.commit()
+
+    logger.info(f"Cancellation requested for search job {search_id}")
+    return {"search_id": search_id, "message": "Cancellation requested"}
+
+
+class SearchCancelledException(Exception):
+    """Raised when a search job is cancelled by the user."""
+    pass
+
+
+def _check_cancelled(db, search_job):
+    """Check if cancellation has been requested and handle it.
+
+    Refreshes the SearchJob from DB to pick up the cancellation flag
+    set by the cancel endpoint (running in a different request context).
+    """
+    db.refresh(search_job)
+    if search_job.cancellation_requested:
+        search_job.status = 'failed'
+        search_job.error = 'Search cancelled by user'
+        search_job.stage = 'cancelled'
+        db.commit()
+        raise SearchCancelledException()
+
+
 def execute_search_job(search_id: str):
     """Execute the search pipeline in background.
 
@@ -1290,6 +1333,9 @@ async def _execute_search_job_async(search_id: str):
             db.commit()
             return
 
+        # Cancellation checkpoint: after resume loading
+        _check_cancelled(db, search_job)
+
         # ================================================================
         # STAGE 2: Fetch jobs from Apify (10-40%)
         # ================================================================
@@ -1346,6 +1392,9 @@ async def _execute_search_job_async(search_id: str):
         jobs_fetched = len(jobs) if jobs else 0
         update_progress('fetching', 40, f"Found {jobs_fetched} jobs", jobs_found=jobs_fetched)
 
+        # Cancellation checkpoint: after fetching
+        _check_cancelled(db, search_job)
+
         if not jobs:
             search_job.status = 'completed'
             search_job.result = SearchResult(
@@ -1370,6 +1419,9 @@ async def _execute_search_job_async(search_id: str):
 
         update_progress('importing', 50, f"Imported {jobs_imported} new jobs",
                        jobs_found=jobs_fetched, jobs_imported=jobs_imported)
+
+        # Cancellation checkpoint: after importing
+        _check_cancelled(db, search_job)
 
         # ================================================================
         # STAGE 4: Match jobs (50-80%)
@@ -1425,11 +1477,14 @@ async def _execute_search_job_async(search_id: str):
                                jobs_found=jobs_fetched, jobs_imported=jobs_imported)
 
                 # Run matching
-                matcher = JobMatcher(mode="auto")
+                matcher = get_job_matcher()
                 matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
 
                 update_progress('matching', 65, f"Found {len(matches)} matches, running AI analysis...",
                                jobs_found=jobs_fetched, jobs_imported=jobs_imported, matches_found=len(matches))
+
+                # Cancellation checkpoint: before expensive Gemini re-ranking
+                _check_cancelled(db, search_job)
 
                 # Gemini re-ranking
                 gemini_reranker = get_gemini_reranker()
@@ -1601,6 +1656,8 @@ async def _execute_search_job_async(search_id: str):
 
         logger.info(f"Search job {search_id} completed: {high_matches} high matches in {duration:.1f}s")
 
+    except SearchCancelledException:
+        logger.info(f"Search job {search_id} was cancelled by user")
     except Exception as e:
         logger.error(f"Search job {search_id} failed: {e}", exc_info=True)
         try:

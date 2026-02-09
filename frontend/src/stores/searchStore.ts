@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { api } from '@/services/api';
 import type { SearchProgress, SearchResult, JobSearchParams, SearchJobProgress } from '@/services/api';
 
 interface SearchState {
@@ -24,6 +25,7 @@ interface SearchState {
   setError: (error: string) => void;
   reset: () => void;
   clearActiveSearch: () => void;
+  cancelSearch: () => Promise<void>;
 
   // AbortController (stored outside React lifecycle)
   abortController: AbortController | null;
@@ -100,6 +102,28 @@ export const useSearchStore = create<SearchState>()(
         isSearching: false,
         progress: null,
       }),
+
+      cancelSearch: async () => {
+        const state = useSearchStore.getState();
+        // Send cancel request to backend
+        if (state.activeSearchId) {
+          try {
+            await api.cancelSearchJob(state.activeSearchId);
+          } catch {
+            // Best effort - backend may already be done
+          }
+        }
+        // Abort polling
+        if (state.abortController) {
+          state.abortController.abort();
+        }
+        set({
+          isSearching: false,
+          activeSearchId: null,
+          abortController: null,
+          error: 'Search cancelled by user',
+        });
+      },
 
       abortController: null,
       setAbortController: (controller) => set({ abortController: controller }),

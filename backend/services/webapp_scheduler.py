@@ -266,7 +266,7 @@ class WebAppScheduler:
         from src.config import get_config
         from src.database.models import Resume, JobPosting, MatchResult
         from src.importers.provider_factory import get_job_provider
-        from src.matching.engine import JobMatcher
+        from backend.services.matcher_service import get_job_matcher
         from src.integrations.gemini_client import get_gemini_reranker
         from src.resume.parser import ResumeParser
         from src.services.performance_logger import PerformanceLogger
@@ -434,7 +434,7 @@ class WebAppScheduler:
                 all_jobs = list(seen_jobs.values())
                 
                 # Run matching
-                matcher = JobMatcher()
+                matcher = get_job_matcher()
                 matches = matcher.match_jobs(resume, all_jobs, min_score=0.0)
                 
                 # Gemini re-ranking

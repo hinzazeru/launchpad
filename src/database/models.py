@@ -319,6 +319,9 @@ class SearchJob(Base):
     trigger_source = Column(String(20), default='manual')  # 'manual' or 'scheduled'
     schedule_id = Column(Integer, ForeignKey("scheduled_searches.id"), nullable=True)
 
+    # Cancellation
+    cancellation_requested = Column(Boolean, default=False)
+
     # Cleanup tracking
     expires_at = Column(DateTime, nullable=True)  # For auto-cleanup after 24 hours
 

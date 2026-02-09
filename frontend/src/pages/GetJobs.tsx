@@ -361,6 +361,7 @@ export function GetJobs() {
     setResult,
     setError,
     reset: resetSearch,
+    cancelSearch,
     abortController,
     setAbortController,
   } = useSearchStore();
@@ -782,7 +783,20 @@ export function GetJobs() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                          <Progress value={progress?.progress || 0} className="h-2" />
+                          <div className="flex items-center gap-4">
+                            <Progress value={progress?.progress || 0} className="h-2 flex-1" />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                await cancelSearch();
+                                toast.info('Search Cancelled', 'The search has been stopped');
+                              }}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Cancel
+                            </Button>
+                          </div>
                           <ProgressStepper currentStage={progress?.stage || 'initializing'} progress={progress} />
 
                           {/* Live Stats */}
