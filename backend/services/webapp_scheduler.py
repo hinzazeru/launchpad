@@ -348,13 +348,16 @@ class WebAppScheduler:
                             experience_years += float(num_match.group(1))
                 
                 class ParsedResume:
-                    def __init__(self, skills, experience_years, domains=None):
+                    def __init__(self, skills, experience_years, domains=None, job_titles=None):
                         self.id = 0
                         self.skills = skills
                         self.experience_years = experience_years
                         self.domains = domains or []
-                
-                resume = ParsedResume(flat_skills, experience_years, [])
+                        self.job_titles = job_titles or []
+
+                # Extract job titles from parsed roles
+                job_titles = [role.title for role in parsed.roles if role.title]
+                resume = ParsedResume(flat_skills, experience_years, [], job_titles)
                 logger.info(f"Parsed resume: {len(flat_skills)} skills, {experience_years} years")
             
             # ====================================================================
@@ -459,7 +462,7 @@ class WebAppScheduler:
                 
                 # Run matching
                 matcher = get_job_matcher()
-                matches = matcher.match_jobs(resume, all_jobs, min_score=0.0)
+                matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
                 
                 # Gemini re-ranking
                 gemini_reranker = get_gemini_reranker()
