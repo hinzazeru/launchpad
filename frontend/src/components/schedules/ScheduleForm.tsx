@@ -90,6 +90,8 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
     const [maxResults, setMaxResults] = useState(schedule?.max_results || 25);
     const [selectedResume, setSelectedResume] = useState(schedule?.resume_filename || '');
     const [exportToSheets, setExportToSheets] = useState(schedule?.export_to_sheets ?? true);
+    const [maxRetries, setMaxRetries] = useState(schedule?.max_retries ?? 2);
+    const [retryDelayMinutes, setRetryDelayMinutes] = useState(schedule?.retry_delay_minutes ?? 10);
     const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
     const [timezone, setTimezone] = useState(schedule?.timezone || 'America/Toronto');
     const [runTimes, setRunTimes] = useState<string[]>(
@@ -153,6 +155,8 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
                     max_results: maxResults,
                     resume_filename: selectedResume,
                     export_to_sheets: exportToSheets,
+                    max_retries: maxRetries,
+                    retry_delay_minutes: retryDelayMinutes,
                     enabled,
                     timezone,
                     run_times: runTimes,
@@ -170,6 +174,8 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
                     max_results: maxResults,
                     resume_filename: selectedResume,
                     export_to_sheets: exportToSheets,
+                    max_retries: maxRetries,
+                    retry_delay_minutes: retryDelayMinutes,
                     enabled,
                     timezone,
                     run_times: runTimes,
@@ -423,6 +429,38 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
                         <label htmlFor="exportToSheets" className="text-sm">
                             Export results to Google Sheets
                         </label>
+                    </div>
+
+                    {/* Retry Settings */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Retry on Failure</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Max retries (0-5)</label>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    max={5}
+                                    value={maxRetries}
+                                    onChange={(e) => setMaxRetries(Math.min(5, Math.max(0, parseInt(e.target.value) || 0)))}
+                                    disabled={isSaving}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Delay (5-60 min)</label>
+                                <Input
+                                    type="number"
+                                    min={5}
+                                    max={60}
+                                    value={retryDelayMinutes}
+                                    onChange={(e) => setRetryDelayMinutes(Math.min(60, Math.max(5, parseInt(e.target.value) || 10)))}
+                                    disabled={isSaving || maxRetries === 0}
+                                />
+                            </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {maxRetries === 0 ? 'Retries disabled' : `Up to ${maxRetries} retries, ${retryDelayMinutes} min apart`}
+                        </p>
                     </div>
 
                     {/* Enabled */}

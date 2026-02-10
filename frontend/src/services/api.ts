@@ -578,6 +578,8 @@ export interface ScheduledSearch {
   max_results: number;
   resume_filename: string;
   export_to_sheets: boolean;
+  max_retries: number;
+  retry_delay_minutes: number;
   enabled: boolean;
   run_times: string[];
   timezone: string;
@@ -598,6 +600,8 @@ export interface ScheduleCreateParams {
   max_results?: number;
   resume_filename: string;
   export_to_sheets?: boolean;
+  max_retries?: number;
+  retry_delay_minutes?: number;
   enabled?: boolean;
   run_times?: string[];
   timezone?: string;
@@ -613,6 +617,8 @@ export interface ScheduleUpdateParams {
   max_results?: number;
   resume_filename?: string;
   export_to_sheets?: boolean;
+  max_retries?: number;
+  retry_delay_minutes?: number;
   enabled?: boolean;
   run_times?: string[];
   timezone?: string;
@@ -643,6 +649,22 @@ export interface ScheduleRunNowResponse {
   name: string;
   message: string;
   search_id: string;
+}
+
+export interface ScheduleRunHistory {
+  search_id: string;
+  created_at: string;
+  status: string;
+  total_duration_ms: number | null;
+  jobs_fetched: number;
+  jobs_matched: number;
+  high_matches: number;
+  error_message: string | null;
+}
+
+export interface ScheduleHistoryResponse {
+  runs: ScheduleRunHistory[];
+  total: number;
 }
 
 // API client class
@@ -980,6 +1002,10 @@ class ApiClient {
 
   async getSchedulerStatus(): Promise<SchedulerStatus> {
     return this.fetch<SchedulerStatus>('/scheduler/status');
+  }
+
+  async getScheduleHistory(id: number, limit: number = 10): Promise<ScheduleHistoryResponse> {
+    return this.fetch<ScheduleHistoryResponse>(`/scheduler/schedules/${id}/history?limit=${limit}`);
   }
 
   /**
@@ -1597,5 +1623,14 @@ export function useSchedulerStatus() {
     queryFn: () => api.getSchedulerStatus(),
     refetchInterval: 60 * 1000, // Refetch every minute to keep next_run_at updated
     staleTime: 30 * 1000,
+  });
+}
+
+export function useScheduleHistory(scheduleId: number | null, limit: number = 5) {
+  return useQuery({
+    queryKey: ['schedule-history', scheduleId, limit],
+    queryFn: () => (scheduleId ? api.getScheduleHistory(scheduleId, limit) : Promise.resolve(null)),
+    enabled: scheduleId !== null,
+    staleTime: 60 * 1000, // 60 seconds
   });
 }

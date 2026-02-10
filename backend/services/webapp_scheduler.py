@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from sqlalchemy.orm import Session
 
 from src.database.db import SessionLocal
@@ -226,7 +227,7 @@ class WebAppScheduler:
             logger.error(f"Scheduled search {schedule_id} failed: {e}", exc_info=True)
             result['error'] = str(e)
             
-            # Update status to error
+            # Update status to error and schedule retry if applicable
             try:
                 schedule = db.query(ScheduledSearch).filter(
                     ScheduledSearch.id == schedule_id
@@ -234,6 +235,29 @@ class WebAppScheduler:
                 if schedule:
                     schedule.last_run_status = 'error'
                     db.commit()
+
+                    # Check if retry is warranted
+                    max_retries = schedule.max_retries or 0
+                    if max_retries > 0:
+                        import time as time_module
+                        recent_failures = db.query(SearchPerformance).filter(
+                            SearchPerformance.schedule_id == schedule_id,
+                            SearchPerformance.status == 'error',
+                            SearchPerformance.created_at >= datetime.now(timezone.utc) - timedelta(hours=1)
+                        ).count()
+
+                        if recent_failures < max_retries:
+                            tz = ZoneInfo(schedule.timezone or 'America/Toronto')
+                            retry_delay = schedule.retry_delay_minutes or 10
+                            retry_time = datetime.now(tz) + timedelta(minutes=retry_delay)
+                            self._scheduler.add_job(
+                                func=self.execute_scheduled_search,
+                                trigger=DateTrigger(run_date=retry_time),
+                                id=f"retry_{schedule_id}_{int(time_module.time())}",
+                                args=[schedule_id],
+                                name=f"Retry: {schedule.name} (attempt {recent_failures + 1})"
+                            )
+                            logger.info(f"Scheduled retry for '{schedule.name}' at {retry_time} (attempt {recent_failures + 1}/{max_retries})")
             except Exception:
                 db.rollback()
         finally:

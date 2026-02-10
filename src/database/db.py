@@ -1,7 +1,7 @@
 """Database connection and initialization module."""
 
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 
@@ -26,10 +26,36 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
-    """Initialize database tables."""
+    """Initialize database tables and run lightweight migrations."""
     from src.database.models import Resume, JobPosting, MatchResult, ApplicationTracking
 
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight column migrations for SQLite (ALTER TABLE ADD COLUMN is safe to retry)
+    if "sqlite" in DATABASE_URL:
+        _migrate_sqlite()
+
+
+def _migrate_sqlite():
+    """Add missing columns to existing SQLite tables.
+
+    SQLAlchemy's create_all() only creates new tables, not new columns.
+    Each migration is idempotent — ALTER TABLE ADD COLUMN fails silently
+    if the column already exists.
+    """
+    migrations = [
+        "ALTER TABLE search_jobs ADD COLUMN cancellation_requested BOOLEAN DEFAULT 0",
+        "ALTER TABLE scheduled_searches ADD COLUMN max_retries INTEGER DEFAULT 2",
+        "ALTER TABLE scheduled_searches ADD COLUMN retry_delay_minutes INTEGER DEFAULT 10",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                # Column already exists — safe to ignore
+                pass
 
 
 def get_db():

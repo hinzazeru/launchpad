@@ -190,6 +190,8 @@ class ScheduledSearch(Base):
     last_run_at = Column(DateTime, nullable=True)
     next_run_at = Column(DateTime, nullable=True)
     last_run_status = Column(String(20), nullable=True)  # 'success' | 'error'
+    max_retries = Column(Integer, default=2)
+    retry_delay_minutes = Column(Integer, default=10)
 
     # Relationships
     search_runs = relationship("SearchPerformance", back_populates="scheduled_search")

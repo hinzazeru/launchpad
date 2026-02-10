@@ -11,6 +11,7 @@ import {
     useDeleteSchedule,
     useRunScheduleNow,
     useSchedulerStatus,
+    useScheduleHistory,
 } from '@/services/api';
 import type { ScheduledSearch } from '@/services/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -30,6 +31,9 @@ import {
     XCircle,
     AlertCircle,
     Edit,
+    History,
+    ChevronDown,
+    ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +51,7 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
     const runNowMutation = useRunScheduleNow();
 
     const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
 
     const schedules = schedulesData?.schedules || [];
 
@@ -144,6 +149,26 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
         }
     };
 
+    const formatDuration = (ms: number | null) => {
+        if (ms === null) return '-';
+        if (ms < 1000) return `${ms}ms`;
+        const seconds = ms / 1000;
+        if (seconds < 60) return `${seconds.toFixed(1)}s`;
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.round(seconds % 60);
+        return `${minutes}m ${remainingSeconds}s`;
+    };
+
+    const formatHistoryTime = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center p-12">
@@ -215,7 +240,7 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
                                     "transition-colors",
                                     !schedule.enabled && "opacity-60 bg-muted/30"
                                 )}>
-                                    <CardContent className="p-4">
+                                    <CardContent className="p-4 space-y-0">
                                         <div className="flex items-start justify-between gap-4">
                                             {/* Left: Schedule Info */}
                                             <div className="flex-1 min-w-0">
@@ -258,7 +283,25 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
 
                                             {/* Right: Status & Actions */}
                                             <div className="flex flex-col items-end gap-2 shrink-0">
-                                                {getStatusBadge(schedule.last_run_status)}
+                                                <div className="flex items-center gap-2">
+                                                    {getStatusBadge(schedule.last_run_status)}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setExpandedHistoryId(
+                                                            expandedHistoryId === schedule.id ? null : schedule.id
+                                                        )}
+                                                        className="h-7 px-2 text-xs"
+                                                    >
+                                                        <History className="h-3 w-3 mr-1" />
+                                                        History
+                                                        {expandedHistoryId === schedule.id ? (
+                                                            <ChevronUp className="h-3 w-3 ml-1" />
+                                                        ) : (
+                                                            <ChevronDown className="h-3 w-3 ml-1" />
+                                                        )}
+                                                    </Button>
+                                                </div>
 
                                                 <div className="flex items-center gap-1">
                                                     <Button
@@ -317,12 +360,99 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* Expandable History Panel */}
+                                        {expandedHistoryId === schedule.id && (
+                                            <ScheduleHistoryPanel scheduleId={schedule.id} formatDuration={formatDuration} formatHistoryTime={formatHistoryTime} />
+                                        )}
                                     </CardContent>
                                 </Card>
                             </motion.div>
                         ))}
                     </AnimatePresence>
                 </div>
+            )}
+        </div>
+    );
+}
+
+function ScheduleHistoryPanel({
+    scheduleId,
+    formatDuration,
+    formatHistoryTime,
+}: {
+    scheduleId: number;
+    formatDuration: (ms: number | null) => string;
+    formatHistoryTime: (dateStr: string) => string;
+}) {
+    const { data, isLoading } = useScheduleHistory(scheduleId, 5);
+
+    if (isLoading) {
+        return (
+            <div className="mt-3 pt-3 border-t flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading history...</span>
+            </div>
+        );
+    }
+
+    const runs = data?.runs || [];
+
+    if (runs.length === 0) {
+        return (
+            <div className="mt-3 pt-3 border-t">
+                <p className="text-sm text-muted-foreground text-center py-2">No run history yet</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-3 pt-3 border-t">
+            <table className="w-full text-xs">
+                <thead>
+                    <tr className="text-muted-foreground border-b">
+                        <th className="text-left py-1 font-medium">Time</th>
+                        <th className="text-right py-1 font-medium">Duration</th>
+                        <th className="text-right py-1 font-medium">Jobs</th>
+                        <th className="text-right py-1 font-medium">Matches</th>
+                        <th className="text-right py-1 font-medium">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {runs.map((run) => (
+                        <tr key={run.search_id} className="border-b last:border-0">
+                            <td className="py-1.5">{formatHistoryTime(run.created_at)}</td>
+                            <td className="text-right py-1.5">{formatDuration(run.total_duration_ms)}</td>
+                            <td className="text-right py-1.5">{run.jobs_fetched}</td>
+                            <td className="text-right py-1.5">
+                                {run.jobs_matched}
+                                {run.high_matches > 0 && (
+                                    <span className="text-green-600 ml-1">({run.high_matches} high)</span>
+                                )}
+                            </td>
+                            <td className="text-right py-1.5">
+                                {run.status === 'success' ? (
+                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] px-1.5 py-0">
+                                        OK
+                                    </Badge>
+                                ) : (
+                                    <Badge
+                                        variant="outline"
+                                        className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"
+                                        title={run.error_message || undefined}
+                                    >
+                                        Error
+                                    </Badge>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            {data && data.total > 5 && (
+                <p className="text-xs text-muted-foreground text-center mt-1">
+                    Showing 5 of {data.total} runs
+                </p>
             )}
         </div>
     );

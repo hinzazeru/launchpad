@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from src.database.db import SessionLocal, get_db
-from src.database.models import ScheduledSearch
+from src.database.models import ScheduledSearch, SearchPerformance
 
 # Resume library path for validation
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -26,6 +26,8 @@ from backend.schemas.scheduler import (
     SchedulerStatus,
     ScheduleToggleResponse,
     ScheduleRunNowResponse,
+    ScheduleRunHistory,
+    ScheduleHistoryResponse,
 )
 from backend.services.webapp_scheduler import get_scheduler
 
@@ -77,6 +79,8 @@ async def create_schedule(schedule: ScheduleCreate, db: Session = Depends(get_db
             enabled=schedule.enabled,
             run_times=schedule.run_times,
             timezone=schedule.timezone,
+            max_retries=schedule.max_retries,
+            retry_delay_minutes=schedule.retry_delay_minutes,
         )
 
         db.add(db_schedule)
@@ -278,6 +282,51 @@ async def run_schedule_now(schedule_id: int, background_tasks: BackgroundTasks, 
         name=schedule.name,
         message="Search started in background",
         search_id=search_id
+    )
+
+
+# ============================================================================
+# Schedule History
+# ============================================================================
+
+@router.get("/schedules/{schedule_id}/history", response_model=ScheduleHistoryResponse)
+async def get_schedule_history(
+    schedule_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    """Get run history for a specific schedule."""
+    # Verify schedule exists
+    schedule = db.query(ScheduledSearch).filter(
+        ScheduledSearch.id == schedule_id
+    ).first()
+
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    # Query SearchPerformance for this schedule
+    query = db.query(SearchPerformance).filter(
+        SearchPerformance.schedule_id == schedule_id
+    ).order_by(SearchPerformance.created_at.desc())
+
+    total = query.count()
+    runs = query.limit(limit).all()
+
+    return ScheduleHistoryResponse(
+        runs=[
+            ScheduleRunHistory(
+                search_id=run.search_id,
+                created_at=run.created_at,
+                status=run.status or 'unknown',
+                total_duration_ms=run.total_duration_ms,
+                jobs_fetched=run.jobs_fetched or 0,
+                jobs_matched=run.jobs_matched or 0,
+                high_matches=run.high_matches or 0,
+                error_message=run.error_message,
+            )
+            for run in runs
+        ],
+        total=total
     )
 
 

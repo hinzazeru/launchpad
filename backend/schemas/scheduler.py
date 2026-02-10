@@ -22,6 +22,8 @@ class ScheduleBase(BaseModel):
     max_results: int = Field(default=25, ge=1, le=100, description="Maximum jobs to fetch")
     resume_filename: str = Field(..., description="Resume filename from library")
     export_to_sheets: bool = Field(default=True, description="Export results to Google Sheets")
+    max_retries: int = Field(default=2, ge=0, le=5, description="Max retries on failure")
+    retry_delay_minutes: int = Field(default=10, ge=5, le=60, description="Retry delay in minutes")
     enabled: bool = Field(default=True, description="Whether schedule is active")
     run_times: List[str] = Field(
         default=["08:00", "12:00", "16:00", "20:00"],
@@ -73,6 +75,8 @@ class ScheduleUpdate(BaseModel):
     max_results: Optional[int] = Field(default=None, ge=1, le=100)
     resume_filename: Optional[str] = None
     export_to_sheets: Optional[bool] = None
+    max_retries: Optional[int] = Field(default=None, ge=0, le=5)
+    retry_delay_minutes: Optional[int] = Field(default=None, ge=5, le=60)
     enabled: Optional[bool] = None
     run_times: Optional[List[str]] = None
     timezone: Optional[str] = None
@@ -148,3 +152,24 @@ class ScheduleRunNowResponse(BaseModel):
     name: str
     message: str
     search_id: str  # UUID of the triggered search for tracking
+
+
+class ScheduleRunHistory(BaseModel):
+    """Response schema for a single schedule run history entry."""
+    search_id: str
+    created_at: datetime
+    status: str
+    total_duration_ms: Optional[int] = None
+    jobs_fetched: int = 0
+    jobs_matched: int = 0
+    high_matches: int = 0
+    error_message: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ScheduleHistoryResponse(BaseModel):
+    """Response schema for schedule run history."""
+    runs: List[ScheduleRunHistory]
+    total: int
