@@ -38,7 +38,11 @@ backend/
 ├── integrations/
 │   ├── sheets_connector.py  # Google Sheets export
 │   └── gemini_client.py     # Gemini AI client (google-generativeai)
-└── config.py                # YAML config loader
+└── config.py                # YAML + env var config loader (ENV_OVERRIDES)
+
+Dockerfile                   # Multi-stage build (Node frontend + Python backend, CPU-only PyTorch)
+railway.json                 # Railway deployment config (Dockerfile builder, healthcheck)
+.dockerignore                # Excludes dev files but keeps frontend source for in-Docker build
 
 frontend/src/
 ├── stores/searchStore.ts    # Zustand global state for job search
@@ -82,7 +86,11 @@ frontend/src/
 
 12. **Global Search State (Zustand)**: The "Get Jobs" search state is managed via Zustand (`frontend/src/stores/searchStore.ts`) so searches persist across page navigation. A floating `SearchStatusIndicator` shows progress on all pages when a search is running.
 
-13. **Performance Logging**: All critical operations (Search, AI Analysis) are wrapped with `PerformanceLogger` contexts. Metrics are persisted to SQLite for the `/analytics/performance` dashboard.
+13. **Performance Logging**: All critical operations (Search, AI Analysis) are wrapped with `PerformanceLogger` contexts. Metrics are persisted to the database for the `/analytics/performance` dashboard.
+
+14. **Environment Variable Config Overrides**: `src/config.py` checks env vars before YAML values via the `ENV_OVERRIDES` mapping. This enables Railway/cloud deployments where secrets are injected as env vars. Config.yaml is optional — if missing, the app runs on env vars and defaults only. Boolean coercion handles `"true"/"false"` strings automatically.
+
+15. **Railway Deployment**: The app is deployed on Railway at `https://launchpad-production-1ce9.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
 
 ## Common Tasks
 
@@ -143,6 +151,8 @@ Related skills receive partial credit (default 0.7x) during matching. Edit `data
 
 1. Add to `config.yaml.example` with comments
 2. Access via `self.config.get("section.key", default_value)` using `src/config.py`
+3. For cloud-deployable secrets, add an entry to `ENV_OVERRIDES` in `src/config.py`
+4. Set the env var on Railway: `railway variable set KEY=value --service launchpad`
 
 ## Important Patterns
 
@@ -194,18 +204,37 @@ When modifying features, these files often need synchronized updates:
 | Change | Files to Update |
 |--------|-----------------|
 | New Telegram command | `telegram_bot.py`, `TELEGRAM_BOT.md`, `ARCHITECTURE.md`, `SCHEDULER.md` |
-| New config option | `config.yaml.example`, `config.py`, relevant docs |
+| New config option | `config.yaml.example`, `config.py` (+ `ENV_OVERRIDES`), relevant docs |
+| Deployment config | `Dockerfile`, `railway.json`, `.dockerignore`, `docs/RAILWAY_DEPLOYMENT.md` |
 | NLP matching algorithm | `engine.py`, `skills_matcher.py`, `ARCHITECTURE.md` |
 | AI matching algorithm | `gemini_matcher.py`, `requirements.py`, `engine.py`, `ARCHITECTURE.md` |
 | AI match insights UI | `api.ts` (types), `JobMatches.tsx`, `Dashboard.tsx` |
 | Database schema | `models.py`, `crud.py`, may need migration |
 
+## Deployment
+
+- **Local**: `uvicorn backend.main:app --reload` (SQLite, frontend via Vite dev server)
+- **Railway** (production): `https://launchpad-production-1ce9.up.railway.app`
+  - Project: `rail-linkedin-project`, Service: `launchpad`
+  - Database: Railway PostgreSQL (auto-referenced via `DATABASE_URL`)
+  - All secrets as env vars (see `ENV_OVERRIDES` in `src/config.py`)
+  - Deploy: `railway up --service launchpad` or push to `main` branch
+  - Logs: `railway logs --service launchpad`
+  - Guides: `docs/RAILWAY_DEPLOYMENT.md`, `ideas/railway_deployment.md`
+
+### Dockerfile Notes
+- 3-stage build: Node frontend → Python deps (CPU-only PyTorch) → slim production image
+- `.dockerignore` keeps frontend source for in-Docker build (unlike pre-built approach)
+- Single Gunicorn worker to stay within Railway memory limits
+- `PRODUCTION=true` env var enables serving React build from `/frontend/dist/`
+
 ## Known Limitations
 
 1. Resume parsing only supports plain text (.txt) and markdown (.md)
-2. SQLite doesn't persist across cloud deployments (use PostgreSQL for production)
-3. Apify API has rate limits and costs per call
-4. Telegram bot can only run one instance at a time (polling conflict)
+2. Apify API has rate limits and costs per call
+3. Telegram bot can only run one instance at a time (polling conflict)
+4. Google Sheets/Gmail OAuth tokens require local browser flow — not available on Railway without volume mounts
+5. `google.generativeai` SDK is deprecated; migration to `google.genai` is pending
 
 ## Dependencies
 

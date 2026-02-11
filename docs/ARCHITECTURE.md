@@ -136,9 +136,9 @@
 
 | Component | Type | Data Stored |
 |-----------|------|-------------|
-| **SQLite Database** | `linkedin_job_matcher.db` | Jobs, Resumes, Match Results, Liked Bullets, Perf Logs |
+| **Database** | SQLite (local) / PostgreSQL (Railway) | Jobs, Resumes, Match Results, Liked Bullets, Perf Logs |
 | **Google Sheets** | External | Job Matches (≥70%), All Jobs (Logs) |
-| **Config File** | `config.yaml` | Settings, profiles, schedule |
+| **Config** | `config.yaml` + env vars | Settings, profiles, schedule. Env vars override YAML (see `ENV_OVERRIDES` in `src/config.py`) |
 
 ## Data Flow Sequences
 

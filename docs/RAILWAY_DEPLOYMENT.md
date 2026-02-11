@@ -1,116 +1,109 @@
 # Railway Deployment Guide
 
-Deploy the LinkedIn Job Matcher to Railway with PostgreSQL for reliable scheduled job searches.
+LaunchPad is deployed on Railway with PostgreSQL.
 
-## Progress Status
+## Live Deployment
 
-### Completed ✅
-- [x] GitHub repository created and code pushed
-- [x] Repository structure fixed (files at root level)
-- [x] Dockerfile created (multi-stage Python 3.10 build)
-- [x] railway.json configuration (health checks, restart policy)
-- [x] Procfile updated (Gunicorn + Uvicorn workers)
-- [x] .dockerignore created
-- [x] PostgreSQL migration script ready
-- [x] Local PostgreSQL tested with data migration
+- **URL**: https://launchpad-production-1ce9.up.railway.app
+- **Project**: `rail-linkedin-project`
+- **Service**: `launchpad`
+- **Database**: Railway PostgreSQL (referenced via `DATABASE_URL`)
 
-### Pending ⏳
-- [ ] Create Railway project
-- [ ] Add PostgreSQL database on Railway
-- [ ] Configure environment variables
-- [ ] Deploy and verify
+## Architecture
 
----
+The Dockerfile uses a 3-stage build:
 
-## Prerequisites
+1. **Frontend** (Node 20): `npm ci` + `npm run build` produces `frontend/dist/`
+2. **Python deps** (Python 3.10): CPU-only PyTorch first, then `requirements.txt`
+3. **Production** (Python 3.10 slim): Copies built frontend + Python packages, runs Gunicorn
 
-- GitHub repo: `empyre-github/linkedin-job-matcher` ✅
-- Railway account: [https://railway.app](https://railway.app)
+Key settings:
+- Single Gunicorn worker (memory-constrained)
+- `PRODUCTION=true` serves React build at `/`
+- `${PORT:-8000}` for Railway's dynamic port assignment
+- Healthcheck at `/api/health` with 120s timeout
 
----
+## Environment Variables
 
-## Quick Deploy (When Ready)
+All secrets are configured as Railway env vars. The app's `src/config.py` checks env vars first (via `ENV_OVERRIDES` mapping), then falls back to `config.yaml`, then defaults.
 
-### 1. Create Project
-1. Go to [Railway Dashboard](https://railway.app/dashboard) → **"New Project"**
-2. **"Deploy from GitHub repo"** → Select `linkedin-job-matcher`
-3. Railway auto-detects the `Dockerfile` and builds
+### Currently Set
 
-### 2. Add PostgreSQL
-1. In project → **"+ New"** → **"Database"** → **"PostgreSQL"**
-2. Click PostgreSQL → **"Variables"** tab → **"Add Reference"**
-3. Add `DATABASE_URL` to your web service
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection (auto-referenced from Postgres service) |
+| `APIFY_API_KEY` | Apify LinkedIn scraper API key |
+| `BRIGHTDATA_API_KEY` | Bright Data API key |
+| `GEMINI_API_KEY` | Google Gemini AI API key |
+| `GEMINI_ENABLED` | `true` |
+| `MATCHING_ENGINE` | `auto` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_ALLOWED_USER_ID` | Authorized Telegram user ID |
+| `TELEGRAM_ENABLED` | `true` |
+| `SHEETS_ENABLED` | `false` (OAuth tokens not available on Railway) |
+| `JOB_PROVIDER` | `auto` |
+| `SCHEDULING_ENABLED` | `false` |
+| `PRODUCTION` | `true` |
 
-### 3. Set Environment Variables
-In web service → **"Variables"**:
+### Adding New Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | ✅ | Auto-linked from PostgreSQL |
-| `PYTHONPATH` | ✅ | Set to `/app` |
-| `GEMINI_API_KEY` | ✅ | Google AI API key |
-| `APIFY_API_KEY` | ✅ | Apify scraping key |
-| `TELEGRAM_BOT_TOKEN` | Optional | For notifications |
-| `TELEGRAM_CHAT_ID` | Optional | For notifications |
-
-### 4. Generate Domain
-1. Service → **"Settings"** → **"Networking"**
-2. Click **"Generate Domain"**
-3. Your app is live at `https://xxx.railway.app`
-
----
-
-## Configuration Files (Already Created)
-
-| File | Purpose |
-|------|---------|
-| `Dockerfile` | Multi-stage build with Python 3.10, PostgreSQL deps |
-| `railway.json` | Health checks at `/api/health`, restart policy |
-| `Procfile` | Gunicorn + Uvicorn workers |
-| `.dockerignore` | Excludes 80+ unnecessary files from build |
-
----
-
-## Health Check
-
-Railway monitors `/api/health` every 30 seconds. The endpoint returns:
-
-```json
-{
-  "status": "healthy",
-  "database": true,
-  "scheduler": "running"
-}
-```
-
----
-
-## Data Migration (Optional)
-
-### Migrate from local SQLite:
 ```bash
-# Get DATABASE_URL from Railway (Settings → Variables)
-export POSTGRES_URL="postgresql://postgres:xxx@xxx.railway.app:5432/railway"
-
-# Run migration
-python -m src.database.migrations.migrate_to_postgres
+railway variable set KEY=value --service launchpad
 ```
 
-### Fresh start:
-Skip migration — tables are created automatically on first startup.
+To add a new env var override, also add it to `ENV_OVERRIDES` in `src/config.py`.
 
----
+## Common Operations
+
+### Deploy
+
+```bash
+# From project root (linked to Railway)
+railway up --service launchpad
+
+# Or push to main — Railway auto-deploys if GitHub integration is connected
+```
+
+### View Logs
+
+```bash
+railway logs --service launchpad
+```
+
+### Check Status
+
+```bash
+railway service status --service launchpad
+```
+
+### Set Variables
+
+```bash
+railway variable set KEY=value --service launchpad
+railway variable list --kv --service launchpad
+```
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| `ModuleNotFoundError` | Add `PYTHONPATH=/app` to env vars |
-| Database connection failed | Verify `DATABASE_URL` is set in web service |
-| Build fails | Check Railway build logs for missing deps |
-| Scheduler not starting | Check startup logs for scheduler init errors |
+| Healthcheck fails | Check runtime logs — likely a missing module or OOM. Increase `healthcheckTimeout` in `railway.json` |
+| `ModuleNotFoundError` | Add missing package to `requirements.txt` and redeploy |
+| OOM / container killed | Reduce workers (currently 1), check if PyTorch is CPU-only |
+| Frontend not served | Ensure `PRODUCTION=true` is set and `frontend/dist/` exists in image |
+| Google Sheets fails | OAuth tokens require local browser flow; disable with `SHEETS_ENABLED=false` |
+| Build fails at frontend | Ensure `frontend/package-lock.json` is committed and not in `.dockerignore` |
 
----
+## Data Migration (SQLite to PostgreSQL)
+
+### Fresh start
+Tables are created automatically on first startup via SQLAlchemy `create_all()`.
+
+### Migrate existing data
+```bash
+export POSTGRES_URL="postgresql://..."  # From Railway Variables
+python -m src.database.migrations.migrate_to_postgres
+```
 
 ## Cost Estimate
 
