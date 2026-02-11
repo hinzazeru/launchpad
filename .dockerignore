@@ -69,14 +69,9 @@ test.json
 .git/
 .gitignore
 
-# Frontend source (only need dist/)
-frontend/src/
+# Frontend (keep source for in-Docker build, exclude artifacts)
 frontend/node_modules/
-frontend/package-lock.json
-frontend/*.json
-frontend/*.ts
-frontend/*.html
-frontend/*.css
+frontend/dist/
 
 # Misc
 *.jpg

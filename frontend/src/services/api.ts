@@ -284,6 +284,7 @@ export type SearchStage =
   | 'matching'
   | 'exporting'
   | 'completed'
+  | 'cancelled'
   | 'error';
 
 export interface JobSearchParams {

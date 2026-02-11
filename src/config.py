@@ -8,6 +8,69 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Mapping of config dot-paths to environment variable names.
+# When set, env vars take priority over config.yaml values.
+ENV_OVERRIDES: Dict[str, str] = {
+    "apify.api_key": "APIFY_API_KEY",
+    "apify.actor_id": "APIFY_ACTOR_ID",
+    "brightdata.api_key": "BRIGHTDATA_API_KEY",
+    "gemini.api_key": "GEMINI_API_KEY",
+    "gemini.enabled": "GEMINI_ENABLED",
+    "telegram.bot_token": "TELEGRAM_BOT_TOKEN",
+    "telegram.allowed_user_id": "TELEGRAM_ALLOWED_USER_ID",
+    "telegram.enabled": "TELEGRAM_ENABLED",
+    "sheets.spreadsheet_id": "SHEETS_SPREADSHEET_ID",
+    "sheets.credentials_path": "SHEETS_CREDENTIALS_PATH",
+    "sheets.token_path": "SHEETS_TOKEN_PATH",
+    "sheets.enabled": "SHEETS_ENABLED",
+    "email.enabled": "EMAIL_ENABLED",
+    "email.from_address": "EMAIL_FROM_ADDRESS",
+    "email.to_address": "EMAIL_TO_ADDRESS",
+    "email.credentials_path": "EMAIL_CREDENTIALS_PATH",
+    "email.token_path": "EMAIL_TOKEN_PATH",
+    "database.url": "DATABASE_URL",
+    "job_provider.provider": "JOB_PROVIDER",
+    "matching.engine": "MATCHING_ENGINE",
+    "scheduling.enabled": "SCHEDULING_ENABLED",
+}
+
+
+def _coerce_value(value: str, default: Any = None) -> Any:
+    """Coerce a string env var value to the appropriate Python type.
+
+    Uses the default's type as a hint when available, otherwise infers from content.
+    """
+    # Use default's type as a hint
+    if default is not None:
+        if isinstance(default, bool):
+            return value.lower() in ("true", "1", "yes")
+        if isinstance(default, int):
+            try:
+                return int(value)
+            except ValueError:
+                return value
+        if isinstance(default, float):
+            try:
+                return float(value)
+            except ValueError:
+                return value
+
+    # No default hint — infer from string content
+    lower = value.lower()
+    if lower in ("true", "1", "yes"):
+        return True
+    if lower in ("false", "0", "no"):
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
 
 class Config:
     """Configuration loader and accessor."""
@@ -57,22 +120,30 @@ class Config:
                 config_path = project_root / "config.yaml"
 
         if not os.path.exists(config_path):
-            raise FileNotFoundError(
-                f"Configuration file not found: {config_path}\n"
-                f"Please copy config.yaml.example to config.yaml and fill in your values."
+            # Config file is optional — env vars can supply all values
+            logger.info(
+                f"Config file not found at {config_path}; "
+                f"using environment variables and defaults only."
             )
+            self._config_data = {}
+            return
 
         # Store the path for future reloads
         self._config_path = config_path
 
         try:
             with open(config_path, 'r') as f:
-                self._config_data = yaml.safe_load(f)
+                self._config_data = yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML in config file: {e}")
 
     def get(self, key_path: str, default: Any = None) -> Any:
         """Get configuration value using dot notation.
+
+        Lookup order:
+        1. Environment variable (if key_path is in ENV_OVERRIDES)
+        2. YAML config file value
+        3. Provided default
 
         Args:
             key_path: Dot-separated path to config value (e.g., "apify.api_key")
@@ -86,6 +157,14 @@ class Config:
             api_key = config.get("apify.api_key")
             min_score = config.get("matching.min_match_score", 0.6)
         """
+        # 1. Check environment variable override
+        env_var = ENV_OVERRIDES.get(key_path)
+        if env_var is not None:
+            env_value = os.environ.get(env_var)
+            if env_value is not None:
+                return _coerce_value(env_value, default)
+
+        # 2. Check YAML config
         if self._config_data is None:
             self.load_config()
 

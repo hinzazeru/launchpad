@@ -482,12 +482,12 @@ async def search_jobs(request: JobSearchRequest):
                 yield send_progress(prog)
                 
         except Exception as e:
-            logger.error(f"Apify fetch failed: {e}", exc_info=True)
+            logger.error(f"Job fetch failed: {e}", exc_info=True)
             yield send_progress(SearchProgress(
                 stage=SearchStage.ERROR,
                 progress=15,
                 message="Failed to fetch jobs",
-                error=f"Apify API error: {str(e)}"
+                error=f"Job fetch error: {str(e)}"
             ))
             return
 
@@ -1368,9 +1368,9 @@ async def _execute_search_job_async(search_id: str):
                 split_calls=True
             )
         except Exception as e:
-            logger.error(f"Apify fetch failed: {e}", exc_info=True)
+            logger.error(f"Job fetch failed: {e}", exc_info=True)
             search_job.status = 'failed'
-            search_job.error = f"Apify API error: {str(e)}"
+            search_job.error = f"Job fetch error: {str(e)}"
             db.commit()
             return
 
