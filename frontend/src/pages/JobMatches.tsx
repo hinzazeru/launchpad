@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useJobs } from '@/services/api';
+import { useJobs, useAnalyticsMarket } from '@/services/api';
 import type { Job } from '@/services/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -720,16 +720,23 @@ export function JobMatches() {
     const [minScore, setMinScore] = useState(initialMinScore);
     const [maxScore, setMaxScore] = useState(100);
     const [search, setSearch] = useState('');
+    const [companyFilter, setCompanyFilter] = useState<string>('');
+    const [locationRegion, setLocationRegion] = useState<string>('');
     const [recency, setRecency] = useState<string>('all'); // Default to 'all' when coming from Analytics
     const [sortOrder, setSortOrder] = useState<string>('score_desc');
+
+    const { data: marketData } = useAnalyticsMarket(10, 60);
 
     const sortBy = sortOrder.startsWith('date') ? 'date' : 'score';
     const sortDirection = sortOrder.endsWith('asc') ? 'asc' : 'desc';
 
+    const effectiveSearch = companyFilter || search || undefined;
+
     const { data, isLoading, error } = useJobs({
         min_score: minScore,
         max_score: maxScore < 100 ? maxScore : undefined,
-        search: search || undefined,
+        search: effectiveSearch,
+        location_region: locationRegion || undefined,
         recency_days: recency === 'all' ? undefined : Number(recency),
         limit: 100,
         sort_by: sortBy,
@@ -967,10 +974,54 @@ export function JobMatches() {
                             placeholder="Search jobs or companies..."
                             className="pl-9 bg-background/50"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                if (e.target.value) setCompanyFilter('');
+                            }}
                         />
                     </div>
                 </div>
+
+                {/* Top Companies Filter */}
+                {marketData?.top_companies && marketData.top_companies.length > 0 && (
+                    <Select
+                        value={companyFilter}
+                        onValueChange={(value) => {
+                            setCompanyFilter(value === '__all__' ? '' : value);
+                            if (value !== '__all__') setSearch('');
+                        }}
+                    >
+                        <SelectTrigger className="w-[200px] bg-background/50">
+                            <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                            <SelectValue placeholder="Company" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="__all__">All Companies</SelectItem>
+                            {marketData.top_companies.map((company) => (
+                                <SelectItem key={company.name} value={company.name}>
+                                    {company.name} ({company.count})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+
+                {/* Location Region Filter */}
+                <Select
+                    value={locationRegion || '__all__'}
+                    onValueChange={(value) => setLocationRegion(value === '__all__' ? '' : value)}
+                >
+                    <SelectTrigger className="w-[170px] bg-background/50">
+                        <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                        <SelectValue placeholder="Location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="__all__">All Locations</SelectItem>
+                        <SelectItem value="us">US</SelectItem>
+                        <SelectItem value="canada">Canada</SelectItem>
+                        <SelectItem value="remote">Remote</SelectItem>
+                    </SelectContent>
+                </Select>
 
                 {/* Score Range */}
                 <div className="flex items-center gap-2">

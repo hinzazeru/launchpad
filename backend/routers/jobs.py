@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from src.database.db import SessionLocal, get_db
 from src.database.models import JobPosting, MatchResult
@@ -69,6 +70,7 @@ async def list_jobs(
     recency_days: Optional[int] = Query(None, ge=1, description="Jobs posted within N days"),
     search: Optional[str] = Query(None, description="Search in title/company"),
     sort_by: str = Query("score", pattern="^(score|date)$", description="Sort by 'score' or 'date'"),
+    location_region: Optional[str] = Query(None, pattern="^(us|canada|remote)$", description="Filter by region: us, canada, or remote"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     limit: int = Query(100, ge=1, le=500, description="Max results"),
     session: Session = Depends(get_db)
@@ -112,6 +114,19 @@ async def list_jobs(
     if recency_days:
         cutoff = datetime.now() - timedelta(days=recency_days)
         query = query.filter(JobPosting.posting_date >= cutoff)
+
+    # Apply location region filter
+    if location_region == "us":
+        query = query.filter(JobPosting.location.ilike("%United States%"))
+    elif location_region == "canada":
+        query = query.filter(JobPosting.location.ilike("%Canada%"))
+    elif location_region == "remote":
+        query = query.filter(
+            or_(
+                JobPosting.location.ilike("%remote%"),
+                JobPosting.title.ilike("%remote%"),
+            )
+        )
 
     # Apply search filter
     if search:

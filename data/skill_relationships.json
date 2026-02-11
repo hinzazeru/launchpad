@@ -10,7 +10,10 @@
   },
   "relationships": {
     "product_management": {
-      "product management": ["product owner", "product strategy", "product development"],
+      "product management": ["product manager", "product owner", "product strategy", "product development", "data product management"],
+      "product manager": ["product management", "data product management", "product owner", "product strategy"],
+      "data product management": ["product management", "product manager", "data product manager"],
+      "data product manager": ["data product management", "product management", "product manager"],
       "product roadmap": ["roadmap", "product strategy", "prioritization", "product vision"],
       "product strategy": ["product vision", "go-to-market", "product roadmap"],
       "product owner": ["product management", "scrum", "backlog management"],

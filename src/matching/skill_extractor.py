@@ -29,6 +29,8 @@ SKILL_DICTIONARY: Dict[str, List[str]] = {
     "product_management": [
         "product management",
         "product manager",
+        "data product management",
+        "data product manager",
         "product strategy",
         "product roadmap",
         "roadmap",

@@ -697,6 +697,7 @@ class ApiClient {
     max_score?: number;
     recency_days?: number;
     search?: string;
+    location_region?: string;
     sort_by?: 'score' | 'date';
     sort_order?: 'asc' | 'desc';
     limit?: number;
@@ -706,6 +707,7 @@ class ApiClient {
     if (params?.max_score !== undefined) searchParams.set('max_score', String(params.max_score));
     if (params?.recency_days !== undefined) searchParams.set('recency_days', String(params.recency_days));
     if (params?.search) searchParams.set('search', params.search);
+    if (params?.location_region) searchParams.set('location_region', params.location_region);
     if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
     if (params?.sort_order) searchParams.set('sort_order', params.sort_order);
     if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
@@ -1176,6 +1178,7 @@ export function useJobs(params?: {
   max_score?: number;
   recency_days?: number;
   search?: string;
+  location_region?: string;
   sort_by?: 'score' | 'date';
   sort_order?: 'asc' | 'desc';
   limit?: number;
