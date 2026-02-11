@@ -1,7 +1,7 @@
 """SQLAlchemy database models."""
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, ForeignKey, Index, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, ForeignKey, Index, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from src.database.db import Base
 
@@ -32,6 +32,7 @@ class JobPosting(Base):
 
     __tablename__ = "job_postings"
     __table_args__ = (
+        UniqueConstraint('title', 'company', name='uq_job_postings_title_company'),
         Index('ix_job_postings_title_company', 'title', 'company'),
     )
 

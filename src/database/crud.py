@@ -261,6 +261,91 @@ def get_existing_job_keys(
     return existing
 
 
+def deduplicate_existing_jobs(db: Session) -> int:
+    """Remove duplicate job postings, keeping the one with the highest ID.
+
+    For each group of jobs sharing the same (lower(title), lower(company)),
+    keeps the row with the highest ID and deletes the rest. Also reassigns
+    any match_results or application_tracking from deleted rows to the kept row.
+
+    Args:
+        db: Database session
+
+    Returns:
+        Number of duplicate rows deleted
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Find duplicate groups: (lower_title, lower_company) with count > 1
+    dupes = (
+        db.query(
+            func.lower(func.trim(JobPosting.title)).label('ltitle'),
+            func.lower(func.trim(JobPosting.company)).label('lcompany'),
+            func.count(JobPosting.id).label('cnt'),
+        )
+        .group_by('ltitle', 'lcompany')
+        .having(func.count(JobPosting.id) > 1)
+        .all()
+    )
+
+    if not dupes:
+        return 0
+
+    total_deleted = 0
+    for ltitle, lcompany, cnt in dupes:
+        # Get all IDs for this group, ordered by id desc (keep highest)
+        rows = (
+            db.query(JobPosting.id)
+            .filter(
+                func.lower(func.trim(JobPosting.title)) == ltitle,
+                func.lower(func.trim(JobPosting.company)) == lcompany,
+            )
+            .order_by(JobPosting.id.desc())
+            .all()
+        )
+        keep_id = rows[0][0]
+        delete_ids = [r[0] for r in rows[1:]]
+
+        # Reassign match_results from duplicates to the kept row
+        db.query(MatchResult).filter(
+            MatchResult.job_id.in_(delete_ids)
+        ).update({MatchResult.job_id: keep_id}, synchronize_session=False)
+
+        # Reassign application_tracking from duplicates to the kept row
+        # Delete conflicting tracking entries first (kept row may already have one)
+        existing_tracking = db.query(ApplicationTracking).filter(
+            ApplicationTracking.job_id == keep_id
+        ).first()
+        if existing_tracking:
+            db.query(ApplicationTracking).filter(
+                ApplicationTracking.job_id.in_(delete_ids)
+            ).delete(synchronize_session=False)
+        else:
+            # Move the first duplicate's tracking to the kept row, delete rest
+            first_dupe_tracking = db.query(ApplicationTracking).filter(
+                ApplicationTracking.job_id.in_(delete_ids)
+            ).first()
+            if first_dupe_tracking:
+                first_dupe_tracking.job_id = keep_id
+                other_ids = [d for d in delete_ids if d != first_dupe_tracking.job_id]
+                if other_ids:
+                    db.query(ApplicationTracking).filter(
+                        ApplicationTracking.job_id.in_(other_ids)
+                    ).delete(synchronize_session=False)
+
+        # Delete the duplicate job postings
+        db.query(JobPosting).filter(
+            JobPosting.id.in_(delete_ids)
+        ).delete(synchronize_session=False)
+
+        total_deleted += len(delete_ids)
+
+    db.commit()
+    logger.info(f"Deduplicated job_postings: removed {total_deleted} duplicate rows from {len(dupes)} groups")
+    return total_deleted
+
+
 def delete_job_posting(db: Session, job_id: int) -> bool:
     """Delete a job posting by ID.
 

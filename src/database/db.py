@@ -29,6 +29,9 @@ def init_db():
     """Initialize database tables and run lightweight migrations."""
     from src.database.models import Resume, JobPosting, MatchResult, ApplicationTracking
 
+    # Deduplicate existing jobs before creating/enforcing the unique constraint
+    _deduplicate_jobs_if_needed()
+
     Base.metadata.create_all(bind=engine)
 
     # Lightweight column migrations for SQLite (ALTER TABLE ADD COLUMN is safe to retry)
@@ -56,6 +59,35 @@ def _migrate_sqlite():
             except Exception:
                 # Column already exists — safe to ignore
                 pass
+
+
+def _deduplicate_jobs_if_needed():
+    """Remove duplicate job postings before the unique constraint is enforced.
+
+    Only runs if the job_postings table already exists (not on first startup).
+    Idempotent — does nothing if no duplicates are found.
+    """
+    import logging
+    from sqlalchemy import inspect
+
+    logger = logging.getLogger(__name__)
+    inspector = inspect(engine)
+
+    # Skip if table doesn't exist yet (first run)
+    if 'job_postings' not in inspector.get_table_names():
+        return
+
+    session = SessionLocal()
+    try:
+        from src.database.crud import deduplicate_existing_jobs
+        removed = deduplicate_existing_jobs(session)
+        if removed > 0:
+            logger.info(f"Pre-migration dedup: removed {removed} duplicate job postings")
+    except Exception as e:
+        logger.warning(f"Job deduplication check failed (non-fatal): {e}")
+        session.rollback()
+    finally:
+        session.close()
 
 
 def get_db():

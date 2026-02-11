@@ -534,10 +534,30 @@ class ApifyJobProvider(JobProvider):
                 new_job_postings.append(job_posting)
                 imported_count += 1
 
-            # Bulk add and commit
+            # Bulk add and commit (with unique constraint fallback)
             if new_job_postings:
-                session.add_all(new_job_postings)
-            session.commit()
+                try:
+                    session.add_all(new_job_postings)
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    if 'UNIQUE constraint failed' in str(e) or 'IntegrityError' in type(e).__name__:
+                        logger.warning(f"Bulk insert hit unique constraint, falling back to one-by-one insert")
+                        survived = []
+                        for job in new_job_postings:
+                            try:
+                                session.add(job)
+                                session.commit()
+                                survived.append(job)
+                            except Exception:
+                                session.rollback()
+                                imported_count -= 1
+                                logger.debug(f"Skipping duplicate: {job.title} @ {job.company}")
+                        new_job_postings = survived
+                    else:
+                        raise
+            else:
+                session.commit()
 
             # Run Gemini extraction on newly imported jobs (domains + summaries)
             if gemini_extractor and new_job_postings:
