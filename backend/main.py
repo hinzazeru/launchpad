@@ -4,13 +4,22 @@ This API provides endpoints for job management, resume handling,
 and AI-powered resume analysis and suggestions.
 """
 
+import logging
 import os
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pathlib import Path
-import sys
+
+# Configure root logger so all app loggers output to stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
 
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent
@@ -65,8 +74,24 @@ app.include_router(scheduler.router, prefix="/api/scheduler", tags=["scheduler"]
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on application startup."""
-    import logging
     logger = logging.getLogger(__name__)
+
+    # Clean up stale search jobs left running from a previous crash/restart
+    try:
+        from src.database.db import SessionLocal
+        from src.database.models import SearchJob
+        db = SessionLocal()
+        stale = db.query(SearchJob).filter(SearchJob.status.in_(['running', 'pending'])).all()
+        for job in stale:
+            job.status = 'failed'
+            job.error = 'Server restarted while search was in progress'
+            logger.warning(f"Marked stale search {job.search_id} as failed")
+        if stale:
+            db.commit()
+        db.close()
+    except Exception as e:
+        logger.error(f"Failed to clean up stale searches: {e}")
+
     try:
         init_scheduler()
         logger.info("Scheduler service initialized")

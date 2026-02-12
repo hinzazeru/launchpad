@@ -16,7 +16,7 @@ import google.generativeai as genai
 from google.generativeai import types
 
 from src.config import get_config
-from src.integrations.gemini_client import clean_json_text
+from src.integrations.gemini_client import clean_json_text, _rate_limiter
 from src.matching.requirements import (
     StructuredRequirements,
     GeminiMatchResult,
@@ -226,13 +226,15 @@ class GeminiMatcher:
             )
 
         try:
-            response = model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
                     max_output_tokens=2048,  # Increased to prevent truncation of complex responses
                     response_mime_type="application/json",
-                )
+                ),
+                request_options={"timeout": 60},  # 60s timeout per call
             )
 
             # Parse response with candidate context for filtering
