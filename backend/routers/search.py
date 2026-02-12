@@ -201,7 +201,7 @@ async def get_suggested_keywords(limit: int = 7):
             # Get common job titles, normalizing variations
             common_titles = (
                 db.query(
-                    JobPosting.title,
+                    func.lower(JobPosting.title).label('title'),
                     func.count(JobPosting.id).label('count')
                 )
                 .group_by(func.lower(JobPosting.title))
@@ -215,7 +215,7 @@ async def get_suggested_keywords(limit: int = 7):
                     break
 
                 # Normalize the title for comparison
-                normalized = title.strip()
+                normalized = title.strip().title()
                 normalized_lower = normalized.lower()
 
                 # Skip if already in suggestions or too similar
