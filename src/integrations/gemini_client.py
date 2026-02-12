@@ -14,6 +14,8 @@ Usage:
 import json
 import logging
 import re
+import time
+import threading
 from typing import List, Dict, Optional
 
 def clean_json_text(text: str) -> str:
@@ -204,6 +206,65 @@ from pathlib import Path
 from src.config import get_config
 
 logger = logging.getLogger(__name__)
+
+
+class GeminiRateLimiter:
+    """Thread-safe rate limiter for Gemini API calls.
+
+    Enforces minimum spacing between calls (default 4s = 15 RPM) and
+    retries with exponential backoff on 429 errors.
+    """
+
+    def __init__(self, min_interval: float = 4.0, max_retries: int = 3):
+        self._min_interval = min_interval
+        self._max_retries = max_retries
+        self._last_call_time = 0.0
+        self._lock = threading.Lock()
+
+    def wait(self) -> None:
+        """Block until enough time has passed since the last call."""
+        with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_call_time
+            if elapsed < self._min_interval:
+                time.sleep(self._min_interval - elapsed)
+            self._last_call_time = time.monotonic()
+
+    def call_with_retry(self, fn, *args, **kwargs):
+        """Call fn with rate limiting and retry on 429 errors.
+
+        Args:
+            fn: Callable that makes the Gemini API call
+            *args, **kwargs: Passed to fn
+
+        Returns:
+            The result of fn()
+
+        Raises:
+            The last exception if all retries are exhausted
+        """
+        last_error = None
+        for attempt in range(self._max_retries + 1):
+            self.wait()
+            try:
+                return fn(*args, **kwargs)
+            except Exception as e:
+                error_str = str(e)
+                if '429' in error_str or 'Resource exhausted' in error_str:
+                    last_error = e
+                    backoff = min(2 ** attempt * 5, 60)  # 5s, 10s, 20s, cap 60s
+                    logger.warning(
+                        f"Gemini 429 rate limit (attempt {attempt + 1}/{self._max_retries + 1}), "
+                        f"backing off {backoff}s"
+                    )
+                    time.sleep(backoff)
+                else:
+                    raise
+        raise last_error
+
+
+# Shared rate limiter instance (15 RPM = 4s between calls)
+_rate_limiter = GeminiRateLimiter(min_interval=4.0, max_retries=3)
 
 
 def _load_valid_domains() -> List[str]:
@@ -443,7 +504,8 @@ class GeminiClient:
             start_time = time.perf_counter()
 
             # Minimal test prompt - just ask for a single word
-            response = self.model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
                 "Respond with only the word 'OK'.",
                 generation_config=types.GenerationConfig(
                     temperature=0.0,
@@ -542,7 +604,8 @@ class GeminiDomainExtractor:
         )
 
         try:
-            response = self.model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.1,  # Low temperature for consistent results
@@ -658,7 +721,8 @@ class GeminiDomainExtractor:
         )
 
         try:
-            response = self.model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.3,  # Slightly higher for more natural writing
@@ -782,7 +846,8 @@ class GeminiRequirementsExtractor:
         )
 
         try:
-            response = self.model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.1,  # Low temperature for consistent extraction
@@ -1011,7 +1076,8 @@ class GeminiMatchReranker:
         )
 
         try:
-            response = self.model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
@@ -1285,7 +1351,8 @@ class GeminiBulletRewriter:
                 }
             ]
 
-            response = self.model.generate_content(
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=self.temperature,
