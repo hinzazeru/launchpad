@@ -294,7 +294,7 @@ gemini:
   # AI Matcher settings
   matcher:
     enabled: true
-    model: "gemini-3-flash-preview"  # Best accuracy
+    model: "gemini-2.5-flash"  # Best stable model
     batch_model: "gemini-2.0-flash"  # Faster for bulk ops
     concurrency: 5
     fallback_to_nlp: true            # Fall back if Gemini fails

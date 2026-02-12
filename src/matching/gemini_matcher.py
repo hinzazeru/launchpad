@@ -149,7 +149,7 @@ class GeminiMatcher:
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
         # Use best reasoning model for matching accuracy
-        self.model_name = self.config.get("gemini.matcher.model", "gemini-3-flash-preview")
+        self.model_name = self.config.get("gemini.matcher.model", "gemini-2.5-flash")
         # Faster model for batch operations
         self.batch_model_name = self.config.get("gemini.matcher.batch_model", "gemini-2.0-flash")
         self.api_key = self.config.get("gemini.api_key")

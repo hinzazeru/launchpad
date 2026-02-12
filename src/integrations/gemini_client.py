@@ -492,7 +492,7 @@ class GeminiClient:
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
         self.api_key = self.config.get("gemini.api_key")
-        self.model_name = self.config.get("gemini.matcher.model", "gemini-3-flash-preview")
+        self.model_name = self.config.get("gemini.matcher.model", "gemini-2.5-flash")
         self.model = None
 
         if self.enabled and self.api_key:
@@ -1006,7 +1006,7 @@ class GeminiMatchReranker:
         self.enabled = self.config.get("matching.gemini_rerank.enabled", False)
         self.top_n = self.config.get("matching.gemini_rerank.top_n", 15)
         self.min_score_threshold = self.config.get("matching.gemini_rerank.min_score_threshold", 0.65)
-        self.model_name = self.config.get("gemini.model", "gemini-3-flash-preview")
+        self.model_name = self.config.get("gemini.model", "gemini-2.5-flash")
         self.api_key = self.config.get("gemini.api_key")
         self.client = None
 
@@ -1215,7 +1215,7 @@ class GeminiBulletRewriter:
         # Use advanced thinking model for bullet rewrites (most critical for resume quality)
         self.model_name = self.config.get(
             "targeting.gemini.model",
-            "gemini-3-flash-preview"  # Best reasoning model for high-quality rewrites
+            "gemini-2.5-flash"  # Best reasoning model for high-quality rewrites
         )
         self.api_key = self.config.get("gemini.api_key")
         self.temperature = self.config.get("targeting.gemini.temperature", 0.35)

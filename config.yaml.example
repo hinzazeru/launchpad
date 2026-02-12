@@ -202,7 +202,7 @@ logging:
 gemini:
   enabled: false  # Set to true to enable Gemini features
   api_key: "YOUR_GEMINI_API_KEY_HERE"  # Get from https://aistudio.google.com/app/apikey
-  model: "gemini-3-flash-preview"  # Main model for match re-ranking. Alt: "gemini-2.5-flash" (stable)
+  model: "gemini-2.5-flash"  # Main model for match re-ranking
 
   # Domain Extraction & Summarization (during job import)
   extractor:
@@ -213,7 +213,7 @@ gemini:
   # AI Job Matcher Configuration (when matching.engine is "gemini" or "auto")
   matcher:
     enabled: true              # Enable AI matching (requires gemini.enabled: true)
-    model: "gemini-3-flash-preview"  # Best model for accurate matching
+    model: "gemini-2.5-flash"  # Best stable model for accurate matching
     batch_model: "gemini-2.0-flash"  # Faster model for batch operations
     concurrency: 5             # Number of parallel API calls
     fallback_to_nlp: true      # Fall back to NLP if Gemini fails
@@ -221,9 +221,9 @@ gemini:
 # Resume Targeting / Bullet Rewriting Configuration
 targeting:
   gemini:
-    # Model for bullet rewriting - uses best reasoning model for high-quality rewrites
-    # Options: "gemini-3-flash-preview" (best), "gemini-2.5-flash", "gemini-2.0-flash" (fastest)
-    model: "gemini-3-flash-preview"
+    # Model for bullet rewriting
+    # Options: "gemini-2.5-flash" (best), "gemini-2.0-flash" (fastest)
+    model: "gemini-2.5-flash"
     temperature: 0.35  # Lower = more consistent, higher = more creative
     max_tokens: 2048   # Higher for thinking model (uses tokens for reasoning)
 
