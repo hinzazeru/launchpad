@@ -200,9 +200,10 @@ class WebAppScheduler:
                 return result
             
             logger.info(f"Executing scheduled search: '{schedule.name}' (id={schedule_id})")
-            
-            # Update last_run_at
+
+            # Update last_run_at and mark as running (so crash detection works on restart)
             schedule.last_run_at = datetime.now(timezone.utc)
+            schedule.last_run_status = 'running'
             db.commit()
             
             # Execute the search pipeline

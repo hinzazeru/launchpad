@@ -79,8 +79,10 @@ async def startup_event():
     # Clean up stale search jobs left running from a previous crash/restart
     try:
         from src.database.db import SessionLocal
-        from src.database.models import SearchJob
+        from src.database.models import SearchJob, ScheduledSearch
         db = SessionLocal()
+
+        # Mark stale web searches as failed
         stale = db.query(SearchJob).filter(SearchJob.status.in_(['running', 'pending'])).all()
         for job in stale:
             job.status = 'failed'
@@ -88,6 +90,41 @@ async def startup_event():
             logger.warning(f"Marked stale search {job.search_id} as failed")
         if stale:
             db.commit()
+
+        # Check for scheduled searches that were interrupted (last_run_status still not set)
+        # and send failure notification via Telegram
+        stale_schedules = db.query(ScheduledSearch).filter(
+            ScheduledSearch.last_run_status == 'running'
+        ).all()
+        for sched in stale_schedules:
+            sched.last_run_status = 'error'
+            logger.warning(f"Marked stale schedule '{sched.name}' as error (worker was killed)")
+        if stale_schedules:
+            db.commit()
+            # Send Telegram notification for crashed scheduled searches
+            try:
+                from src.config import get_config
+                import aiohttp
+                config = get_config()
+                bot_token = config.get("telegram.bot_token")
+                chat_id = config.get("telegram.chat_id")
+                if bot_token and chat_id:
+                    for sched in stale_schedules:
+                        message = (
+                            f"❌ Scheduled Search Crashed: \"{sched.name}\"\n\n"
+                            f"The worker was killed (timeout) during execution.\n"
+                            f"The search has been marked as failed."
+                        )
+                        async with aiohttp.ClientSession() as session:
+                            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                            await session.post(url, json={
+                                'chat_id': chat_id,
+                                'text': message,
+                            })
+                        logger.info(f"Sent crash notification for schedule '{sched.name}'")
+            except Exception as notify_err:
+                logger.error(f"Failed to send crash notification: {notify_err}")
+
         db.close()
     except Exception as e:
         logger.error(f"Failed to clean up stale searches: {e}")
