@@ -9,7 +9,7 @@ export function SearchStatusIndicator() {
   const location = useLocation();
 
   // Don't show on GetJobs page (redundant) or when not searching
-  if (location.pathname === '/get-jobs' || !isSearching) {
+  if (location.pathname === '/' || !isSearching) {
     return null;
   }
 
@@ -21,7 +21,7 @@ export function SearchStatusIndicator() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.9 }}
           transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-          onClick={() => navigate('/get-jobs')}
+          onClick={() => navigate('/')}
           className="fixed bottom-6 right-6 bg-primary text-primary-foreground
                      px-4 py-3 rounded-full shadow-lg flex items-center gap-3
                      hover:bg-primary/90 transition-colors z-50 cursor-pointer"

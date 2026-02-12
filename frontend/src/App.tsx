@@ -18,8 +18,8 @@ function App() {
           <Layout>
             <ErrorBoundary>
               <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/get-jobs" element={<GetJobs />} />
+                <Route path="/" element={<GetJobs />} />
+                <Route path="/analyze" element={<Dashboard />} />
                 <Route path="/matches" element={<JobMatches />} />
                 <Route path="/library" element={<Library />} />
                 <Route path="/analytics" element={<Analytics />} />
