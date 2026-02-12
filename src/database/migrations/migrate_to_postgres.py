@@ -77,62 +77,109 @@ def migrate():
         
         total_migrated = 0
         
-        # Pre-fetch valid resume IDs for FK validation
+        # Pre-fetch valid IDs for FK validation
         valid_resume_ids = set()
+        valid_job_ids = set()
         try:
-            from src.database.models import Resume
             valid_resume_ids = set(r.id for r in sqlite_session.query(Resume.id).all())
-            print(f"Valid resume IDs: {valid_resume_ids}")
+            print(f"Valid resume IDs in source: {valid_resume_ids}")
         except:
             pass
         
+        # ID mapping for job_postings (sqlite_id -> postgres_id) to handle duplicates
+        job_id_map = {}
+
         for model_class, table_name in TABLES_IN_ORDER:
             print(f"Migrating {table_name}...")
-            
+
             # Count source rows
             source_count = sqlite_session.query(model_class).count()
-            
+
             if source_count == 0:
                 print(f"  → 0 rows (empty table)")
                 continue
-            
-            # Check if target already has data
+
+            # Check if target already has data (skip non-mergeable tables)
             target_count = postgres_session.query(model_class).count()
-            if target_count > 0:
+            if target_count > 0 and table_name not in ("job_postings",):
                 print(f"  ⚠ Target already has {target_count} rows, skipping")
                 continue
-            
+            elif target_count > 0:
+                print(f"  ℹ Target has {target_count} rows, merging new records...")
+
             # Fetch all rows from SQLite
             rows = sqlite_session.query(model_class).all()
-            
-            # Filter out orphaned match_results (with invalid resume_id)
-            if table_name == "match_results" and valid_resume_ids:
+
+            # Special handling for job_postings: skip duplicates, build ID map
+            if table_name == "job_postings":
+                # Build lookup of existing jobs in target by (title, company)
+                existing_jobs = {}
+                for job in postgres_session.query(JobPosting).all():
+                    existing_jobs[(job.title, job.company)] = job.id
+
+                new_rows = []
+                skipped_dupes = 0
+                for row in rows:
+                    key = (row.title, row.company)
+                    if key in existing_jobs:
+                        # Map old ID to existing target ID
+                        job_id_map[row.id] = existing_jobs[key]
+                        skipped_dupes += 1
+                    else:
+                        job_id_map[row.id] = row.id  # Same ID
+                        new_rows.append(row)
+
+                if skipped_dupes > 0:
+                    print(f"  ⚠ Skipping {skipped_dupes} duplicate jobs (already in target)")
+                rows = new_rows
+
+            # Filter out orphaned match_results and remap job_ids
+            if table_name == "match_results":
                 original_count = len(rows)
-                rows = [r for r in rows if r.resume_id in valid_resume_ids]
-                skipped = original_count - len(rows)
+                filtered = []
+                for r in rows:
+                    if valid_resume_ids and r.resume_id not in valid_resume_ids:
+                        continue
+                    if r.job_id not in job_id_map:
+                        continue
+                    filtered.append(r)
+                skipped = original_count - len(filtered)
                 if skipped > 0:
-                    print(f"  ⚠ Skipping {skipped} orphaned records (invalid resume_id)")
-            
+                    print(f"  ⚠ Skipping {skipped} orphaned records (invalid resume_id or job_id)")
+                rows = filtered
+
             # Bulk insert into PostgreSQL
             batch_size = 100
+            inserted = 0
             for i in range(0, len(rows), batch_size):
                 batch = rows[i:i + batch_size]
-                
+
                 for row in batch:
                     # Expunge from SQLite session and make transient
                     sqlite_session.expunge(row)
                     # Convert to dict and create new object
-                    row_dict = {c.key: getattr(row, c.key) 
+                    row_dict = {c.key: getattr(row, c.key)
                                for c in inspect(row).mapper.column_attrs}
+
+                    # Remap job_id for match_results
+                    if table_name == "match_results" and "job_id" in row_dict:
+                        row_dict["job_id"] = job_id_map.get(row_dict["job_id"], row_dict["job_id"])
+
                     new_obj = model_class(**row_dict)
                     postgres_session.merge(new_obj)
-                
+                    inserted += 1
+
                 postgres_session.flush()
-            
+
             postgres_session.commit()
+
+            # After job_postings, update valid_job_ids
+            if table_name == "job_postings":
+                valid_job_ids = set(r.id for r in postgres_session.query(JobPosting.id).all())
+
             migrated_count = postgres_session.query(model_class).count()
-            print(f"  ✓ {migrated_count} rows migrated")
-            total_migrated += migrated_count
+            print(f"  ✓ {migrated_count} rows in target ({inserted} inserted)")
+            total_migrated += inserted
         
         # Reset sequences for PostgreSQL auto-increment
         print("\nResetting PostgreSQL sequences...")
