@@ -15,9 +15,9 @@ export function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { path: '/', label: 'Analyze', icon: Target },
     { path: '/get-jobs', label: 'Get Jobs', icon: Search },
     { path: '/matches', label: 'Matches', icon: Briefcase },
+    { path: '/', label: 'Analyze', icon: Target },
     { path: '/analytics', label: 'Analytics', icon: BarChart2 },
     { path: '/library', label: 'Resume Library', icon: FolderOpen },
     { path: '/settings', label: 'Settings', icon: Settings },
