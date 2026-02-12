@@ -222,8 +222,8 @@ gemini:
 targeting:
   gemini:
     # Model for bullet rewriting
-    # Options: "gemini-2.5-flash" (best), "gemini-2.0-flash" (fastest)
-    model: "gemini-2.5-flash"
+    # Options: "gemini-3-flash-preview" (best), "gemini-2.5-flash", "gemini-2.0-flash" (fastest)
+    model: "gemini-3-flash-preview"
     temperature: 0.35  # Lower = more consistent, higher = more creative
     max_tokens: 2048   # Higher for thinking model (uses tokens for reasoning)
 

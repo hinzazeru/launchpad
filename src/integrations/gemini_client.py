@@ -1215,7 +1215,7 @@ class GeminiBulletRewriter:
         # Use advanced thinking model for bullet rewrites (most critical for resume quality)
         self.model_name = self.config.get(
             "targeting.gemini.model",
-            "gemini-2.5-flash"  # Best reasoning model for high-quality rewrites
+            "gemini-3-flash-preview"  # Best reasoning model for high-quality rewrites
         )
         self.api_key = self.config.get("gemini.api_key")
         self.temperature = self.config.get("targeting.gemini.temperature", 0.35)
