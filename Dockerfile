@@ -58,4 +58,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/api/health')" || exit 1
 
 # Start with Gunicorn — use shell form so $PORT is expanded at runtime
-CMD gunicorn backend.main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind "[::]:${PORT:-8000}" --timeout 600
+# Timeout disabled: single worker runs long background tasks (Gemini AI matching)
+# Docker HEALTHCHECK and Railway handle container-level health monitoring
+CMD gunicorn backend.main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind "[::]:${PORT:-8000}" --timeout 0
