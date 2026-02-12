@@ -211,15 +211,26 @@ logger = logging.getLogger(__name__)
 class GeminiRateLimiter:
     """Thread-safe rate limiter for Gemini API calls.
 
-    Enforces minimum spacing between calls (default 4s = 15 RPM) and
-    retries with exponential backoff on 429 errors.
+    Enforces minimum spacing between calls and retries with exponential
+    backoff on 429 errors. Includes a circuit breaker that stops retrying
+    for a cooldown period after repeated 429s, so batch operations fail
+    fast instead of blocking the worker for minutes.
     """
 
-    def __init__(self, min_interval: float = 4.0, max_retries: int = 3):
+    def __init__(self, min_interval: float = 0.4, max_retries: int = 2,
+                 circuit_breaker_cooldown: float = 120.0):
         self._min_interval = min_interval
         self._max_retries = max_retries
         self._last_call_time = 0.0
         self._lock = threading.Lock()
+        # Circuit breaker: skip calls entirely after repeated 429s
+        self._circuit_open_until = 0.0
+        self._circuit_breaker_cooldown = circuit_breaker_cooldown
+
+    @property
+    def circuit_open(self) -> bool:
+        """Check if circuit breaker is tripped (quota exhausted)."""
+        return time.monotonic() < self._circuit_open_until
 
     def wait(self) -> None:
         """Block until enough time has passed since the last call."""
@@ -233,6 +244,9 @@ class GeminiRateLimiter:
     def call_with_retry(self, fn, *args, **kwargs):
         """Call fn with rate limiting and retry on 429 errors.
 
+        If the circuit breaker is open (recent 429 quota exhaustion),
+        raises immediately without making an API call.
+
         Args:
             fn: Callable that makes the Gemini API call
             *args, **kwargs: Passed to fn
@@ -241,8 +255,11 @@ class GeminiRateLimiter:
             The result of fn()
 
         Raises:
-            The last exception if all retries are exhausted
+            The last exception if all retries are exhausted or circuit is open
         """
+        if self.circuit_open:
+            raise Exception("Gemini rate limit circuit breaker open — skipping call (quota exhausted)")
+
         last_error = None
         for attempt in range(self._max_retries + 1):
             self.wait()
@@ -252,19 +269,28 @@ class GeminiRateLimiter:
                 error_str = str(e)
                 if '429' in error_str or 'Resource exhausted' in error_str:
                     last_error = e
-                    backoff = min(2 ** attempt * 5, 60)  # 5s, 10s, 20s, cap 60s
-                    logger.warning(
-                        f"Gemini 429 rate limit (attempt {attempt + 1}/{self._max_retries + 1}), "
-                        f"backing off {backoff}s"
-                    )
-                    time.sleep(backoff)
+                    if attempt < self._max_retries:
+                        backoff = min(2 ** attempt * 5, 30)  # 5s, 10s, cap 30s
+                        logger.warning(
+                            f"Gemini 429 rate limit (attempt {attempt + 1}/{self._max_retries + 1}), "
+                            f"backing off {backoff}s"
+                        )
+                        time.sleep(backoff)
+                    else:
+                        # All retries exhausted — trip circuit breaker
+                        self._circuit_open_until = time.monotonic() + self._circuit_breaker_cooldown
+                        logger.warning(
+                            f"Gemini quota exhausted after {self._max_retries + 1} attempts. "
+                            f"Circuit breaker open for {self._circuit_breaker_cooldown}s — "
+                            f"subsequent calls will be skipped."
+                        )
                 else:
                     raise
         raise last_error
 
 
-# Shared rate limiter instance (Paid Tier 1: ~150 RPM = 0.4s between calls)
-_rate_limiter = GeminiRateLimiter(min_interval=0.4, max_retries=3)
+# Shared rate limiter (Paid Tier 1: ~150 RPM, circuit breaker trips after 2 retries)
+_rate_limiter = GeminiRateLimiter(min_interval=0.4, max_retries=2, circuit_breaker_cooldown=120.0)
 
 
 def _load_valid_domains() -> List[str]:
