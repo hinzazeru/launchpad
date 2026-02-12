@@ -219,6 +219,8 @@ class WebAppScheduler:
             # Send Telegram notification if configured
             if search_result.get('success'):
                 await self._send_notification(schedule, search_result)
+            else:
+                await self._send_failure_notification(schedule, search_result.get('error', 'Unknown error'))
             
             result = search_result
             result['success'] = True
@@ -258,6 +260,9 @@ class WebAppScheduler:
                                 name=f"Retry: {schedule.name} (attempt {recent_failures + 1})"
                             )
                             logger.info(f"Scheduled retry for '{schedule.name}' at {retry_time} (attempt {recent_failures + 1}/{max_retries})")
+
+                    # Send failure notification
+                    await self._send_failure_notification(schedule, str(e))
             except Exception:
                 db.rollback()
         finally:
@@ -512,7 +517,7 @@ class WebAppScheduler:
                 matches.sort(key=get_blended_score, reverse=True)
                 
                 result['jobs_matched'] = len(matches)
-                result['high_matches'] = len([m for m in matches if get_blended_score(m) >= 0.85])
+                result['high_matches'] = len([m for m in matches if get_blended_score(m) >= 0.70])
                 result['top_matches'] = [
                     {
                         'title': m.get('job_title', 'Unknown'),
@@ -603,15 +608,21 @@ class WebAppScheduler:
             # Build notification message
             high_matches = result.get('high_matches', 0)
             top_matches = result.get('top_matches', [])
-            
-            if high_matches == 0:
-                return  # Don't notify if no high-quality matches
-            
-            message_lines = [
-                f"🔔 Scheduled Search Complete: \"{schedule.name}\"",
-                "",
-                f"Found {high_matches} high-quality matches (85%+):"
-            ]
+            jobs_matched = result.get('jobs_matched', 0)
+            jobs_fetched = result.get('jobs_fetched', 0)
+
+            if high_matches > 0:
+                message_lines = [
+                    f"✅ Scheduled Search Complete: \"{schedule.name}\"",
+                    "",
+                    f"Found {high_matches} high-quality matches (70%+) from {jobs_fetched} jobs:"
+                ]
+            else:
+                message_lines = [
+                    f"✅ Scheduled Search Complete: \"{schedule.name}\"",
+                    "",
+                    f"Fetched {jobs_fetched} jobs, matched {jobs_matched} — no high-quality matches (70%+) this run."
+                ]
             
             for i, match in enumerate(top_matches[:3], 1):
                 title = match.get('title', 'Unknown')
@@ -641,7 +652,50 @@ class WebAppScheduler:
             
         except Exception as e:
             logger.warning(f"Failed to send Telegram notification: {e}")
-    
+
+    async def _send_failure_notification(
+        self,
+        schedule: ScheduledSearch,
+        error_message: str
+    ) -> None:
+        """Send Telegram notification when a scheduled search fails.
+
+        Args:
+            schedule: The schedule that failed
+            error_message: Error description
+        """
+        try:
+            from src.config import get_config
+            config = get_config()
+
+            bot_token = config.get("telegram.bot_token")
+            chat_id = config.get("telegram.chat_id")
+
+            if not bot_token or not chat_id:
+                return
+
+            message = "\n".join([
+                f"❌ Scheduled Search Failed: \"{schedule.name}\"",
+                "",
+                f"Error: {error_message[:500]}",
+                "",
+                f"Retries configured: {schedule.max_retries or 0}",
+            ])
+
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                await session.post(url, json={
+                    'chat_id': chat_id,
+                    'text': message,
+                    'parse_mode': 'HTML'
+                })
+
+            logger.info(f"Sent failure notification for schedule '{schedule.name}'")
+
+        except Exception as e:
+            logger.warning(f"Failed to send failure notification: {e}")
+
     def _update_next_run(self, schedule_id: int, db: Optional[Session] = None) -> None:
         """Calculate and update the next_run_at for a schedule.
         
