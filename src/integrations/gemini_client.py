@@ -263,8 +263,8 @@ class GeminiRateLimiter:
         raise last_error
 
 
-# Shared rate limiter instance (15 RPM = 4s between calls)
-_rate_limiter = GeminiRateLimiter(min_interval=4.0, max_retries=3)
+# Shared rate limiter instance (Paid Tier 1: ~150 RPM = 0.4s between calls)
+_rate_limiter = GeminiRateLimiter(min_interval=0.4, max_retries=3)
 
 
 def _load_valid_domains() -> List[str]:
