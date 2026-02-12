@@ -175,7 +175,7 @@ async def get_suggested_keywords(limit: int = 7):
         # 1. Get keywords from scheduled searches (most relevant)
         scheduled_keywords = (
             db.query(
-                ScheduledSearch.keyword,
+                func.lower(ScheduledSearch.keyword).label('keyword'),
                 func.count(ScheduledSearch.id).label('count')
             )
             .group_by(func.lower(ScheduledSearch.keyword))
@@ -185,7 +185,7 @@ async def get_suggested_keywords(limit: int = 7):
         )
 
         for kw, count in scheduled_keywords:
-            normalized = kw.strip()
+            normalized = kw.strip().title()
             if normalized.lower() not in seen_keywords:
                 suggestions.append(SuggestedKeyword(
                     keyword=normalized,
