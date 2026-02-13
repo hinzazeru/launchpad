@@ -21,7 +21,7 @@ import logging
 import time
 
 from src.database.db import get_db
-from src.database.models import JobPosting, MatchResult, SearchPerformance, APICallMetric
+from src.database.models import JobPosting, MatchResult, SearchPerformance, APICallMetric, ScheduledSearch
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -175,6 +175,12 @@ class RecentSearch(BaseModel):
     status: str
     error_message: Optional[str]
     trigger_source: str = "manual"  # 'manual' or 'scheduled'
+    schedule_name: Optional[str] = None
+    rematch_type: Optional[str] = None
+    gemini_attempted: Optional[int] = None
+    gemini_succeeded: Optional[int] = None
+    gemini_failed: Optional[int] = None
+    jobs_skipped: Optional[int] = None
 
 
 class RecentSearchesResponse(BaseModel):
@@ -857,8 +863,9 @@ async def get_recent_searches(
         return cached
 
     try:
-        searches = (
-            session.query(SearchPerformance)
+        rows = (
+            session.query(SearchPerformance, ScheduledSearch.name)
+            .outerjoin(ScheduledSearch, SearchPerformance.schedule_id == ScheduledSearch.id)
             .order_by(SearchPerformance.created_at.desc())
             .limit(limit)
             .all()
@@ -874,9 +881,15 @@ async def get_recent_searches(
                 high_matches=s.high_matches or 0,
                 status=s.status or "unknown",
                 error_message=s.error_message,
-                trigger_source=s.trigger_source or "manual"
+                trigger_source=s.trigger_source or "manual",
+                schedule_name=schedule_name,
+                rematch_type=s.rematch_type,
+                gemini_attempted=s.gemini_attempted,
+                gemini_succeeded=s.gemini_succeeded,
+                gemini_failed=s.gemini_failed,
+                jobs_skipped=s.jobs_skipped,
             )
-            for s in searches
+            for s, schedule_name in rows
         ]
 
         result = RecentSearchesResponse(searches=search_list)
@@ -983,3 +996,118 @@ async def get_gemini_usage(
     except Exception as e:
         logger.error(f"Error fetching Gemini usage: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load Gemini usage data")
+
+
+# --- Scheduled Search Summary ---
+
+class SchedulePerformanceSummary(BaseModel):
+    """Per-schedule performance summary."""
+    schedule_id: int
+    schedule_name: str
+    total_runs: int
+    successful_runs: int
+    failed_runs: int
+    avg_duration_ms: float
+    avg_jobs_fetched: float
+    avg_high_matches: float
+    avg_gemini_success_rate: Optional[float] = None
+    total_jobs_skipped: int
+    last_run_at: Optional[str] = None
+    last_status: Optional[str] = None
+
+
+class ScheduledSearchesSummaryResponse(BaseModel):
+    """Response for scheduled search summary endpoint."""
+    schedules: List[SchedulePerformanceSummary]
+    total_scheduled_runs_30d: int
+    overall_success_rate: float
+
+
+@router.get("/performance/scheduled-summary", response_model=ScheduledSearchesSummaryResponse)
+async def get_scheduled_search_summary(
+    days: int = 30,
+    session: Session = Depends(get_db)
+):
+    """Get per-schedule performance aggregates.
+
+    Returns summary metrics for each scheduled search over the given period.
+    """
+    cache_key = f"scheduled_summary_{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        # Aggregate SearchPerformance by schedule_id, joined with ScheduledSearch
+        rows = (
+            session.query(
+                SearchPerformance.schedule_id,
+                ScheduledSearch.name,
+                func.count(SearchPerformance.id).label('total_runs'),
+                func.sum(case((SearchPerformance.status == 'success', 1), else_=0)).label('successful_runs'),
+                func.sum(case((SearchPerformance.status == 'error', 1), else_=0)).label('failed_runs'),
+                func.avg(SearchPerformance.total_duration_ms).label('avg_duration_ms'),
+                func.avg(SearchPerformance.jobs_fetched).label('avg_jobs_fetched'),
+                func.avg(SearchPerformance.high_matches).label('avg_high_matches'),
+                func.sum(func.coalesce(SearchPerformance.gemini_succeeded, 0)).label('total_gemini_succeeded'),
+                func.sum(func.coalesce(SearchPerformance.gemini_attempted, 0)).label('total_gemini_attempted'),
+                func.sum(func.coalesce(SearchPerformance.jobs_skipped, 0)).label('total_jobs_skipped'),
+            )
+            .join(ScheduledSearch, SearchPerformance.schedule_id == ScheduledSearch.id)
+            .filter(SearchPerformance.created_at >= cutoff)
+            .filter(SearchPerformance.schedule_id.isnot(None))
+            .group_by(SearchPerformance.schedule_id, ScheduledSearch.name)
+            .all()
+        )
+
+        schedules = []
+        total_runs = 0
+        total_success = 0
+
+        for row in rows:
+            total_runs += row.total_runs
+            total_success += row.successful_runs
+
+            # Get last run info
+            last_run = (
+                session.query(SearchPerformance.created_at, SearchPerformance.status)
+                .filter(SearchPerformance.schedule_id == row.schedule_id)
+                .order_by(SearchPerformance.created_at.desc())
+                .first()
+            )
+
+            gemini_rate = None
+            if row.total_gemini_attempted and row.total_gemini_attempted > 0:
+                gemini_rate = round(row.total_gemini_succeeded / row.total_gemini_attempted, 2)
+
+            schedules.append(SchedulePerformanceSummary(
+                schedule_id=row.schedule_id,
+                schedule_name=row.name,
+                total_runs=row.total_runs,
+                successful_runs=row.successful_runs,
+                failed_runs=row.failed_runs,
+                avg_duration_ms=round(float(row.avg_duration_ms or 0), 1),
+                avg_jobs_fetched=round(float(row.avg_jobs_fetched or 0), 1),
+                avg_high_matches=round(float(row.avg_high_matches or 0), 1),
+                avg_gemini_success_rate=gemini_rate,
+                total_jobs_skipped=int(row.total_jobs_skipped or 0),
+                last_run_at=last_run.created_at.isoformat() if last_run else None,
+                last_status=last_run.status if last_run else None,
+            ))
+
+        overall_rate = round(total_success / total_runs, 2) if total_runs > 0 else 0.0
+
+        result = ScheduledSearchesSummaryResponse(
+            schedules=schedules,
+            total_scheduled_runs_30d=total_runs,
+            overall_success_rate=overall_rate,
+        )
+
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching scheduled search summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load scheduled search summary")

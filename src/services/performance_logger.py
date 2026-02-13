@@ -37,6 +37,7 @@ class PerformanceLogger:
         self.search_id = search_id or str(uuid.uuid4())
         self.timings: Dict[str, int] = {}
         self.counts: Dict[str, int] = {}
+        self.extra: Dict[str, any] = {}
         self.api_calls: List[Dict] = []
         self.start_time = time.perf_counter()
 
@@ -49,6 +50,10 @@ class PerformanceLogger:
 
     def record_count(self, name: str, count: int):
         self.counts[name] = count
+
+    def record_extra(self, key: str, value):
+        """Record an extra metadata field (JSON-serializable)."""
+        self.extra[key] = value
 
     def record_api_call(self, call_type: str, duration_ms: int, status: str, **kwargs):
         self.api_calls.append({
@@ -103,7 +108,20 @@ class PerformanceLogger:
                 jobs_matched=self.counts.get('jobs_matched', 0),
                 high_matches=self.counts.get('high_matches', 0),
                 gemini_calls=self.counts.get('gemini_calls', 0),
-                
+
+                # Gemini matching stats
+                gemini_attempted=self.counts.get('gemini_attempted'),
+                gemini_succeeded=self.counts.get('gemini_succeeded'),
+                gemini_failed=self.counts.get('gemini_failed'),
+                gemini_failure_reasons=self.extra.get('gemini_failure_reasons'),
+
+                # Smart rematch tracking
+                rematch_type=self.extra.get('rematch_type'),
+                jobs_skipped=self.counts.get('jobs_skipped'),
+
+                # Gemini timing summary
+                gemini_timing_summary=self.extra.get('gemini_timing_summary'),
+
                 # Error context
                 error_stage=error_stage,
                 error_message=str(error_message)[:2000] if error_message else None  # Truncate error message

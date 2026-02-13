@@ -14,6 +14,7 @@ import {
   Search,
   User,
   CalendarClock,
+  Bot,
 } from 'lucide-react';
 import {
   LineChart,
@@ -27,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { StageBreakdown } from './StageBreakdown';
 import { LatencyChart } from './LatencyChart';
 import { GeminiUsageChart } from './GeminiUsageChart';
+import { ScheduledSearchSummary } from './ScheduledSearchSummary';
 
 // Format date for display
 function formatDate(dateStr: string): string {
@@ -214,6 +216,9 @@ export function PerformanceTab() {
       {/* Gemini API Usage Chart */}
       <GeminiUsageChart />
 
+      {/* Scheduled Search Summary */}
+      <ScheduledSearchSummary />
+
       {/* Stage Breakdown and API Latency */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div
@@ -269,6 +274,7 @@ export function PerformanceTab() {
                       <th className="text-right py-2 px-2 font-medium text-muted-foreground">Jobs</th>
                       <th className="text-right py-2 px-2 font-medium text-muted-foreground">Matches</th>
                       <th className="text-right py-2 px-2 font-medium text-muted-foreground">High</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">AI</th>
                       <th className="text-left py-2 px-2 font-medium text-muted-foreground">Status</th>
                     </tr>
                   </thead>
@@ -282,23 +288,67 @@ export function PerformanceTab() {
                           {formatDateTime(search.created_at)}
                         </td>
                         <td className="py-2 px-2 text-center">
-                          {search.trigger_source === 'scheduled' ? (
-                            <span className="inline-flex items-center gap-1 text-blue-500" title="Scheduled run">
-                              <CalendarClock className="w-4 h-4" />
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground" title="Manual run">
-                              <User className="w-4 h-4" />
-                            </span>
-                          )}
+                          <span className="inline-flex items-center gap-1">
+                            {search.trigger_source === 'scheduled' ? (
+                              <span className="inline-flex items-center gap-1 text-blue-500" title={search.schedule_name ? `Schedule: ${search.schedule_name}` : 'Scheduled run'}>
+                                <CalendarClock className="w-4 h-4" />
+                                {search.schedule_name && (
+                                  <span className="text-xs max-w-[80px] truncate hidden sm:inline">{search.schedule_name}</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-muted-foreground" title="Manual run">
+                                <User className="w-4 h-4" />
+                              </span>
+                            )}
+                            {search.rematch_type && (
+                              <span
+                                className={`text-[10px] font-semibold px-1 py-0.5 rounded ${
+                                  search.rematch_type === 'incremental'
+                                    ? 'bg-blue-500/10 text-blue-500'
+                                    : 'bg-orange-500/10 text-orange-500'
+                                }`}
+                                title={`Rematch type: ${search.rematch_type}`}
+                              >
+                                {search.rematch_type === 'incremental' ? 'INC' : 'FULL'}
+                              </span>
+                            )}
+                          </span>
                         </td>
                         <td className="py-2 px-2 text-right font-mono">
                           {formatDuration(search.total_duration_ms)}
                         </td>
-                        <td className="py-2 px-2 text-right">{search.jobs_fetched}</td>
+                        <td className="py-2 px-2 text-right">
+                          <span
+                            title={search.jobs_skipped ? `${search.jobs_fetched} fetched, ${search.jobs_skipped} skipped (already matched)` : undefined}
+                            className={search.jobs_skipped ? 'cursor-help border-b border-dotted border-muted-foreground' : ''}
+                          >
+                            {search.jobs_fetched}
+                            {search.jobs_skipped ? (
+                              <span className="text-muted-foreground text-xs ml-0.5">+{search.jobs_skipped}</span>
+                            ) : null}
+                          </span>
+                        </td>
                         <td className="py-2 px-2 text-right">{search.jobs_matched}</td>
                         <td className="py-2 px-2 text-right font-medium text-emerald-500">
                           {search.high_matches}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {search.gemini_attempted != null && search.gemini_attempted > 0 ? (
+                            <span
+                              className="inline-flex items-center gap-1 cursor-help"
+                              title={`${search.gemini_succeeded ?? 0} succeeded, ${search.gemini_failed ?? 0} failed of ${search.gemini_attempted} attempted`}
+                            >
+                              <Bot className="w-3 h-3 text-violet-500" />
+                              <span className={`text-xs font-mono ${
+                                (search.gemini_failed ?? 0) > 0 ? 'text-amber-500' : 'text-violet-500'
+                              }`}>
+                                {search.gemini_succeeded ?? 0}/{search.gemini_attempted}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">--</span>
+                          )}
                         </td>
                         <td className="py-2 px-2">
                           {search.status === 'success' ? (

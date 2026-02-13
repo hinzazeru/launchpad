@@ -540,10 +540,37 @@ export interface RecentSearch {
   status: string;
   error_message: string | null;
   trigger_source: 'manual' | 'scheduled';
+  schedule_name?: string;
+  rematch_type?: string;
+  gemini_attempted?: number;
+  gemini_succeeded?: number;
+  gemini_failed?: number;
+  jobs_skipped?: number;
 }
 
 export interface RecentSearchesResponse {
   searches: RecentSearch[];
+}
+
+export interface SchedulePerformanceSummary {
+  schedule_id: number;
+  schedule_name: string;
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  avg_duration_ms: number;
+  avg_jobs_fetched: number;
+  avg_high_matches: number;
+  avg_gemini_success_rate: number | null;
+  total_jobs_skipped: number;
+  last_run_at: string | null;
+  last_status: string | null;
+}
+
+export interface ScheduledSearchesSummaryResponse {
+  schedules: SchedulePerformanceSummary[];
+  total_scheduled_runs_30d: number;
+  overall_success_rate: number;
 }
 
 // Domain types
@@ -944,6 +971,10 @@ class ApiClient {
 
   async getRecentSearches(limit: number = 20): Promise<RecentSearchesResponse> {
     return this.fetch<RecentSearchesResponse>(`/analytics/performance/recent-searches?limit=${limit}`);
+  }
+
+  async getScheduledSearchSummary(days: number = 30): Promise<ScheduledSearchesSummaryResponse> {
+    return this.fetch<ScheduledSearchesSummaryResponse>(`/analytics/performance/scheduled-summary?days=${days}`);
   }
 
   // Domain endpoints
@@ -1512,6 +1543,14 @@ export function useRecentSearches(limit: number = 20) {
   return useQuery({
     queryKey: ['recent-searches', limit],
     queryFn: () => api.getRecentSearches(limit),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useScheduledSearchSummary(days: number = 30) {
+  return useQuery({
+    queryKey: ['scheduled-search-summary', days],
+    queryFn: () => api.getScheduledSearchSummary(days),
     staleTime: 5 * 60 * 1000,
   });
 }

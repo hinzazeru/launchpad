@@ -241,6 +241,19 @@ class SearchPerformance(Base):
     high_matches = Column(Integer, default=0)
     gemini_calls = Column(Integer, default=0)
 
+    # Gemini matching stats
+    gemini_attempted = Column(Integer, nullable=True)
+    gemini_succeeded = Column(Integer, nullable=True)
+    gemini_failed = Column(Integer, nullable=True)
+    gemini_failure_reasons = Column(JSON, nullable=True)
+
+    # Smart rematch tracking
+    rematch_type = Column(String(30), nullable=True)  # 'incremental' | 'full_resume' | 'full_engine' | 'full_both'
+    jobs_skipped = Column(Integer, nullable=True)
+
+    # Per-job Gemini timing summary
+    gemini_timing_summary = Column(JSON, nullable=True)  # {min_ms, max_ms, avg_ms, p50_ms, p90_ms}
+
     # Error tracking
     error_stage = Column(String(50), nullable=True)
     error_message = Column(Text, nullable=True)

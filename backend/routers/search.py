@@ -900,7 +900,18 @@ async def search_jobs(request: JobSearchRequest):
             perf_logger.record_count('jobs_imported', jobs_imported)
             perf_logger.record_count('jobs_matched', len(all_matches))
             perf_logger.record_count('high_matches', high_matches)
-            
+
+            # Record Gemini matching stats
+            if gemini_stats:
+                perf_logger.record_count('gemini_attempted', gemini_stats.attempted)
+                perf_logger.record_count('gemini_succeeded', gemini_stats.succeeded)
+                perf_logger.record_count('gemini_failed', gemini_stats.failed)
+                if gemini_stats.failure_reasons:
+                    perf_logger.record_extra('gemini_failure_reasons', gemini_stats.failure_reasons)
+                timing = gemini_stats.timing_summary()
+                if timing:
+                    perf_logger.record_extra('gemini_timing_summary', timing)
+
             db_session = SessionLocal()
             try:
                 perf_logger.save(db_session, status='success', trigger_source='manual')

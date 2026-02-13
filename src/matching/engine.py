@@ -46,6 +46,7 @@ Configuration (config.yaml):
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -66,12 +67,32 @@ class GeminiStats:
     succeeded: int = 0
     failed: int = 0
     failure_reasons: List[str] = field(default_factory=list)
+    _timings_ms: List[float] = field(default_factory=list)
 
     def add_failure(self, reason: str) -> None:
         """Add a failure reason (unique only)."""
         self.failed += 1
         if reason not in self.failure_reasons:
             self.failure_reasons.append(reason)
+
+    def add_timing(self, duration_ms: float) -> None:
+        """Record per-job Gemini match duration."""
+        self._timings_ms.append(duration_ms)
+
+    def timing_summary(self) -> Optional[Dict]:
+        """Compute timing percentile summary, or None if no timings recorded."""
+        if not self._timings_ms:
+            return None
+        sorted_t = sorted(self._timings_ms)
+        n = len(sorted_t)
+        return {
+            "count": n,
+            "min_ms": round(sorted_t[0], 1),
+            "max_ms": round(sorted_t[-1], 1),
+            "avg_ms": round(sum(sorted_t) / n, 1),
+            "p50_ms": round(sorted_t[n // 2], 1),
+            "p90_ms": round(sorted_t[int(n * 0.9)], 1) if n >= 2 else round(sorted_t[-1], 1),
+        }
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for API response."""
@@ -461,11 +482,13 @@ class JobMatcher:
             if gemini_stats:
                 gemini_stats.attempted += 1
 
+            t0 = time.perf_counter()
             try:
                 ai_result = self._match_with_gemini(resume, job)
                 if ai_result:
                     if gemini_stats:
                         gemini_stats.succeeded += 1
+                        gemini_stats.add_timing((time.perf_counter() - t0) * 1000)
                     return ai_result
                 else:
                     # Gemini returned None (empty response)

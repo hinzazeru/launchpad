@@ -451,9 +451,17 @@ class WebAppScheduler:
                     reason = "resume changed" if resume_changed else "engine version changed"
                     if resume_changed and engine_changed:
                         reason = "resume and engine version changed"
+                        rematch_type = 'full_both'
+                    elif resume_changed:
+                        rematch_type = 'full_resume'
+                    else:
+                        rematch_type = 'full_engine'
                     logger.info(f"Full rematch triggered for '{schedule.name}': {reason}")
                 else:
+                    rematch_type = 'incremental'
                     logger.info(f"Incremental match for '{schedule.name}': only jobs imported since {schedule.last_run_at}")
+
+                perf_logger.record_extra('rematch_type', rematch_type)
 
                 # Query matching jobs
                 query = db.query(JobPosting).filter(
@@ -475,6 +483,9 @@ class WebAppScheduler:
                         )
                     )
 
+                # Count total eligible before incremental filter for jobs_skipped metric
+                total_eligible = query.count()
+
                 # Smart rematch: only match newly imported jobs unless forced
                 if not force_rematch and schedule.last_run_at:
                     query = query.filter(JobPosting.import_date >= schedule.last_run_at)
@@ -495,7 +506,12 @@ class WebAppScheduler:
                     )):
                         seen_jobs[dedup_key] = job
                 all_jobs = list(seen_jobs.values())
-                
+
+                # Track jobs skipped by smart rematch
+                jobs_skipped = total_eligible - len(all_jobs)
+                if jobs_skipped > 0:
+                    perf_logger.record_count('jobs_skipped', jobs_skipped)
+
                 # Run matching (matcher already initialized above for version check)
                 matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
                 
@@ -578,7 +594,18 @@ class WebAppScheduler:
             perf_logger.record_count('jobs_imported', result['jobs_imported'])
             perf_logger.record_count('jobs_matched', result['jobs_matched'])
             perf_logger.record_count('high_matches', result['high_matches'])
-            
+
+            # Record Gemini matching stats
+            if gemini_stats:
+                perf_logger.record_count('gemini_attempted', gemini_stats.attempted)
+                perf_logger.record_count('gemini_succeeded', gemini_stats.succeeded)
+                perf_logger.record_count('gemini_failed', gemini_stats.failed)
+                if gemini_stats.failure_reasons:
+                    perf_logger.record_extra('gemini_failure_reasons', gemini_stats.failure_reasons)
+                timing = gemini_stats.timing_summary()
+                if timing:
+                    perf_logger.record_extra('gemini_timing_summary', timing)
+
             perf_logger.save(
                 db,
                 status='success',
