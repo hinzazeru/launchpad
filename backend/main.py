@@ -76,6 +76,42 @@ async def startup_event():
     """Initialize services on application startup."""
     logger = logging.getLogger(__name__)
 
+    # Run pending database migrations before any ORM queries
+    try:
+        from sqlalchemy import text
+        from src.database.db import engine
+
+        migrations = [
+            # add_rematch_tracking (may already exist from earlier deploy)
+            ("scheduled_searches", "resume_content_hash", "VARCHAR(64)"),
+            ("scheduled_searches", "last_engine_version", "VARCHAR(20)"),
+            # add_search_analytics_columns
+            ("search_performance", "gemini_attempted", "INTEGER"),
+            ("search_performance", "gemini_succeeded", "INTEGER"),
+            ("search_performance", "gemini_failed", "INTEGER"),
+            ("search_performance", "gemini_failure_reasons", "TEXT"),
+            ("search_performance", "rematch_type", "VARCHAR(30)"),
+            ("search_performance", "jobs_skipped", "INTEGER"),
+            ("search_performance", "gemini_timing_summary", "TEXT"),
+        ]
+
+        with engine.connect() as conn:
+            for table, col, col_type in migrations:
+                try:
+                    # Check if column exists (PostgreSQL)
+                    result = conn.execute(text(
+                        f"SELECT column_name FROM information_schema.columns "
+                        f"WHERE table_name = '{table}' AND column_name = '{col}'"
+                    ))
+                    if result.fetchone() is None:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                        logger.info(f"Migration: added {table}.{col}")
+                except Exception as col_err:
+                    logger.debug(f"Migration skip {table}.{col}: {col_err}")
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Auto-migration check failed (non-fatal): {e}")
+
     # Clean up stale search jobs left running from a previous crash/restart
     try:
         from src.database.db import SessionLocal
