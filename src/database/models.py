@@ -194,6 +194,10 @@ class ScheduledSearch(Base):
     max_retries = Column(Integer, default=2)
     retry_delay_minutes = Column(Integer, default=10)
 
+    # Smart rematch tracking
+    resume_content_hash = Column(String(64), nullable=True)  # SHA256 of resume file
+    last_engine_version = Column(String(20), nullable=True)  # Engine version used in last run
+
     # Relationships
     search_runs = relationship("SearchPerformance", back_populates="scheduled_search")
 

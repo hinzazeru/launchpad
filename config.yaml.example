@@ -52,6 +52,10 @@ matching:
   #   "auto" - Use Gemini if available, fall back to NLP (recommended)
   engine: "auto"
 
+  # Bump this version when changing matching config to trigger full re-matching
+  # of all jobs in scheduled searches (instead of only matching newly imported jobs)
+  engine_version: "1.0.0"
+
   # Weights for NLP matching algorithm (must sum to 1.0)
   # Only used when engine is "nlp" or as fallback
   weights:

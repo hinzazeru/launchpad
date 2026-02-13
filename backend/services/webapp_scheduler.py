@@ -212,8 +212,11 @@ class WebAppScheduler:
                 schedule=schedule
             )
             
-            # Update schedule status
+            # Update schedule status and rematch tracking
             schedule.last_run_status = 'success' if search_result.get('success') else 'error'
+            if search_result.get('success'):
+                schedule.resume_content_hash = search_result.get('_resume_hash')
+                schedule.last_engine_version = search_result.get('_engine_version')
             self._update_next_run(schedule_id, db)
             db.commit()
             
@@ -287,6 +290,7 @@ class WebAppScheduler:
         Returns:
             Dict with search results
         """
+        import hashlib
         import time as time_module
         import re
         from datetime import timedelta
@@ -328,7 +332,10 @@ class WebAppScheduler:
                 
                 with open(file_path, 'r', encoding='utf-8') as f:
                     resume_content = f.read()
-                
+
+                # Compute resume hash for smart rematch detection
+                resume_hash = hashlib.sha256(resume_content.encode()).hexdigest()
+
                 parser = ResumeParser()
                 parsed = parser.parse_auto(resume_content)
                 
@@ -365,6 +372,9 @@ class WebAppScheduler:
                 job_titles = [role.title for role in parsed.roles if role.title]
                 resume = ParsedResume(flat_skills, experience_years, [], job_titles)
                 logger.info(f"Parsed resume: {len(flat_skills)} skills, {experience_years} years")
+
+                # Store hash in result for tracking update after success
+                result['_resume_hash'] = resume_hash
             
             # ====================================================================
             # STAGE 2: Fetch jobs from Apify
@@ -429,6 +439,22 @@ class WebAppScheduler:
             # STAGE 4: Match jobs against resume
             # ====================================================================
             with perf_logger.time('match'):
+                # Smart rematch: detect if resume or engine changed
+                matcher = get_job_matcher()
+                resume_changed = schedule.resume_content_hash != resume_hash
+                engine_changed = schedule.last_engine_version != matcher.engine_version
+                force_rematch = resume_changed or engine_changed
+
+                result['_engine_version'] = matcher.engine_version
+
+                if force_rematch:
+                    reason = "resume changed" if resume_changed else "engine version changed"
+                    if resume_changed and engine_changed:
+                        reason = "resume and engine version changed"
+                    logger.info(f"Full rematch triggered for '{schedule.name}': {reason}")
+                else:
+                    logger.info(f"Incremental match for '{schedule.name}': only jobs imported since {schedule.last_run_at}")
+
                 # Query matching jobs
                 query = db.query(JobPosting).filter(
                     JobPosting.title.ilike(f"%{actual_keyword}%")
@@ -448,7 +474,11 @@ class WebAppScheduler:
                             (JobPosting.posting_date.is_(None)) & (JobPosting.import_date >= cutoff_date)
                         )
                     )
-                
+
+                # Smart rematch: only match newly imported jobs unless forced
+                if not force_rematch and schedule.last_run_at:
+                    query = query.filter(JobPosting.import_date >= schedule.last_run_at)
+
                 all_jobs = query.all()
                 
                 # Filter low-quality jobs
@@ -466,8 +496,7 @@ class WebAppScheduler:
                         seen_jobs[dedup_key] = job
                 all_jobs = list(seen_jobs.values())
                 
-                # Run matching
-                matcher = get_job_matcher()
+                # Run matching (matcher already initialized above for version check)
                 matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
                 
                 # Gemini re-ranking
