@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useJobs, useAnalyticsMarket } from '@/services/api';
+import { useJobs, useAnalyticsMarket, useUpdateJobStatus } from '@/services/api';
 import type { Job } from '@/services/api';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import {
     Briefcase,
     Lightbulb,
     Bot,
+    Heart,
+    EyeOff,
 } from 'lucide-react';
 import {
     Select,
@@ -188,56 +190,6 @@ function RadialScore({
     );
 }
 
-// Compact horizontal stacked bar for breakdown
-function BreakdownBar({ skills, experience, domains }: { skills: number; experience: number; domains: number }) {
-    const total = skills + experience + domains;
-    const skillsWidth = total > 0 ? (skills / total) * 100 : 33;
-    const expWidth = total > 0 ? (experience / total) * 100 : 33;
-    const domainsWidth = total > 0 ? (domains / total) * 100 : 34;
-
-    return (
-        <div className="space-y-1.5">
-            <div className="flex h-2 rounded-full overflow-hidden bg-muted/30">
-                <motion.div
-                    className="bg-gradient-to-r from-blue-500 to-blue-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${skillsWidth}%` }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    title={`Skills: ${Math.round(skillsWidth)}%`}
-                />
-                <motion.div
-                    className="bg-gradient-to-r from-violet-500 to-violet-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${expWidth}%` }}
-                    transition={{ duration: 0.5, delay: 0.4 }}
-                    title={`Experience: ${Math.round(expWidth)}%`}
-                />
-                <motion.div
-                    className="bg-gradient-to-r from-cyan-500 to-cyan-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${domainsWidth}%` }}
-                    transition={{ duration: 0.5, delay: 0.5 }}
-                    title={`Domains: ${Math.round(domainsWidth)}%`}
-                />
-            </div>
-            <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
-                <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-blue-500" />
-                    Skills
-                </span>
-                <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-violet-500" />
-                    Exp
-                </span>
-                <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-cyan-500" />
-                    Domain
-                </span>
-            </div>
-        </div>
-    );
-}
-
 function formatDate(dateString?: string) {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -262,7 +214,7 @@ function SkillTag({ skill, variant }: { skill: string; variant: 'matched' | 'gap
 }
 
 // Job Card Component
-function JobCard({ job, index }: { job: Job; index: number }) {
+function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onStatusChange: (jobId: number, status: string | null) => void }) {
     const [isExpanded, setIsExpanded] = useState(false);
 
     // Parse experience
@@ -273,15 +225,8 @@ function JobCard({ job, index }: { job: Job; index: number }) {
         if (match) resumeYears = parseFloat(match[1]);
     }
 
-    // Calculate approximate breakdown percentages (for visual purposes)
-    const skillsPercent = job.skills_required_count > 0
-        ? (job.skills_matched_count / job.skills_required_count) * 45
-        : 22.5;
-    const expPercent = requiredYears > 0
-        ? Math.min(resumeYears / requiredYears, 1) * 35
-        : 17.5;
-    const domainPercent = ((job.domains?.length || 0) / Math.max((job.domains?.length || 0) + (job.missing_domains?.length || 0), 1)) * 20;
-
+    const isHearted = job.user_status === 'hearted';
+    const isIgnored = job.user_status === 'ignored';
     const hasGaps = (job.skill_gaps?.length || 0) > 0;
     const hasMissingDomains = (job.missing_domains?.length || 0) > 0;
 
@@ -293,7 +238,7 @@ function JobCard({ job, index }: { job: Job; index: number }) {
         >
             <Card
                 className={`group relative overflow-hidden transition-all duration-300 cursor-pointer hover:shadow-lg hover:shadow-primary/5 border-border/50 ${isExpanded ? 'ring-1 ring-primary/20' : ''
-                    }`}
+                    } ${isIgnored ? 'opacity-50' : ''}`}
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 {/* Score indicator strip */}
@@ -362,15 +307,37 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                             </span>
                                         )}
                                     </div>
-                                    <a
-                                        href={job.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="flex-shrink-0 p-1 rounded-md hover:bg-muted/50 text-muted-foreground hover:text-primary transition-colors"
-                                    >
-                                        <ExternalLink className="w-4 h-4" />
-                                    </a>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onStatusChange(job.id, isHearted ? null : 'hearted'); }}
+                                            className={`p-1 rounded-md transition-colors ${isHearted
+                                                ? 'text-red-500 hover:text-red-600'
+                                                : 'text-muted-foreground/40 hover:text-red-400'
+                                                }`}
+                                            title={isHearted ? 'Remove from favorites' : 'Add to favorites'}
+                                        >
+                                            <Heart className={`w-4 h-4 ${isHearted ? 'fill-current' : ''}`} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onStatusChange(job.id, isIgnored ? null : 'ignored'); }}
+                                            className={`p-1 rounded-md transition-colors ${isIgnored
+                                                ? 'text-amber-500 hover:text-amber-600'
+                                                : 'text-muted-foreground/40 hover:text-muted-foreground'
+                                                }`}
+                                            title={isIgnored ? 'Un-ignore' : 'Ignore this match'}
+                                        >
+                                            <EyeOff className="w-4 h-4" />
+                                        </button>
+                                        <a
+                                            href={job.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="p-1 rounded-md hover:bg-muted/50 text-muted-foreground hover:text-primary transition-colors"
+                                        >
+                                            <ExternalLink className="w-4 h-4" />
+                                        </a>
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
                                     <span className="flex items-center gap-1.5 font-medium">
@@ -401,13 +368,6 @@ function JobCard({ job, index }: { job: Job; index: number }) {
                                     </span>
                                 </div>
                             </div>
-
-                            {/* Breakdown Bar */}
-                            <BreakdownBar
-                                skills={skillsPercent}
-                                experience={expPercent}
-                                domains={domainPercent}
-                            />
 
                             {/* Quick Stats Row */}
                             <div className="flex items-center gap-4 text-xs">
@@ -724,6 +684,10 @@ export function JobMatches() {
     const [locationRegion, setLocationRegion] = useState<string>('');
     const [recency, setRecency] = useState<string>('all'); // Default to 'all' when coming from Analytics
     const [sortOrder, setSortOrder] = useState<string>('score_desc');
+    const [showIgnored, setShowIgnored] = useState(false);
+    const [heartedOnly, setHeartedOnly] = useState(false);
+
+    const updateStatusMutation = useUpdateJobStatus();
 
     const { data: marketData } = useAnalyticsMarket(10, 60);
 
@@ -741,7 +705,13 @@ export function JobMatches() {
         limit: 100,
         sort_by: sortBy,
         sort_order: sortDirection,
+        show_ignored: showIgnored || undefined,
+        hearted_only: heartedOnly || undefined,
     });
+
+    const handleStatusChange = (jobId: number, status: string | null) => {
+        updateStatusMutation.mutate({ jobId, userStatus: status });
+    };
 
     // Stats
     const totalJobs = data?.jobs.length || 0;
@@ -1084,6 +1054,31 @@ export function JobMatches() {
                         {option.label}
                     </Button>
                 ))}
+
+                {/* Divider */}
+                <div className="w-px h-5 bg-border mx-1" />
+
+                {/* Heart / Ignore filters */}
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={heartedOnly}
+                        onChange={(e) => { setHeartedOnly(e.target.checked); if (e.target.checked) setShowIgnored(false); }}
+                        className="rounded border-border"
+                    />
+                    <Heart className="w-3 h-3 text-red-500" />
+                    Hearted only
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={showIgnored}
+                        onChange={(e) => { setShowIgnored(e.target.checked); if (e.target.checked) setHeartedOnly(false); }}
+                        className="rounded border-border"
+                    />
+                    <EyeOff className="w-3 h-3" />
+                    Show ignored
+                </label>
             </div>
 
             {/* Job Cards */}
@@ -1109,7 +1104,7 @@ export function JobMatches() {
                     </div>
                 ) : (
                     data?.jobs.map((job, index) => (
-                        <JobCard key={job.id} job={job} index={index} />
+                        <JobCard key={job.id} job={job} index={index} onStatusChange={handleStatusChange} />
                     ))
                 )}
             </div>

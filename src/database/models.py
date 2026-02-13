@@ -111,6 +111,9 @@ class MatchResult(Base):
     match_engine = Column(String(20), default="nlp")  # "nlp" or "gemini"
     match_confidence = Column(Float, nullable=True)  # Model confidence (0-1)
 
+    # User curation
+    user_status = Column(String(20), nullable=True, index=True)  # 'hearted', 'ignored', or NULL
+
     # Relationships
     job_posting = relationship("JobPosting", back_populates="match_results")
     resume = relationship("Resume", back_populates="match_results")

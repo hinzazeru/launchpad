@@ -64,6 +64,9 @@ export interface Job {
   // Matching metadata
   match_engine?: 'nlp' | 'gemini';
   match_confidence?: number;
+
+  // User curation
+  user_status?: 'hearted' | 'ignored' | null;
 }
 
 export interface JobListResponse {
@@ -731,6 +734,8 @@ class ApiClient {
     location_region?: string;
     sort_by?: 'score' | 'date';
     sort_order?: 'asc' | 'desc';
+    show_ignored?: boolean;
+    hearted_only?: boolean;
     limit?: number;
   }): Promise<JobListResponse> {
     const searchParams = new URLSearchParams();
@@ -741,6 +746,8 @@ class ApiClient {
     if (params?.location_region) searchParams.set('location_region', params.location_region);
     if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
     if (params?.sort_order) searchParams.set('sort_order', params.sort_order);
+    if (params?.show_ignored) searchParams.set('show_ignored', 'true');
+    if (params?.hearted_only) searchParams.set('hearted_only', 'true');
     if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
 
     const query = searchParams.toString();
@@ -749,6 +756,13 @@ class ApiClient {
 
   async getJob(id: number): Promise<Job> {
     return this.fetch<Job>(`/jobs/${id}`);
+  }
+
+  async updateJobStatus(jobId: number, userStatus: string | null): Promise<{ id: number; user_status: string | null }> {
+    return this.fetch(`/jobs/${jobId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ user_status: userStatus }),
+    });
   }
 
   async getJobStats(): Promise<JobStats> {
@@ -1216,12 +1230,41 @@ export function useJobs(params?: {
   location_region?: string;
   sort_by?: 'score' | 'date';
   sort_order?: 'asc' | 'desc';
+  show_ignored?: boolean;
+  hearted_only?: boolean;
   limit?: number;
 }) {
   return useQuery({
     queryKey: ['jobs', params],
     queryFn: () => api.getJobs(params),
     placeholderData: (previousData) => previousData, // Keep previous data during refetch
+  });
+}
+
+export function useUpdateJobStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, userStatus }: { jobId: number; userStatus: string | null }) =>
+      api.updateJobStatus(jobId, userStatus),
+    onMutate: async ({ jobId, userStatus }) => {
+      // Optimistic update: patch the job in all cached job lists
+      await queryClient.cancelQueries({ queryKey: ['jobs'] });
+      queryClient.setQueriesData<JobListResponse>(
+        { queryKey: ['jobs'] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            jobs: old.jobs.map((j) =>
+              j.id === jobId ? { ...j, user_status: userStatus as Job['user_status'] } : j
+            ),
+          };
+        }
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
   });
 }
 

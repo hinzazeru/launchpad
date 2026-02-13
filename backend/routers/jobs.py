@@ -44,6 +44,9 @@ class JobResponse(BaseModel):
     skill_gaps: List[str] = []
     experience_required: Optional[float] = None
 
+    # User curation
+    user_status: Optional[str] = None
+
     model_config = {"from_attributes": True}
 
 
@@ -72,6 +75,8 @@ async def list_jobs(
     sort_by: str = Query("score", pattern="^(score|date)$", description="Sort by 'score' or 'date'"),
     location_region: Optional[str] = Query(None, pattern="^(us|canada|remote)$", description="Filter by region: us, canada, or remote"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
+    show_ignored: bool = Query(False, description="Include ignored matches"),
+    hearted_only: bool = Query(False, description="Show only hearted matches"),
     limit: int = Query(100, ge=1, le=500, description="Max results"),
     session: Session = Depends(get_db)
 ):
@@ -88,6 +93,12 @@ async def list_jobs(
         session.query(JobPosting, MatchResult)
         .join(MatchResult)
     )
+
+    # Apply user_status filters
+    if hearted_only:
+        query = query.filter(MatchResult.user_status == 'hearted')
+    elif not show_ignored:
+        query = query.filter(or_(MatchResult.user_status != 'ignored', MatchResult.user_status.is_(None)))
 
     # Apply sorting
     if sort_by == "date":
@@ -185,6 +196,7 @@ async def list_jobs(
             skills_required_count=len(required_skills),
             skill_gaps=skill_gaps,
             experience_required=job.experience_required,
+            user_status=match.user_status,
         ))
 
     return JobListResponse(
@@ -268,7 +280,44 @@ async def get_job(job_id: int, session: Session = Depends(get_db)):
         skills_required_count=len(required_skills),
         skill_gaps=skill_gaps,
         experience_required=job.experience_required,
+        user_status=match.user_status,
     )
+
+
+class UserStatusRequest(BaseModel):
+    """Request model for updating job user_status."""
+    user_status: Optional[str] = None  # 'hearted', 'ignored', or null to clear
+
+
+class UserStatusResponse(BaseModel):
+    """Response model for user_status update."""
+    id: int
+    user_status: Optional[str] = None
+
+
+@router.patch("/{job_id}/status", response_model=UserStatusResponse)
+async def update_job_status(
+    job_id: int,
+    request: UserStatusRequest,
+    session: Session = Depends(get_db)
+):
+    """Update the user_status (hearted/ignored) for a job match."""
+    if request.user_status not in (None, 'hearted', 'ignored'):
+        raise HTTPException(status_code=400, detail="user_status must be 'hearted', 'ignored', or null")
+
+    match = (
+        session.query(MatchResult)
+        .filter(MatchResult.job_id == job_id)
+        .first()
+    )
+
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found for this job")
+
+    match.user_status = request.user_status
+    session.commit()
+
+    return UserStatusResponse(id=match.id, user_status=match.user_status)
 
 
 class RerankRequest(BaseModel):

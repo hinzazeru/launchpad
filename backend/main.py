@@ -95,6 +95,8 @@ async def startup_event():
             ("search_performance", "gemini_timing_summary", "TEXT"),
             # weekdays_only toggle for scheduled searches
             ("scheduled_searches", "weekdays_only", "BOOLEAN DEFAULT FALSE"),
+            # user curation (heart/ignore) on match results
+            ("match_results", "user_status", "VARCHAR(20)"),
         ]
 
         with engine.connect() as conn:
