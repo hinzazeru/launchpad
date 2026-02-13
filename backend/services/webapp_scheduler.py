@@ -468,8 +468,12 @@ class WebAppScheduler:
                     JobPosting.title.ilike(f"%{actual_keyword}%")
                 )
                 
+                # Skip DB location filter for remote searches and broad geographic terms
+                # that won't appear in LinkedIn job locations (e.g. "North America", "Europe")
+                BROAD_LOCATIONS = {"north america", "south america", "europe", "asia", "worldwide", "global", "anywhere"}
                 is_remote_request = is_remote_search or work_arrangement == "Remote"
-                if not is_remote_request and search_location:
+                is_broad_location = search_location and search_location.strip().lower() in BROAD_LOCATIONS
+                if not is_remote_request and not is_broad_location and search_location:
                     location_filter = search_location.split(',')[-1].strip()
                     query = query.filter(JobPosting.location.ilike(f"%{location_filter}%"))
                 
