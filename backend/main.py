@@ -93,6 +93,8 @@ async def startup_event():
             ("search_performance", "rematch_type", "VARCHAR(30)"),
             ("search_performance", "jobs_skipped", "INTEGER"),
             ("search_performance", "gemini_timing_summary", "TEXT"),
+            # weekdays_only toggle for scheduled searches
+            ("scheduled_searches", "weekdays_only", "BOOLEAN DEFAULT FALSE"),
         ]
 
         with engine.connect() as conn:

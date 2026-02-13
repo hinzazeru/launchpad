@@ -30,6 +30,7 @@ class ScheduleBase(BaseModel):
         description="Daily run times in HH:MM format (24-hour)"
     )
     timezone: str = Field(default="America/Toronto", description="Timezone for run times")
+    weekdays_only: bool = Field(default=False, description="Only run on weekdays (Mon-Fri)")
 
     @field_validator('run_times')
     @classmethod
@@ -80,6 +81,7 @@ class ScheduleUpdate(BaseModel):
     enabled: Optional[bool] = None
     run_times: Optional[List[str]] = None
     timezone: Optional[str] = None
+    weekdays_only: Optional[bool] = None
 
     @field_validator('run_times')
     @classmethod

@@ -184,6 +184,7 @@ class ScheduledSearch(Base):
     enabled = Column(Boolean, default=True, index=True)
     run_times = Column(JSON, default=["08:00", "12:00", "16:00", "20:00"])  # Daily times
     timezone = Column(String(50), default="America/Toronto")
+    weekdays_only = Column(Boolean, default=False)  # Only run Mon-Fri
 
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)

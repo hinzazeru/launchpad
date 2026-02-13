@@ -158,9 +158,13 @@ class WebAppScheduler:
                 existing.remove()
             
             # Add new job with cron trigger
+            trigger_kwargs = dict(hour=hour, minute=minute, timezone=tz)
+            if schedule.weekdays_only:
+                trigger_kwargs['day_of_week'] = '0-4'  # Mon-Fri
+
             self._scheduler.add_job(
                 func=self.execute_scheduled_search,
-                trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+                trigger=CronTrigger(**trigger_kwargs),
                 id=job_id,
                 args=[schedule.id],
                 name=f"{schedule.name} @ {time_str}"

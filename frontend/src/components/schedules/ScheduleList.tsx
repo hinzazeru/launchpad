@@ -255,6 +255,11 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
                                                             Paused
                                                         </Badge>
                                                     )}
+                                                    {schedule.weekdays_only && (
+                                                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                                                            Weekdays
+                                                        </Badge>
+                                                    )}
                                                 </div>
 
                                                 <div className="text-sm text-muted-foreground mb-2">

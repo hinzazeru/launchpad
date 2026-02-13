@@ -611,6 +611,7 @@ export interface ScheduledSearch {
   enabled: boolean;
   run_times: string[];
   timezone: string;
+  weekdays_only: boolean;
   created_at: string;
   updated_at: string;
   last_run_at?: string;
@@ -633,6 +634,7 @@ export interface ScheduleCreateParams {
   enabled?: boolean;
   run_times?: string[];
   timezone?: string;
+  weekdays_only?: boolean;
 }
 
 export interface ScheduleUpdateParams {
@@ -650,6 +652,7 @@ export interface ScheduleUpdateParams {
   enabled?: boolean;
   run_times?: string[];
   timezone?: string;
+  weekdays_only?: boolean;
 }
 
 export interface ScheduleListResponse {

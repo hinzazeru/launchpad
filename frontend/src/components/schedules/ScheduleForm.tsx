@@ -94,6 +94,7 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
     const [retryDelayMinutes, setRetryDelayMinutes] = useState(schedule?.retry_delay_minutes ?? 10);
     const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
     const [timezone, setTimezone] = useState(schedule?.timezone || 'America/Toronto');
+    const [weekdaysOnly, setWeekdaysOnly] = useState(schedule?.weekdays_only ?? false);
     const [runTimes, setRunTimes] = useState<string[]>(
         schedule?.run_times || ['08:00', '12:00', '16:00', '20:00']
     );
@@ -160,6 +161,7 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
                     enabled,
                     timezone,
                     run_times: runTimes,
+                    weekdays_only: weekdaysOnly,
                 };
                 await updateMutation.mutateAsync({ id: schedule.id, params });
                 toast.success('Schedule Updated', `"${name}" has been updated`);
@@ -179,6 +181,7 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
                     enabled,
                     timezone,
                     run_times: runTimes,
+                    weekdays_only: weekdaysOnly,
                 };
                 await createMutation.mutateAsync(params);
                 toast.success('Schedule Created', `"${name}" has been created`);
@@ -414,6 +417,21 @@ export function ScheduleForm({ schedule, onClose, onSaved }: ScheduleFormProps) 
                                 Add
                             </Button>
                         </div>
+                    </div>
+
+                    {/* Weekdays Only */}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="weekdaysOnly"
+                            checked={weekdaysOnly}
+                            onChange={(e) => setWeekdaysOnly(e.target.checked)}
+                            disabled={isSaving}
+                            className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor="weekdaysOnly" className="text-sm">
+                            Weekdays only (Mon–Fri)
+                        </label>
                     </div>
 
                     {/* Export to Sheets */}

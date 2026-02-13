@@ -81,6 +81,7 @@ async def create_schedule(schedule: ScheduleCreate, db: Session = Depends(get_db
             timezone=schedule.timezone,
             max_retries=schedule.max_retries,
             retry_delay_minutes=schedule.retry_delay_minutes,
+            weekdays_only=schedule.weekdays_only,
         )
 
         db.add(db_schedule)
