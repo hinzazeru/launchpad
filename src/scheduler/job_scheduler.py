@@ -56,7 +56,7 @@ from src.database.db import SessionLocal
 from src.database.models import Resume, JobPosting, MatchResult
 from src.database import crud
 from src.importers.provider_factory import get_job_provider
-from src.matching.engine import JobMatcher
+from backend.services.matcher_service import get_job_matcher
 from src.integrations.sheets_connector import SheetsConnector
 from src.integrations.gemini_client import GeminiMatchReranker
 
@@ -88,7 +88,7 @@ class JobScheduler:
 
         # Initialize components
         self.provider = get_job_provider()
-        self.matcher = JobMatcher()  # Pre-caches skill dictionary embeddings
+        self.matcher = get_job_matcher()  # Singleton — shares model with backend
         self.sheets_connector = SheetsConnector()
         self.gemini_reranker = GeminiMatchReranker()  # LLM-based match re-ranking
 
