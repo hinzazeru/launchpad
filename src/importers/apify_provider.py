@@ -559,57 +559,13 @@ class ApifyJobProvider(JobProvider):
             else:
                 session.commit()
 
-            # Run Gemini extraction on newly imported jobs (domains + summaries)
-            if gemini_extractor and new_job_postings:
-                for job_posting in new_job_postings:
-                    # Extract domains
-                    try:
-                        result = gemini_extractor.extract_domains(
-                            description=job_posting.description or '',
-                            company=job_posting.company,
-                            title=job_posting.title
-                        )
-                        domains = result.get('domains', [])
-                        if domains or result.get('reasoning'):  # Gemini responded
-                            job_posting.required_domains = domains if domains else None
-                            job_posting.domain_extraction_method = 'llm'
-                    except Exception as e:
-                        logger.warning(f"Gemini domain extraction failed for {job_posting.title}: {e}")
-                        # Keep keyword extraction as fallback
-
-                    # Generate summary
-                    try:
-                        summary = gemini_extractor.summarize_job(
-                            description=job_posting.description or '',
-                            company=job_posting.company,
-                            title=job_posting.title
-                        )
-                        if summary:
-                            job_posting.summary = summary
-                    except Exception as e:
-                        logger.warning(f"Gemini summarization failed for {job_posting.title}: {e}")
-                        # Summary is optional
-
-                session.commit()
-
-            # Extract structured requirements for AI matching
-            if requirements_extractor and new_job_postings:
-                for job_posting in new_job_postings:
-                    try:
-                        requirements = requirements_extractor.extract_requirements(
-                            description=job_posting.description or '',
-                            title=job_posting.title,
-                            company=job_posting.company
-                        )
-                        if requirements:
-                            job_posting.structured_requirements = requirements
-                            job_posting.requirements_extracted_at = datetime.utcnow()
-                            job_posting.requirements_extraction_model = requirements_extractor.model_name
-                    except Exception as e:
-                        logger.warning(f"Requirements extraction failed for {job_posting.title}: {e}")
-                        # Requirements extraction is optional - AI matching can still work without it
-
-                session.commit()
+            # Run Gemini extraction on newly imported jobs (parallel)
+            if new_job_postings and (gemini_extractor or requirements_extractor):
+                from src.importers.enrichment import enrich_jobs_parallel
+                enriched = enrich_jobs_parallel(
+                    new_job_postings, gemini_extractor, requirements_extractor, session
+                )
+                logger.info(f"Enriched {enriched}/{len(new_job_postings)} jobs with Gemini")
 
             if self.use_mock_data:
                 print(f"[MOCK MODE] Imported {imported_count} jobs (skipped freshness validation, duplicates filtered)")

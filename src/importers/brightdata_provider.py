@@ -449,54 +449,13 @@ class BrightDataJobProvider(JobProvider):
             else:
                 session.commit()
 
-            # Run Gemini extraction on newly imported jobs (domains + summaries)
-            if gemini_extractor and new_job_postings:
-                for job_posting in new_job_postings:
-                    # Extract domains
-                    try:
-                        result = gemini_extractor.extract_domains(
-                            description=job_posting.description or '',
-                            company=job_posting.company,
-                            title=job_posting.title
-                        )
-                        domains = result.get('domains', [])
-                        if domains or result.get('reasoning'):  # Gemini responded
-                            job_posting.required_domains = domains if domains else None
-                            job_posting.domain_extraction_method = 'llm'
-                    except Exception as e:
-                        logger.warning(f"Gemini domain extraction failed for {job_posting.title}: {e}")
-                        # Keep keyword extraction as fallback
-
-                    # Generate summary
-                    try:
-                        summary = gemini_extractor.summarize_job(
-                            description=job_posting.description or '',
-                            company=job_posting.company,
-                            title=job_posting.title
-                        )
-                        if summary:
-                            job_posting.ai_summary = summary
-                    except Exception as e:
-                        logger.warning(f"Gemini summary generation failed for {job_posting.title}: {e}")
-
-                # Commit Gemini-extracted data
-                session.commit()
-
-            # Run requirements extraction if enabled
-            if requirements_extractor and new_job_postings:
-                for job_posting in new_job_postings:
-                    try:
-                        requirements = requirements_extractor.extract_requirements(
-                            description=job_posting.description or '',
-                            title=job_posting.title
-                        )
-                        if requirements:
-                            job_posting.gemini_requirements = requirements
-                    except Exception as e:
-                        logger.warning(f"Gemini requirements extraction failed for {job_posting.title}: {e}")
-
-                # Commit requirements data
-                session.commit()
+            # Run Gemini extraction on newly imported jobs (parallel)
+            if new_job_postings and (gemini_extractor or requirements_extractor):
+                from src.importers.enrichment import enrich_jobs_parallel
+                enriched = enrich_jobs_parallel(
+                    new_job_postings, gemini_extractor, requirements_extractor, session
+                )
+                logger.info(f"Enriched {enriched}/{len(new_job_postings)} jobs with Gemini")
 
             logger.info(f"Imported {imported_count} new jobs from Bright Data")
             return imported_count
