@@ -235,40 +235,6 @@ async def get_job_stats(session: Session = Depends(get_db)):
     }
 
 
-@router.post("/backfill-enrichment")
-async def backfill_enrichment(session: Session = Depends(get_db)):
-    """One-off: backfill Gemini enrichment for jobs missing summary/requirements."""
-    import logging
-    logger = logging.getLogger(__name__)
-
-    from src.integrations.gemini_client import get_gemini_extractor, get_requirements_extractor
-    from src.importers.enrichment import enrich_jobs_parallel
-
-    jobs = session.query(JobPosting).filter(
-        or_(
-            JobPosting.summary.is_(None),
-            JobPosting.structured_requirements.is_(None),
-        )
-    ).all()
-
-    if not jobs:
-        return {"message": "No jobs need backfill", "count": 0}
-
-    gemini_extractor = get_gemini_extractor()
-    requirements_extractor = get_requirements_extractor()
-
-    if not gemini_extractor and not requirements_extractor:
-        raise HTTPException(status_code=500, detail="No Gemini extractors available")
-
-    logger.info(f"Backfilling enrichment for {len(jobs)} jobs")
-    enriched = enrich_jobs_parallel(
-        jobs, gemini_extractor, requirements_extractor, session, max_workers=5
-    )
-    logger.info(f"Backfill complete: enriched {enriched}/{len(jobs)} jobs")
-
-    return {"message": f"Enriched {enriched}/{len(jobs)} jobs", "enriched": enriched, "total": len(jobs)}
-
-
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: int, session: Session = Depends(get_db)):
     """Get a single job by ID with full details."""
