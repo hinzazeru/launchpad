@@ -259,7 +259,7 @@ class GeminiMatcher:
     ) -> str:
         """Build prompt using structured requirements."""
         # Format must-have skills
-        must_have = requirements.get("must_have_skills", [])
+        must_have = requirements.get("must_have_skills") or []
         must_have_text = "\n".join([
             f"- {s.get('name', s) if isinstance(s, dict) else s}"
             + (f" ({s.get('context', '')})" if isinstance(s, dict) and s.get('context') else "")
@@ -268,7 +268,7 @@ class GeminiMatcher:
         ]) if must_have else "Not specified"
 
         # Format nice-to-have skills
-        nice_to_have = requirements.get("nice_to_have_skills", [])
+        nice_to_have = requirements.get("nice_to_have_skills") or []
         nice_to_have_text = "\n".join([
             f"- {s.get('name', s) if isinstance(s, dict) else s}"
             for s in nice_to_have
@@ -285,7 +285,7 @@ class GeminiMatcher:
             required_years = "Not specified"
 
         # Format responsibilities
-        responsibilities = requirements.get("key_responsibilities", [])
+        responsibilities = requirements.get("key_responsibilities") or []
         resp_text = "\n".join([f"- {r}" for r in responsibilities[:7]]) if responsibilities else "Not specified"
 
         return AI_MATCH_PROMPT.format(
@@ -299,8 +299,8 @@ class GeminiMatcher:
             nice_to_have_skills=nice_to_have_text,
             required_years=required_years,
             seniority_level=requirements.get("seniority_level", "Not specified"),
-            required_domains=", ".join(requirements.get("required_domains", [])) or "Not specified",
-            preferred_domains=", ".join(requirements.get("preferred_domains", [])) or "Not specified",
+            required_domains=", ".join(requirements.get("required_domains") or []) or "Not specified",
+            preferred_domains=", ".join(requirements.get("preferred_domains") or []) or "Not specified",
             responsibilities=resp_text
         )
 
