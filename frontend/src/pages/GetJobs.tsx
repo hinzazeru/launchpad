@@ -498,10 +498,10 @@ export function GetJobs() {
 
   return (
     <PageTransition>
-      <div className="container mx-auto p-6 max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground">Get Jobs</h1>
-          <p className="text-muted-foreground mt-2">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Get Jobs</h1>
+          <p className="text-muted-foreground mt-1">
             Search LinkedIn for jobs and match them against your resume
           </p>
         </div>

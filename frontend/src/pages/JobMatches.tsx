@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useJobs, useAnalyticsMarket, useUpdateJobStatus } from '@/services/api';
@@ -57,6 +57,15 @@ function RadialScore({
     breakdown?: ScoreBreakdown;
 }) {
     const [showTooltip, setShowTooltip] = useState(false);
+
+    // Dismiss on outside click — enables tap-to-show on mobile
+    useEffect(() => {
+        if (!showTooltip) return;
+        const dismiss = () => setShowTooltip(false);
+        document.addEventListener('click', dismiss);
+        return () => document.removeEventListener('click', dismiss);
+    }, [showTooltip]);
+
     const radius = (size - strokeWidth) / 2;
     const circumference = radius * 2 * Math.PI;
     const offset = circumference - (score / 100) * circumference;
@@ -79,10 +88,16 @@ function RadialScore({
 
     return (
         <div
-            className="relative"
+            className={`relative ${hasBreakdown ? 'cursor-pointer' : ''}`}
             style={{ width: size, height: size }}
             onMouseEnter={() => hasBreakdown && setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
+            onClick={(e) => {
+                if (hasBreakdown) {
+                    e.stopPropagation(); // prevent card expand
+                    setShowTooltip(v => !v);
+                }
+            }}
         >
             <svg width={size} height={size} className="-rotate-90">
                 <defs>
