@@ -127,6 +127,8 @@
 | **Telegram Bot** | `src/bot/telegram_bot.py` | Command handling, user interaction |
 | **Job Scheduler** | `src/scheduler/job_scheduler.py` | Automated background scheduling |
 | **API Importer** | `src/importers/apify_provider.py` | Fetch jobs from Apify |
+| **BrightData Importer** | `src/importers/brightdata_provider.py` | Fetch jobs from Bright Data |
+| **Job Enrichment** | `src/importers/enrichment.py` | Parallel Gemini extraction (domains, summaries, requirements) |
 | **Job Matcher** | `src/matching/engine.py` | Orchestrate matching (dual-mode) |
 | **AI Matcher** | `src/matching/gemini_matcher.py` | Gemini-based AI matching |
 | **Match Types** | `src/matching/requirements.py` | Data structures for AI results |
@@ -160,7 +162,11 @@
 
 4. IMPORTING
    ├── Normalize and validate job data
-   ├── Import to SQLite (skip duplicates)
+   ├── Import to database (skip duplicates)
+   ├── Enrich with Gemini in parallel (5 concurrent workers):
+   │   ├── Domain extraction
+   │   ├── Job summarization
+   │   └── Structured requirements extraction
    └── Return "Fetched Jobs" list (unmatched raw jobs) for transparency
 
 5. MATCHING

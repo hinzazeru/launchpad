@@ -34,7 +34,10 @@ backend/
 │   ├── analysis.py          # AI Analysis endpoints
 │   ├── analytics.py         # Performance summaries
 └── ...
-├── importers/apify_provider.py # Fetches jobs from Apify LinkedIn scraper
+├── importers/
+│   ├── apify_provider.py    # Fetches jobs from Apify LinkedIn scraper
+│   ├── brightdata_provider.py # Fetches jobs from Bright Data
+│   └── enrichment.py        # Parallel Gemini extraction (domains, summaries, requirements)
 ├── integrations/
 │   ├── sheets_connector.py  # Google Sheets export
 │   └── gemini_client.py     # Gemini AI client (google-generativeai)
@@ -90,7 +93,9 @@ frontend/src/
 
 14. **Environment Variable Config Overrides**: `src/config.py` checks env vars before YAML values via the `ENV_OVERRIDES` mapping. This enables Railway/cloud deployments where secrets are injected as env vars. Config.yaml is optional — if missing, the app runs on env vars and defaults only. Boolean coercion handles `"true"/"false"` strings automatically.
 
-15. **Railway Deployment**: The app is deployed on Railway at `https://launchpad-production-1ce9.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
+15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. Both Apify and BrightData providers share this helper.
+
+16. **Railway Deployment**: The app is deployed on Railway at `https://launchpad-production-1ce9.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
 
 ## Common Tasks
 
@@ -210,6 +215,7 @@ When modifying features, these files often need synchronized updates:
 | AI matching algorithm | `gemini_matcher.py`, `requirements.py`, `engine.py`, `ARCHITECTURE.md` |
 | AI match insights UI | `api.ts` (types), `JobMatches.tsx`, `Dashboard.tsx` |
 | Database schema | `models.py`, `crud.py`, may need migration |
+| Job enrichment pipeline | `enrichment.py`, `apify_provider.py`, `brightdata_provider.py` |
 
 ## Deployment
 
