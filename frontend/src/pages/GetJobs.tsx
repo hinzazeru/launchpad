@@ -155,15 +155,15 @@ function StatsCard({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
-        'p-4 rounded-lg border flex flex-col items-center justify-center text-center',
+        'p-2 sm:p-4 rounded-lg border flex flex-col items-center justify-center text-center',
         highlight ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : 'bg-muted/50'
       )}
     >
-      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-        <Icon className="h-4 w-4" />
-        <span className="text-xs">{label}</span>
+      <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
+        <Icon className="h-3.5 w-3.5" />
+        <span className="text-[10px] sm:text-xs leading-tight text-center">{label}</span>
       </div>
-      <div className={cn('text-2xl font-bold', highlight && 'text-green-600 dark:text-green-400')}>
+      <div className={cn('text-lg sm:text-2xl font-bold', highlight && 'text-green-600 dark:text-green-400')}>
         {value}
       </div>
     </motion.div>
@@ -182,7 +182,7 @@ function ResultsPanel({ result }: { result: SearchResult }) {
   return (
     <div className="space-y-6">
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <StatsCard label="Jobs Fetched" value={result.jobs_fetched} icon={Search} />
         <StatsCard label="Jobs Matched" value={result.jobs_matched} icon={BarChart3} />
         <StatsCard

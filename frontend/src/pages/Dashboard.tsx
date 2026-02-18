@@ -681,9 +681,25 @@ export function Dashboard() {
           </TabsList>
 
           <TabsContent value="analysis" className="mt-0">
+
+        {/* Mobile: compact job/resume summary shown after analysis */}
+        {analysisResult && selectedJob && (
+          <div className="lg:hidden flex items-center gap-3 p-3 mb-4 rounded-lg bg-muted/50 border border-border/50">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{selectedJob.title}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {selectedJob.company}{selectedResume ? ` • ${selectedResume.name}` : ''}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setAnalysisResult(null)}>
+              Change
+            </Button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Selection */}
-          <div className="lg:col-span-1 space-y-4">
+          {/* Left Column - Selection — hidden on mobile once results are shown */}
+          <div className={"lg:col-span-1 space-y-4" + (analysisResult ? " hidden lg:block" : "")}>
             {/* Job Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
@@ -973,45 +989,45 @@ export function Dashboard() {
                 <div className="space-y-6">
                   {/* Stats Bar - matching JobMatches design */}
                   <motion.div
-                    className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+                    className="grid grid-cols-2 sm:grid-cols-4 gap-2"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                   >
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <TrendingUp className="w-4 h-4 text-primary" />
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                      <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0">
+                        <TrendingUp className="w-3.5 h-3.5 text-primary" />
                       </div>
-                      <div>
-                        <p className="text-2xl font-bold tabular-nums">{(analysisResult.overall_alignment * 100).toFixed(0)}%</p>
-                        <p className="text-xs text-muted-foreground">Overall Score</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-2 rounded-md bg-blue-500/10">
-                        <FileText className="w-4 h-4 text-blue-500" />
-                      </div>
-                      <div>
-                        <p className="text-2xl font-bold tabular-nums">{analysisResult.total_bullets}</p>
-                        <p className="text-xs text-muted-foreground">Total Bullets</p>
+                      <div className="min-w-0">
+                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{(analysisResult.overall_alignment * 100).toFixed(0)}%</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Overall Score</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-2 rounded-md bg-amber-500/10">
-                        <AlertCircle className="w-4 h-4 text-amber-500" />
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                      <div className="p-1.5 rounded-md bg-blue-500/10 flex-shrink-0">
+                        <FileText className="w-3.5 h-3.5 text-blue-500" />
                       </div>
-                      <div>
-                        <p className="text-2xl font-bold tabular-nums">{analysisResult.low_scoring_bullets}</p>
-                        <p className="text-xs text-muted-foreground">Low Scoring</p>
+                      <div className="min-w-0">
+                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{analysisResult.total_bullets}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Bullets</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-2 rounded-md bg-emerald-500/10">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                      <div className="p-1.5 rounded-md bg-amber-500/10 flex-shrink-0">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
                       </div>
-                      <div>
-                        <p className="text-2xl font-bold tabular-nums">{totalModifications}</p>
-                        <p className="text-xs text-muted-foreground">Modified</p>
+                      <div className="min-w-0">
+                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{analysisResult.low_scoring_bullets}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Low Scoring</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                      <div className="p-1.5 rounded-md bg-emerald-500/10 flex-shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{totalModifications}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Modified</p>
                       </div>
                     </div>
                   </motion.div>

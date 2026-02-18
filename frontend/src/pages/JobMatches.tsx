@@ -364,11 +364,16 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
                                     {/* Job Domains - Moved to Header */}
                                     {job.domains && job.domains.length > 0 && (
                                         <div className="flex items-center gap-1.5">
-                                            {job.domains.map(domain => (
+                                            {job.domains.slice(0, 2).map(domain => (
                                                 <span key={domain} className="inline-flex px-2 py-0.5 text-[10px] font-medium rounded-md border bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20">
                                                     {domain}
                                                 </span>
                                             ))}
+                                            {job.domains.length > 2 && (
+                                                <span className="text-[10px] text-muted-foreground font-medium">
+                                                    +{job.domains.length - 2}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
 
