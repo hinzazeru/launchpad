@@ -323,20 +323,25 @@ class JobMatcher:
     def calculate_experience_match(
         self,
         resume_years: float,
-        job_years_required: Optional[float]
+        job_years_required: Optional[float],
+        max_years: Optional[float] = None
     ) -> float:
         """Calculate experience alignment score.
 
         Args:
             resume_years: Years of experience from resume
-            job_years_required: Years required by job (can be None)
+            job_years_required: Minimum years required by job (can be None)
+            max_years: Maximum years preferred by job (can be None). When provided,
+                       being above the range results in a slight overqualified penalty.
 
         Returns:
             Score from 0.0 to 1.0
 
         Scoring logic:
             - If job doesn't specify requirements: 0.4 (slightly penalized)
-            - If resume >= required: 1.0 (perfect match)
+            - If resume in [min, max] range: 1.0 (perfect match)
+            - If resume > max (overqualified): 0.85 (slight penalty)
+            - If resume >= min (no max specified): 1.0
             - If resume < required: Scaled score based on deficit
                 - 0-1 year deficit: 0.7
                 - 1-2 year deficit: 0.5
@@ -346,8 +351,12 @@ class JobMatcher:
         if job_years_required is None or job_years_required == 0:
             return 0.4  # No requirements specified - slightly penalize unknown
 
+        # Check overqualified when max_years is known
+        if max_years is not None and resume_years > max_years:
+            return 0.85  # Overqualified - slight penalty but still viable
+
         if resume_years >= job_years_required:
-            return 1.0  # Meets or exceeds requirements
+            return 1.0  # Meets or exceeds minimum requirements
 
         # Calculate deficit
         deficit = job_years_required - resume_years
@@ -520,36 +529,69 @@ class JobMatcher:
         Returns:
             Dictionary with match results
         """
-        # Extract skills from job description (preferred over LinkedIn tags)
-        extracted_skills = extract_skills_from_description(job.description or "")
+        # Use Gemini-extracted structured_requirements when available (more accurate than regex)
+        structured_req = job.structured_requirements  # dict or None (JSON column)
+        must_have_skills: List[str] = []
+        nice_to_have_skills: List[str] = []
+        extracted_skills: List[str] = []
 
-        # Log warning for sparse skill extraction
-        if len(extracted_skills) < 3:
-            logger.warning(
-                f"Low skill extraction ({len(extracted_skills)} skills) for job: "
-                f"'{job.title}' at '{job.company}' (desc len: {len(job.description or '')})"
+        if structured_req:
+            raw_must = structured_req.get('must_have_skills', [])
+            raw_nice = structured_req.get('nice_to_have_skills', [])
+            must_have_skills = [s['name'] if isinstance(s, dict) else s for s in raw_must if s]
+            nice_to_have_skills = [s['name'] if isinstance(s, dict) else s for s in raw_nice if s]
+
+        if must_have_skills or nice_to_have_skills:
+            # Structured path: use Gemini-extracted skills with importance weights
+            logger.debug(
+                f"NLP using structured_requirements for '{job.title}': "
+                f"{len(must_have_skills)} must-have, {len(nice_to_have_skills)} nice-to-have"
             )
+            job_skills = must_have_skills + nice_to_have_skills
+            skill_weights: Optional[Dict[str, float]] = {s: 2.0 for s in must_have_skills}
+            skill_weights.update({s: 1.0 for s in nice_to_have_skills})
+        else:
+            # Fallback: regex extraction from description (original behavior)
+            extracted_skills = extract_skills_from_description(job.description or "")
+            if len(extracted_skills) < 3:
+                logger.warning(
+                    f"Low skill extraction ({len(extracted_skills)} skills) for job: "
+                    f"'{job.title}' at '{job.company}' (desc len: {len(job.description or '')})"
+                )
+            job_skills = extracted_skills if extracted_skills else (job.required_skills or [])
+            skill_weights = None
 
-        # Use extracted skills if available, fall back to required_skills field
-        job_skills = extracted_skills if extracted_skills else (job.required_skills or [])
-
-        # Skills matching
+        # Skills matching (weighted when structured_requirements available)
         skills_score, matching_skills, match_details = self.skills_matcher.calculate_skills_match(
             resume_skills=resume.skills or [],
             job_skills=job_skills,
-            threshold=skills_threshold
+            threshold=skills_threshold,
+            weights=skill_weights
         )
 
-        # Experience matching
+        # Experience matching — use min/max range from structured_requirements when available
+        min_years = job.experience_required
+        max_years: Optional[float] = None
+        if structured_req:
+            min_years = structured_req.get('min_years', min_years)
+            max_years = structured_req.get('max_years')
+
         experience_score = self.calculate_experience_match(
             resume_years=resume.experience_years or 0,
-            job_years_required=job.experience_required
+            job_years_required=min_years,
+            max_years=max_years
         )
 
-        # Domain matching
+        # Domain matching — prefer structured_requirements domains when available
+        job_domains = job.required_domains or []
+        if structured_req:
+            sr_domains = structured_req.get('required_domains', [])
+            if sr_domains:
+                job_domains = sr_domains
+
         domain_score, matching_domains, missing_domains = self.calculate_domain_match(
             resume_domains=resume.domains or [],
-            job_domains=job.required_domains or []
+            job_domains=job_domains
         )
 
         # Calculate weighted overall score
@@ -578,7 +620,7 @@ class JobMatcher:
             'match_details': match_details,
             'extracted_skills': extracted_skills,
             'resume_years': resume.experience_years or 0,
-            'job_years_required': job.experience_required,
+            'job_years_required': min_years,
             'engine_version': self.engine_version,
             'match_engine': 'nlp',
         }

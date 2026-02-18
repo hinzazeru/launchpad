@@ -42,6 +42,7 @@ class JobResponse(BaseModel):
     skills_matched_count: int = 0
     skills_required_count: int = 0
     skill_gaps: List[str] = []
+    critical_skill_gaps: List[str] = []
     experience_required: Optional[float] = None
 
     # User curation
@@ -171,6 +172,16 @@ async def list_jobs(
         matching_skills_lower = {s.lower() for s in matching_skills}
         skill_gaps = [s for s in required_skills if s.lower() not in matching_skills_lower]
 
+        # Tag critical gaps using must_have_skills from structured_requirements
+        critical_skill_gaps = []
+        if job.structured_requirements:
+            must_have = [
+                s['name'].lower() if isinstance(s, dict) else s.lower()
+                for s in job.structured_requirements.get('must_have_skills', [])
+                if s
+            ]
+            critical_skill_gaps = [g for g in skill_gaps if g.lower() in must_have]
+
         jobs.append(JobResponse(
             id=job.id,
             title=job.title,
@@ -195,6 +206,7 @@ async def list_jobs(
             skills_matched_count=len(matching_skills),
             skills_required_count=len(required_skills),
             skill_gaps=skill_gaps,
+            critical_skill_gaps=critical_skill_gaps,
             experience_required=job.experience_required,
             user_status=match.user_status,
         ))
@@ -255,6 +267,15 @@ async def get_job(job_id: int, session: Session = Depends(get_db)):
     matching_skills_lower = {s.lower() for s in matching_skills}
     skill_gaps = [s for s in required_skills if s.lower() not in matching_skills_lower]
 
+    critical_skill_gaps = []
+    if job.structured_requirements:
+        must_have = [
+            s['name'].lower() if isinstance(s, dict) else s.lower()
+            for s in job.structured_requirements.get('must_have_skills', [])
+            if s
+        ]
+        critical_skill_gaps = [g for g in skill_gaps if g.lower() in must_have]
+
     return JobResponse(
         id=job.id,
         title=job.title,
@@ -279,6 +300,7 @@ async def get_job(job_id: int, session: Session = Depends(get_db)):
         skills_matched_count=len(matching_skills),
         skills_required_count=len(required_skills),
         skill_gaps=skill_gaps,
+        critical_skill_gaps=critical_skill_gaps,
         experience_required=job.experience_required,
         user_status=match.user_status,
     )

@@ -128,11 +128,11 @@ def test_calculate_experience_match_deficit(mock_config):
 
     # 1 year deficit
     score = matcher.calculate_experience_match(resume_years=4.0, job_years_required=5.0)
-    assert score == 0.8
+    assert score == 0.7
 
     # 3+ year deficit
     score = matcher.calculate_experience_match(resume_years=1.0, job_years_required=5.0)
-    assert score == 0.2
+    assert score == 0.1
 
 
 def test_match_job_high_match(mock_config, sample_resume, sample_job_high_match):
@@ -185,7 +185,7 @@ def test_match_jobs_ranking(mock_config, sample_resume):
 
     jobs = [job2, job1]  # Intentionally out of order
 
-    matches = matcher.match_jobs(sample_resume, jobs, min_score=0.0)
+    matches, _ = matcher.match_jobs(sample_resume, jobs, min_score=0.0)
 
     # Should be sorted by score (descending)
     assert matches[0]['overall_score'] >= matches[1]['overall_score']

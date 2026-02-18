@@ -86,7 +86,8 @@ class SkillsMatcher:
         resume_skills: List[str],
         job_skills: List[str],
         threshold: float = 0.5,
-        use_related_skills: bool = True
+        use_related_skills: bool = True,
+        weights: Optional[Dict[str, float]] = None
     ) -> Tuple[float, List[str], Dict[str, float]]:
         """Calculate skills match score using semantic similarity and related skills.
 
@@ -99,6 +100,9 @@ class SkillsMatcher:
             job_skills: List of required skills from job posting
             threshold: Minimum similarity threshold to consider a match (0.0-1.0)
             use_related_skills: Whether to check for related skills (default True)
+            weights: Optional dict of job_skill -> importance weight. When provided,
+                     the score is a weighted average (e.g. must-have=2.0, nice-to-have=1.0).
+                     When None, all skills are weighted equally (backward-compatible).
 
         Returns:
             Tuple of:
@@ -175,8 +179,17 @@ class SkillsMatcher:
                         'relationship': f"{job_skill_norm} ↔ {related_match['resume_skill_norm']}"
                     }
 
-        # Calculate overall match score (weighted average)
-        match_score = total_score / len(job_skills) if job_skills else 0.0
+        # Calculate overall match score
+        if weights:
+            # Weighted average: must-have skills count more than nice-to-have
+            total_weight = sum(weights.get(s, 1.0) for s in job_skills)
+            weighted_credit = sum(
+                match_details.get(s, {}).get('credit', 0.0) * weights.get(s, 1.0)
+                for s in job_skills
+            )
+            match_score = weighted_credit / total_weight if total_weight > 0 else 0.0
+        else:
+            match_score = total_score / len(job_skills) if job_skills else 0.0
 
         # Remove duplicates from matched_skills while preserving order
         unique_matched_skills = list(dict.fromkeys(matched_skills))
