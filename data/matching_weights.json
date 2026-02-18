@@ -1,0 +1,11 @@
+{
+  "nlp_weights": {
+    "skills": 0.45,
+    "experience": 0.35,
+    "domains": 0.20
+  },
+  "gemini_blend_weights": {
+    "ai": 0.75,
+    "nlp": 0.25
+  }
+}

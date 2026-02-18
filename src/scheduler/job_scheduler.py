@@ -414,8 +414,8 @@ class JobScheduler:
             return self._finalize_perf_stats(perf_stats)
 
         # Sort by blended score (AI + NLP weighted)
-        ai_weight = self.config.get("matching.gemini_rerank.blend_weights.ai", 0.75)
-        nlp_weight = self.config.get("matching.gemini_rerank.blend_weights.nlp", 0.25)
+        blend = self.config.get_gemini_blend_weights()
+        ai_weight, nlp_weight = blend['ai'], blend['nlp']
 
         def get_blended_score(match):
             nlp_score = match.get('overall_score', 0)

@@ -352,8 +352,8 @@ class TelegramBot:
                 high_score_matches = [m for m in all_recent_matches if m.match_score >= 85]
 
                 # Get blend weights for sorting
-                ai_weight = self.config.get("matching.gemini_rerank.blend_weights.ai", 0.75)
-                nlp_weight = self.config.get("matching.gemini_rerank.blend_weights.nlp", 0.25)
+                blend = self.config.get_gemini_blend_weights()
+                ai_weight, nlp_weight = blend['ai'], blend['nlp']
 
                 def get_blended_score(match):
                     nlp_score = match.match_score / 100  # Convert from 0-100 to 0-1
@@ -553,8 +553,8 @@ class TelegramBot:
                     .all()
 
                 # Get blend weights for sorting
-                ai_weight = self.config.get("matching.gemini_rerank.blend_weights.ai", 0.75)
-                nlp_weight = self.config.get("matching.gemini_rerank.blend_weights.nlp", 0.25)
+                blend = self.config.get_gemini_blend_weights()
+                ai_weight, nlp_weight = blend['ai'], blend['nlp']
 
                 def get_blended_score(match):
                     nlp_score = match.match_score / 100

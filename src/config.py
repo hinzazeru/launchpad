@@ -1,5 +1,6 @@
 """Configuration management for LinkedIn Job Matcher."""
 
+import json
 import os
 import logging
 import yaml
@@ -256,8 +257,20 @@ class Config:
             'search_radius': self.get("search.default_search_radius"),
         }
 
+    def _load_matching_weights_file(self) -> dict:
+        """Load data/matching_weights.json (git-tracked, no secrets)."""
+        path = Path(__file__).parent.parent / "data" / "matching_weights.json"
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+
     def get_matching_weights(self) -> Dict[str, float]:
         """Get matching algorithm weights.
+
+        Loads from data/matching_weights.json first (git-tracked), then falls back
+        to config.yaml overrides, then hardcoded defaults.
 
         Returns:
             Dictionary with 'skills', 'experience', and 'domains' weights
@@ -265,20 +278,36 @@ class Config:
         Raises:
             ValueError: If weights don't sum to 1.0
         """
+        file_weights = self._load_matching_weights_file().get("nlp_weights", {})
         weights = {
-            'skills': self.get("matching.weights.skills", 0.45),
-            'experience': self.get("matching.weights.experience", 0.35),
-            'domains': self.get("matching.weights.domains", 0.20),
+            'skills':     self.get("matching.weights.skills",     file_weights.get("skills",     0.45)),
+            'experience': self.get("matching.weights.experience", file_weights.get("experience", 0.35)),
+            'domains':    self.get("matching.weights.domains",    file_weights.get("domains",    0.20)),
         }
 
         total = sum(weights.values())
         if not (0.99 <= total <= 1.01):  # Allow small floating point errors
             raise ValueError(
                 f"Matching weights must sum to 1.0, got {total}. "
-                f"Please check matching.weights in config.yaml"
+                f"Please check data/matching_weights.json or matching.weights in config.yaml"
             )
 
         return weights
+
+    def get_gemini_blend_weights(self) -> Dict[str, float]:
+        """Get Gemini/NLP blend weights for re-ranking.
+
+        Loads from data/matching_weights.json first (git-tracked), then falls back
+        to config.yaml overrides, then hardcoded defaults.
+
+        Returns:
+            Dictionary with 'ai' and 'nlp' blend weights
+        """
+        file_weights = self._load_matching_weights_file().get("gemini_blend_weights", {})
+        return {
+            'ai':  self.get("matching.gemini_rerank.blend_weights.ai",  file_weights.get("ai",  0.75)),
+            'nlp': self.get("matching.gemini_rerank.blend_weights.nlp", file_weights.get("nlp", 0.25)),
+        }
 
     def get_min_match_score(self) -> float:
         """Get minimum match score threshold.
