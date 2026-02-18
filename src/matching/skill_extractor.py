@@ -450,81 +450,147 @@ def extract_salary_from_description(description: str) -> Optional[str]:
     """Extract salary information from job description text.
 
     Looks for common salary patterns and returns a normalized string representation.
-    Only extracts salaries that appear to be realistic annual compensation (40K-500K range).
+    Supports annual salaries (40K-500K range) and hourly rates ($15-$300/hr).
 
     Args:
         description: Job description text
 
     Returns:
-        Salary string (e.g., "$120K-$150K", "$95,000") or None if not found
+        Salary string (e.g., "$120K-$150K", "$95,000", "$60-$70/hr") or None if not found
 
     Examples:
         >>> extract_salary_from_description("Salary: $120,000 - $150,000 per year")
         "$120,000-$150,000"
         >>> extract_salary_from_description("Compensation: 80K-100K")
         "$80K-$100K"
+        >>> extract_salary_from_description("Rate: $60.00/hr - $70.00/hr")
+        "$60-$70/hr"
         >>> extract_salary_from_description("No salary listed")
         None
     """
     if not description:
         return None
 
-    # Patterns to match various salary formats
-    # Priority order: ranges first, then single values
-    patterns = [
-        # Range patterns: $120,000 - $150,000, $120K-$150K, 80k-100k
-        r'\$\s*(\d{2,3},?\d{3})\s*[-–to]+\s*\$?\s*(\d{2,3},?\d{3})',  # $120,000 - $150,000
-        r'\$\s*(\d{2,3})[kK]\s*[-–to]+\s*\$?\s*(\d{2,3})[kK]',  # $120K - $150K
-        r'(\d{2,3})[kK]\s*[-–to]+\s*(\d{2,3})[kK]',  # 120K-150K (no $)
-        # Single value patterns
-        r'\$\s*(\d{2,3},?\d{3})(?:\s*(?:per\s+year|annually|/yr|/year))?',  # $120,000
-        r'\$\s*(\d{2,3})[kK]',  # $120K
-        # CAD/USD prefix patterns
-        r'(?:CAD|USD)\s*(\d{2,3},?\d{3})\s*[-–to]+\s*(\d{2,3},?\d{3})',  # CAD 120,000 - 150,000
-        r'(?:CAD|USD)\s*(\d{2,3},?\d{3})',  # CAD 120,000
+    # --- Hourly rate patterns (checked first to avoid misclassification) ---
+    # Matches /hr, /hour, /hrs, /hours (with optional space before slash)
+    _HR = r'/\s*(?:hr|hour|hrs|hours)'
+
+    hourly_patterns = [
+        # CA$/USD$ prefix hourly ranges: CA$75.00/hr - CA$85.00/hr
+        (r'(CA|US)\$\s*(\d+(?:\.\d+)?)\s*' + _HR + r'\s*[-–to]+\s*(?:(?:CA|US)\$\s*)?(\d+(?:\.\d+)?)\s*' + _HR,
+         'ca_hourly_range'),
+        # Plain hourly ranges: $60/hr - $70/hr, $40–$80 /hour
+        (r'\$\s*(\d+(?:\.\d+)?)\s*' + _HR + r'\s*[-–to]+\s*\$?\s*(\d+(?:\.\d+)?)\s*' + _HR,
+         'plain_hourly_range'),
+        # Plain range where only the second value has /hr: $40 - $80/hr
+        (r'\$\s*(\d+(?:\.\d+)?)\s*[-–to]+\s*\$?\s*(\d+(?:\.\d+)?)\s*' + _HR,
+         'plain_hourly_range'),
+        # Single CA$/USD$ hourly: CA$75/hr
+        (r'(CA|US)\$\s*(\d+(?:\.\d+)?)\s*' + _HR,
+         'ca_hourly_single'),
+        # Single plain hourly: $75/hr
+        (r'\$\s*(\d+(?:\.\d+)?)\s*' + _HR,
+         'plain_hourly_single'),
     ]
 
-    for pattern in patterns:
+    for pattern, kind in hourly_patterns:
         match = re.search(pattern, description, re.IGNORECASE)
-        if match:
-            groups = match.groups()
+        if not match:
+            continue
+        try:
+            if kind == 'ca_hourly_range':
+                prefix, r1, r2 = match.group(1), match.group(2), match.group(3)
+                num1, num2 = float(r1), float(r2)
+                if 15 <= num1 <= 300 and 15 <= num2 <= 300:
+                    return f"{prefix}${int(num1)}-${int(num2)}/hr"
+            elif kind == 'plain_hourly_range':
+                num1, num2 = float(match.group(1)), float(match.group(2))
+                if 15 <= num1 <= 300 and 15 <= num2 <= 300:
+                    return f"${int(num1)}-${int(num2)}/hr"
+            elif kind == 'ca_hourly_single':
+                prefix, num1 = match.group(1), float(match.group(2))
+                if 15 <= num1 <= 300:
+                    return f"{prefix}${int(num1)}/hr"
+            elif kind == 'plain_hourly_single':
+                num1 = float(match.group(1))
+                if 15 <= num1 <= 300:
+                    return f"${int(num1)}/hr"
+        except (ValueError, IndexError):
+            continue
 
-            # Validate the numbers are in realistic salary range (40K - 500K)
-            try:
-                # Parse the first number
-                num1_str = groups[0].replace(',', '')
-                num1 = int(num1_str)
+    # --- Annual salary patterns ---
+    # Priority order: ranges first, then single values.
+    # Each tuple is (pattern, is_range, has_currency_prefix).
+    annual_patterns = [
+        # USD$/CA$/CAD$ prefix ranges with optional "per year" between numbers:
+        #   USD$190,000 per year - USD$211,000 per year
+        #   CA$120,000 - CA$150,000
+        (r'(?:USD|CAD|CA)\$\s*(\d{2,3},?\d{3})(?:\.\d+)?(?:\s*(?:per\s+year|annually|/yr|/year))?\s*[-–to]+\s*(?:(?:USD|CAD|CA)\$\s*)?(\d{2,3},?\d{3})(?:\.\d+)?',
+         True, False),
+        # CAD/USD (space, no $) ranges: CAD 120,000 - 150,000
+        (r'(?:CAD|USD)\s+(\d{2,3},?\d{3})(?:\.\d+)?\s*[-–to]+\s*(\d{2,3},?\d{3})(?:\.\d+)?',
+         True, False),
+        # Plain $ range with optional "per year" between numbers:
+        #   $120,000 per year - $150,000 per year  or  $120,000 - $150,000
+        (r'\$\s*(\d{2,3},?\d{3})(?:\.\d+)?(?:\s*(?:per\s+year|annually|/yr|/year))?\s*[-–to]+\s*\$?\s*(\d{2,3},?\d{3})(?:\.\d+)?',
+         True, False),
+        # "and" as range separator: between $160,360 and $240,540
+        (r'\$\s*(\d{2,3},?\d{3})(?:\.\d+)?\s+and\s+\$?\s*(\d{2,3},?\d{3})(?:\.\d+)?',
+         True, False),
+        # K ranges: $120K - $150K, $120K-$150K
+        (r'\$\s*(\d{2,3})[kK]\s*[-–to]+\s*\$?\s*(\d{2,3})[kK]',
+         True, False),
+        # Bare K ranges: 120K-150K
+        (r'(\d{2,3})[kK]\s*[-–to]+\s*(\d{2,3})[kK]',
+         True, False),
+        # USD$/CA$/CAD$ single values: USD$190,000
+        (r'(?:USD|CAD|CA)\$\s*(\d{2,3},?\d{3})(?:\.\d+)?(?:\s*(?:per\s+year|annually|/yr|/year))?',
+         False, False),
+        # CAD/USD (space) single values: CAD 120,000
+        (r'(?:CAD|USD)\s+(\d{2,3},?\d{3})(?:\.\d+)?',
+         False, False),
+        # Plain $ single: $120,000
+        (r'\$\s*(\d{2,3},?\d{3})(?:\.\d+)?(?:\s*(?:per\s+year|annually|/yr|/year))?',
+         False, False),
+        # K single: $120K
+        (r'\$\s*(\d{2,3})[kK]',
+         False, False),
+    ]
 
-                # Determine if it's in thousands (K) format or full format
-                if num1 < 1000:  # It's in K format (e.g., 120 means 120K)
-                    if num1 < 40 or num1 > 500:  # Outside 40K-500K range
+    for pattern, is_range, _ in annual_patterns:
+        match = re.search(pattern, description, re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            num1_str = match.group(1).replace(',', '')
+            num1 = int(float(num1_str))
+
+            if num1 < 1000:  # K format (e.g., 120 → 120K)
+                if num1 < 40 or num1 > 500:
+                    continue
+            else:  # Full dollar amount
+                if num1 < 40000 or num1 > 500000:
+                    continue
+
+            if is_range:
+                num2_str = match.group(2).replace(',', '')
+                num2 = int(float(num2_str))
+                if num1 < 1000:
+                    if num2 < 40 or num2 > 500:
                         continue
-                else:  # Full format (e.g., 120000)
-                    if num1 < 40000 or num1 > 500000:
+                    return f"${num1}K-${num2}K"
+                else:
+                    if num2 < 40000 or num2 > 500000:
                         continue
+                    return f"${num1:,}-${num2:,}"
+            else:
+                if num1 < 1000:
+                    return f"${num1}K"
+                else:
+                    return f"${num1:,}"
 
-                # Format the output
-                if len(groups) == 2 and groups[1]:  # Range
-                    num2_str = groups[1].replace(',', '')
-                    num2 = int(num2_str)
-
-                    # Validate second number
-                    if num1 < 1000:  # K format
-                        if num2 < 40 or num2 > 500:
-                            continue
-                        return f"${num1}K-${num2}K"
-                    else:  # Full format
-                        if num2 < 40000 or num2 > 500000:
-                            continue
-                        return f"${num1:,}-${num2:,}"
-                else:  # Single value
-                    if num1 < 1000:  # K format
-                        return f"${num1}K"
-                    else:
-                        return f"${num1:,}"
-
-            except (ValueError, IndexError):
-                continue
+        except (ValueError, IndexError):
+            continue
 
     return None
 
