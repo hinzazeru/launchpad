@@ -237,8 +237,7 @@ def test_normalize_apify_job_standard_fields():
     assert normalized['location'] == 'SF'
     assert normalized['description'] == 'Great job'
     assert normalized['url'] == 'https://example.com'
-    assert 'Product Management' in normalized['required_skills']
-    assert 'Technology' in normalized['required_skills']
+    assert normalized['required_skills'] == []  # Skills are populated later by NLP/Gemini extraction
     assert normalized['experience_required'] == 5.0
     assert normalized['source'] == 'api'
 

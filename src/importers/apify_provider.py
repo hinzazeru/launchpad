@@ -340,26 +340,10 @@ class ApifyJobProvider(JobProvider):
             # Default to current time if no posting date found
             normalized['posting_date'] = datetime.utcnow()
 
-        # Parse skills from job_function (comes as string like "Product Management")
-        # Also extract from job_summary if needed
-        skills = []
-        job_function = job_data.get('job_function', '')
-        if job_function:
-            if isinstance(job_function, list):
-                skills.extend(job_function)
-            elif isinstance(job_function, str):
-                skills.append(job_function)
-
-        # Add job industries as additional context
-        job_industries = job_data.get('job_industries', '')
-        if job_industries:
-            if isinstance(job_industries, list):
-                skills.extend(job_industries)
-            elif isinstance(job_industries, str):
-                # Split by comma if it's a comma-separated string
-                skills.extend([s.strip() for s in job_industries.split(',')])
-
-        normalized['required_skills'] = skills
+        # required_skills is populated later by NLP/Gemini extraction from job description text.
+        # job_function (e.g., "Product Management") and job_industries (e.g., "Financial Services")
+        # are LinkedIn metadata fields, not skills — including them causes false skill gap reports.
+        normalized['required_skills'] = []
 
         # Parse experience from job_seniority_level
         seniority_level = job_data.get('job_seniority_level', '')
