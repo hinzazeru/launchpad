@@ -45,6 +45,9 @@ class JobResponse(BaseModel):
     critical_skill_gaps: List[str] = []
     experience_required: Optional[float] = None
 
+    # Match engine metadata
+    match_engine: Optional[str] = None  # 'nlp' or 'gemini'
+
     # User curation
     user_status: Optional[str] = None
 
@@ -208,6 +211,7 @@ async def list_jobs(
             skill_gaps=skill_gaps,
             critical_skill_gaps=critical_skill_gaps,
             experience_required=job.experience_required,
+            match_engine=match.match_engine,
             user_status=match.user_status,
         ))
 
@@ -302,6 +306,7 @@ async def get_job(job_id: int, session: Session = Depends(get_db)):
         skill_gaps=skill_gaps,
         critical_skill_gaps=critical_skill_gaps,
         experience_required=job.experience_required,
+        match_engine=match.match_engine,
         user_status=match.user_status,
     )
 
