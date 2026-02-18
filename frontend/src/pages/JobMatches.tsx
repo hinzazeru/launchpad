@@ -24,6 +24,7 @@ import {
     Bot,
     Heart,
     EyeOff,
+    SlidersHorizontal,
 } from 'lucide-react';
 import {
     Select,
@@ -686,6 +687,8 @@ export function JobMatches() {
     const [sortOrder, setSortOrder] = useState<string>('score_desc');
     const [showIgnored, setShowIgnored] = useState(false);
     const [heartedOnly, setHeartedOnly] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [insightsOpen, setInsightsOpen] = useState(false);
 
     const updateStatusMutation = useUpdateJobStatus();
 
@@ -721,6 +724,17 @@ export function JobMatches() {
         : 0;
     const aiMatches = data?.jobs.filter(j => j.match_engine === 'gemini').length || 0;
     const nlpMatches = totalJobs - aiMatches;
+
+    const activeFilterCount = [
+        search !== '',
+        companyFilter !== '',
+        locationRegion !== '',
+        minScore !== 0,
+        maxScore !== 100,
+        heartedOnly,
+        showIgnored,
+        recency !== 'all',
+    ].filter(Boolean).length;
 
     // Aggregated AI Insights
     const aggregatedInsights = (() => {
@@ -802,47 +816,47 @@ export function JobMatches() {
             {/* Stats Bar */}
             {!isLoading && totalJobs > 0 && (
                 <motion.div
-                    className="grid grid-cols-2 md:grid-cols-4 gap-4"
+                    className="grid grid-cols-2 sm:grid-cols-4 gap-2"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                 >
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                        <div className="p-2 rounded-md bg-primary/10">
-                            <Briefcase className="w-4 h-4 text-primary" />
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0">
+                            <Briefcase className="w-3.5 h-3.5 text-primary" />
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold tabular-nums">{totalJobs}</p>
-                            <p className="text-xs text-muted-foreground">Total Matches</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                        <div className="p-2 rounded-md bg-emerald-500/10">
-                            <TrendingUp className="w-4 h-4 text-emerald-500" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold tabular-nums">{highMatches}</p>
-                            <p className="text-xs text-muted-foreground">High Quality (70%+)</p>
+                        <div className="min-w-0">
+                            <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{totalJobs}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Total Matches</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                        <div className="p-2 rounded-md bg-violet-500/10">
-                            <Sparkles className="w-4 h-4 text-violet-500" />
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-emerald-500/10 flex-shrink-0">
+                            <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold tabular-nums">{avgScore}%</p>
-                            <p className="text-xs text-muted-foreground">Average Score</p>
+                        <div className="min-w-0">
+                            <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{highMatches}</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">High Quality (85+)</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                        <div className="p-2 rounded-md bg-violet-500/10">
-                            <Bot className="w-4 h-4 text-violet-500" />
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-violet-500/10 flex-shrink-0">
+                            <Sparkles className="w-3.5 h-3.5 text-violet-500" />
                         </div>
-                        <div>
-                            <p className="text-2xl font-bold tabular-nums">
-                                {aiMatches}<span className="text-sm font-normal text-muted-foreground">/{nlpMatches}</span>
+                        <div className="min-w-0">
+                            <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{avgScore}%</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Avg Score</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-violet-500/10 flex-shrink-0">
+                            <Bot className="w-3.5 h-3.5 text-violet-500" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">
+                                {aiMatches}<span className="text-xs sm:text-sm font-normal text-muted-foreground">/{nlpMatches}</span>
                             </p>
-                            <p className="text-xs text-muted-foreground">AI / NLP Matches</p>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">AI / NLP</p>
                         </div>
                     </div>
                 </motion.div>
@@ -851,234 +865,271 @@ export function JobMatches() {
             {/* Aggregated AI Insights Panel */}
             {aggregatedInsights && (aggregatedInsights.skillGaps.length > 0 || aggregatedInsights.recommendations.length > 0) && (
                 <motion.div
-                    className="p-4 rounded-xl bg-gradient-to-r from-violet-500/5 to-blue-500/5 border border-violet-500/20"
+                    className="rounded-xl bg-gradient-to-r from-violet-500/5 to-blue-500/5 border border-violet-500/20 overflow-hidden"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.25 }}
                 >
-                    <div className="flex items-center gap-2 mb-3">
-                        <Bot className="w-4 h-4 text-violet-500" />
+                    {/* Header — tap to toggle on mobile, always shows on desktop */}
+                    <button
+                        className="w-full flex items-center gap-2 p-4 text-left"
+                        onClick={() => setInsightsOpen(!insightsOpen)}
+                    >
+                        <Bot className="w-4 h-4 text-violet-500 flex-shrink-0" />
                         <h3 className="text-sm font-semibold text-violet-600 dark:text-violet-400">
                             AI Insights Summary
                         </h3>
-                        <span className="text-xs text-muted-foreground ml-auto">
+                        <span className="text-xs text-muted-foreground ml-auto hidden sm:block">
                             Based on {aggregatedInsights.jobsAnalyzed} AI-analyzed matches
                         </span>
-                    </div>
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform duration-200 ${insightsOpen ? 'rotate-180' : ''}`} />
+                    </button>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Common Skill Gaps */}
-                        {aggregatedInsights.skillGaps.length > 0 && (
-                            <div className="space-y-2">
-                                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <XCircle className="w-3 h-3 text-red-500" />
-                                    Common Skill Gaps
-                                </h4>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {aggregatedInsights.skillGaps.map(([skill, count]) => (
-                                        <span
-                                            key={skill}
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
-                                        >
-                                            {skill}
-                                            <span className="text-[9px] text-red-400/70">×{count}</span>
-                                        </span>
-                                    ))}
+                    <AnimatePresence initial={false}>
+                        {insightsOpen && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* Common Skill Gaps */}
+                                    {aggregatedInsights.skillGaps.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                                <XCircle className="w-3 h-3 text-red-500" />
+                                                Common Skill Gaps
+                                            </h4>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {aggregatedInsights.skillGaps.map(([skill, count]) => (
+                                                    <span
+                                                        key={skill}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                                                    >
+                                                        {skill}
+                                                        <span className="text-[9px] text-red-400/70">×{count}</span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Common Strengths */}
+                                    {aggregatedInsights.strengths.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                                Your Strengths
+                                            </h4>
+                                            <ul className="space-y-1">
+                                                {aggregatedInsights.strengths.map(([strength, count]) => (
+                                                    <li key={strength} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                        <span className="text-emerald-500 mt-0.5">✓</span>
+                                                        <span className="line-clamp-2">{strength}</span>
+                                                        <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {/* Top Recommendations */}
+                                    {aggregatedInsights.recommendations.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                                <Lightbulb className="w-3 h-3 text-blue-500" />
+                                                Top Recommendations
+                                            </h4>
+                                            <ul className="space-y-1">
+                                                {aggregatedInsights.recommendations.map(([rec, count]) => (
+                                                    <li key={rec} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                                                        <span className="text-blue-500 mt-0.5">→</span>
+                                                        <span className="line-clamp-2">{rec}</span>
+                                                        <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
+                            </motion.div>
                         )}
-
-                        {/* Common Strengths */}
-                        {aggregatedInsights.strengths.length > 0 && (
-                            <div className="space-y-2">
-                                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                    Your Strengths
-                                </h4>
-                                <ul className="space-y-1">
-                                    {aggregatedInsights.strengths.map(([strength, count]) => (
-                                        <li key={strength} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                            <span className="text-emerald-500 mt-0.5">✓</span>
-                                            <span className="line-clamp-2">{strength}</span>
-                                            <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-
-                        {/* Top Recommendations */}
-                        {aggregatedInsights.recommendations.length > 0 && (
-                            <div className="space-y-2">
-                                <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                    <Lightbulb className="w-3 h-3 text-blue-500" />
-                                    Top Recommendations
-                                </h4>
-                                <ul className="space-y-1">
-                                    {aggregatedInsights.recommendations.map(([rec, count]) => (
-                                        <li key={rec} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                            <span className="text-blue-500 mt-0.5">→</span>
-                                            <span className="line-clamp-2">{rec}</span>
-                                            <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
+                    </AnimatePresence>
                 </motion.div>
             )}
 
             {/* Filters */}
             <motion.div
-                className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl bg-card border border-border/50"
+                className="space-y-2"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.15 }}
             >
-                {/* Search */}
-                <div className="flex-1">
-                    <div className="relative">
-                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search jobs or companies..."
-                            className="pl-9 bg-background/50"
-                            value={search}
-                            onChange={(e) => {
-                                setSearch(e.target.value);
-                                if (e.target.value) setCompanyFilter('');
-                            }}
-                        />
-                    </div>
-                </div>
+                {/* Mobile toggle — hidden on lg+ where filters are always visible */}
+                <button
+                    className="lg:hidden flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-card border border-border/50 hover:bg-muted/50 active:bg-muted transition-colors text-sm font-medium"
+                    onClick={() => setFiltersOpen(!filtersOpen)}
+                >
+                    <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+                    Filters
+                    {activeFilterCount > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full bg-primary text-primary-foreground">
+                            {activeFilterCount}
+                        </span>
+                    )}
+                    <ChevronDown className={`w-4 h-4 ml-auto text-muted-foreground transition-transform duration-200 ${filtersOpen ? 'rotate-180' : ''}`} />
+                </button>
 
-                {/* Top Companies Filter */}
-                {marketData?.top_companies && marketData.top_companies.length > 0 && (
+                {/* Filter content — hidden on mobile when closed, always shown on lg+ */}
+                <div className={`flex-col gap-3 p-4 rounded-xl bg-card border border-border/50 ${filtersOpen ? 'flex' : 'hidden'} lg:flex lg:flex-row`}>
+                    {/* Search */}
+                    <div className="flex-1">
+                        <div className="relative">
+                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search jobs or companies..."
+                                className="pl-9 bg-background/50"
+                                value={search}
+                                onChange={(e) => {
+                                    setSearch(e.target.value);
+                                    if (e.target.value) setCompanyFilter('');
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Top Companies Filter */}
+                    {marketData?.top_companies && marketData.top_companies.length > 0 && (
+                        <Select
+                            value={companyFilter}
+                            onValueChange={(value) => {
+                                setCompanyFilter(value === '__all__' ? '' : value);
+                                if (value !== '__all__') setSearch('');
+                            }}
+                        >
+                            <SelectTrigger className="w-full lg:w-[200px] bg-background/50">
+                                <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                                <SelectValue placeholder="Company" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="__all__">All Companies</SelectItem>
+                                {marketData.top_companies.map((company) => (
+                                    <SelectItem key={company.name} value={company.name}>
+                                        {company.name} ({company.count})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+
+                    {/* Location Region Filter */}
                     <Select
-                        value={companyFilter}
-                        onValueChange={(value) => {
-                            setCompanyFilter(value === '__all__' ? '' : value);
-                            if (value !== '__all__') setSearch('');
-                        }}
+                        value={locationRegion || '__all__'}
+                        onValueChange={(value) => setLocationRegion(value === '__all__' ? '' : value)}
                     >
-                        <SelectTrigger className="w-[200px] bg-background/50">
-                            <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                            <SelectValue placeholder="Company" />
+                        <SelectTrigger className="w-full lg:w-[170px] bg-background/50">
+                            <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                            <SelectValue placeholder="Location" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="__all__">All Companies</SelectItem>
-                            {marketData.top_companies.map((company) => (
-                                <SelectItem key={company.name} value={company.name}>
-                                    {company.name} ({company.count})
-                                </SelectItem>
-                            ))}
+                            <SelectItem value="__all__">All Locations</SelectItem>
+                            <SelectItem value="us">US</SelectItem>
+                            <SelectItem value="canada">Canada</SelectItem>
+                            <SelectItem value="remote">Remote</SelectItem>
                         </SelectContent>
                     </Select>
-                )}
 
-                {/* Location Region Filter */}
-                <Select
-                    value={locationRegion || '__all__'}
-                    onValueChange={(value) => setLocationRegion(value === '__all__' ? '' : value)}
-                >
-                    <SelectTrigger className="w-[170px] bg-background/50">
-                        <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                        <SelectValue placeholder="Location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="__all__">All Locations</SelectItem>
-                        <SelectItem value="us">US</SelectItem>
-                        <SelectItem value="canada">Canada</SelectItem>
-                        <SelectItem value="remote">Remote</SelectItem>
-                    </SelectContent>
-                </Select>
+                    {/* Score Range */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Score:</span>
+                        <Input
+                            type="number"
+                            value={minScore}
+                            onChange={(e) => setMinScore(Number(e.target.value))}
+                            className="w-16 h-9 text-center bg-background/50"
+                            min={0}
+                            max={100}
+                        />
+                        <span className="text-muted-foreground">—</span>
+                        <Input
+                            type="number"
+                            value={maxScore}
+                            onChange={(e) => setMaxScore(Number(e.target.value))}
+                            className="w-16 h-9 text-center bg-background/50"
+                            min={0}
+                            max={100}
+                        />
+                    </div>
 
-                {/* Score Range */}
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">Score:</span>
-                    <Input
-                        type="number"
-                        value={minScore}
-                        onChange={(e) => setMinScore(Number(e.target.value))}
-                        className="w-16 h-9 text-center bg-background/50"
-                        min={0}
-                        max={100}
-                    />
-                    <span className="text-muted-foreground">—</span>
-                    <Input
-                        type="number"
-                        value={maxScore}
-                        onChange={(e) => setMaxScore(Number(e.target.value))}
-                        className="w-16 h-9 text-center bg-background/50"
-                        min={0}
-                        max={100}
-                    />
+                    {/* Sort */}
+                    <Select value={sortOrder} onValueChange={setSortOrder}>
+                        <SelectTrigger className="w-full lg:w-[150px] bg-background/50">
+                            <SelectValue placeholder="Sort" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="score_desc">Score: High → Low</SelectItem>
+                            <SelectItem value="score_asc">Score: Low → High</SelectItem>
+                            <SelectItem value="date_desc">Date: Newest</SelectItem>
+                            <SelectItem value="date_asc">Date: Oldest</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
-
-
-                {/* Sort */}
-                <Select value={sortOrder} onValueChange={setSortOrder}>
-                    <SelectTrigger className="w-[150px] bg-background/50">
-                        <SelectValue placeholder="Sort" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="score_desc">Score: High → Low</SelectItem>
-                        <SelectItem value="score_asc">Score: Low → High</SelectItem>
-                        <SelectItem value="date_desc">Date: Newest</SelectItem>
-                        <SelectItem value="date_asc">Date: Oldest</SelectItem>
-                    </SelectContent>
-                </Select>
             </motion.div>
 
             {/* Time Period Filter Buttons */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-muted-foreground mr-1">Show:</span>
-                {[
-                    { value: '1', label: '24h' },
-                    { value: '3', label: '3 days' },
-                    { value: '7', label: '7 days' },
-                    { value: '14', label: '14 days' },
-                    { value: '30', label: '30 days' },
-                    { value: 'all', label: 'All time' },
-                ].map((option) => (
-                    <Button
-                        key={option.value}
-                        variant={recency === option.value ? 'default' : 'outline'}
-                        size="sm"
-                        className={`h-7 px-3 text-xs ${recency === option.value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-background/50 hover:bg-muted'
-                            }`}
-                        onClick={() => setRecency(option.value)}
-                    >
-                        {option.label}
-                    </Button>
-                ))}
+            <div className="space-y-2">
+                {/* Period buttons — horizontal scroll on mobile, wrap on sm+ */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-webkit-overflow-scrolling:touch]">
+                    <span className="text-xs text-muted-foreground flex-shrink-0">Show:</span>
+                    {[
+                        { value: '1', label: '24h' },
+                        { value: '3', label: '3 days' },
+                        { value: '7', label: '7 days' },
+                        { value: '14', label: '14 days' },
+                        { value: '30', label: '30 days' },
+                        { value: 'all', label: 'All time' },
+                    ].map((option) => (
+                        <Button
+                            key={option.value}
+                            variant={recency === option.value ? 'default' : 'outline'}
+                            size="sm"
+                            className={`h-7 px-3 text-xs flex-shrink-0 ${recency === option.value
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-background/50 hover:bg-muted'
+                                }`}
+                            onClick={() => setRecency(option.value)}
+                        >
+                            {option.label}
+                        </Button>
+                    ))}
+                </div>
 
-                {/* Divider */}
-                <div className="w-px h-5 bg-border mx-1" />
-
-                {/* Heart / Ignore filters */}
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={heartedOnly}
-                        onChange={(e) => { setHeartedOnly(e.target.checked); if (e.target.checked) setShowIgnored(false); }}
-                        className="rounded border-border"
-                    />
-                    <Heart className="w-3 h-3 text-red-500" />
-                    Hearted only
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={showIgnored}
-                        onChange={(e) => { setShowIgnored(e.target.checked); if (e.target.checked) setHeartedOnly(false); }}
-                        className="rounded border-border"
-                    />
-                    <EyeOff className="w-3 h-3" />
-                    Show ignored
-                </label>
+                {/* Status filters on their own row */}
+                <div className="flex items-center gap-3">
+                    <div className="w-px h-5 bg-border" />
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={heartedOnly}
+                            onChange={(e) => { setHeartedOnly(e.target.checked); if (e.target.checked) setShowIgnored(false); }}
+                            className="rounded border-border"
+                        />
+                        <Heart className="w-3 h-3 text-red-500" />
+                        Hearted only
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={showIgnored}
+                            onChange={(e) => { setShowIgnored(e.target.checked); if (e.target.checked) setHeartedOnly(false); }}
+                            className="rounded border-border"
+                        />
+                        <EyeOff className="w-3 h-3" />
+                        Show ignored
+                    </label>
+                </div>
             </div>
 
             {/* Job Cards */}
