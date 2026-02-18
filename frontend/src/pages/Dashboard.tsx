@@ -816,6 +816,18 @@ export function Dashboard() {
                         <p className="text-emerald-500 text-xs font-medium">{selectedJob.salary}</p>
                       )}
                     </div>
+                    {selectedJob.domains.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {selectedJob.domains.map((domain) => (
+                          <span
+                            key={domain}
+                            className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted border border-border/60 text-muted-foreground"
+                          >
+                            {domain}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {/* AI Match Insights */}
                     {selectedJob.match_engine === 'gemini' && (
