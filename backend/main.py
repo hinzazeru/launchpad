@@ -25,7 +25,7 @@ logging.basicConfig(
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from backend.routers import jobs, resumes, analysis, search, bullets, analytics, domains, scheduler
+from backend.routers import jobs, resumes, analysis, search, bullets, analytics, domains, scheduler, admin
 from src.database.db import init_db
 from backend.services.webapp_scheduler import init_scheduler, shutdown_scheduler
 
@@ -65,6 +65,7 @@ app.include_router(bullets.router, prefix="/api/bullets", tags=["bullets"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(domains.router, prefix="/api/domains", tags=["domains"])
 app.include_router(scheduler.router, prefix="/api/scheduler", tags=["scheduler"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 
 # ============================================================================

@@ -35,6 +35,7 @@ ENV_OVERRIDES: Dict[str, str] = {
     "job_provider.provider": "JOB_PROVIDER",
     "matching.engine": "MATCHING_ENGINE",
     "scheduling.enabled": "SCHEDULING_ENABLED",
+    "admin.token": "ADMIN_TOKEN",
 }
 
 
