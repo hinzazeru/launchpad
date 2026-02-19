@@ -711,7 +711,6 @@ export function JobMatches() {
     const [showIgnored, setShowIgnored] = useState(false);
     const [heartedOnly, setHeartedOnly] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
-    const [insightsOpen, setInsightsOpen] = useState(false);
 
     const updateStatusMutation = useUpdateJobStatus();
 
@@ -760,61 +759,6 @@ export function JobMatches() {
     ].filter(Boolean).length;
 
     // Aggregated AI Insights
-    const aggregatedInsights = (() => {
-        if (!data?.jobs.length) return null;
-
-        const aiJobs = data.jobs.filter(j => j.match_engine === 'gemini');
-        if (aiJobs.length === 0) return null;
-
-        // Count skill gaps across all jobs
-        const skillGapCounts: Record<string, number> = {};
-        const recommendationCounts: Record<string, number> = {};
-        const strengthCounts: Record<string, number> = {};
-
-        aiJobs.forEach(job => {
-            // Count skill gaps
-            job.skill_gaps_detailed?.forEach(gap => {
-                skillGapCounts[gap.skill] = (skillGapCounts[gap.skill] || 0) + 1;
-            });
-            job.skill_gaps?.forEach(skill => {
-                skillGapCounts[skill] = (skillGapCounts[skill] || 0) + 1;
-            });
-
-            // Count recommendations
-            job.ai_recommendations?.forEach(rec => {
-                recommendationCounts[rec] = (recommendationCounts[rec] || 0) + 1;
-            });
-
-            // Count strengths
-            job.ai_strengths?.forEach(str => {
-                strengthCounts[str] = (strengthCounts[str] || 0) + 1;
-            });
-        });
-
-        // Get top items (appearing in multiple jobs)
-        const topSkillGaps = Object.entries(skillGapCounts)
-            .filter(([, count]) => count >= 2)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-
-        const topRecommendations = Object.entries(recommendationCounts)
-            .filter(([, count]) => count >= 2)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 3);
-
-        const topStrengths = Object.entries(strengthCounts)
-            .filter(([, count]) => count >= 2)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 3);
-
-        return {
-            skillGaps: topSkillGaps,
-            recommendations: topRecommendations,
-            strengths: topStrengths,
-            jobsAnalyzed: aiJobs.length
-        };
-    })();
-
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -882,104 +826,6 @@ export function JobMatches() {
                             <p className="text-[10px] sm:text-xs text-muted-foreground truncate">AI / NLP</p>
                         </div>
                     </div>
-                </motion.div>
-            )}
-
-            {/* Aggregated AI Insights Panel */}
-            {aggregatedInsights && (aggregatedInsights.skillGaps.length > 0 || aggregatedInsights.recommendations.length > 0) && (
-                <motion.div
-                    className="rounded-xl bg-gradient-to-r from-violet-500/5 to-blue-500/5 border border-violet-500/20 overflow-hidden"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25 }}
-                >
-                    {/* Header — tap to toggle on mobile, always shows on desktop */}
-                    <button
-                        className="w-full flex items-center gap-2 p-4 text-left"
-                        onClick={() => setInsightsOpen(!insightsOpen)}
-                    >
-                        <Bot className="w-4 h-4 text-violet-500 flex-shrink-0" />
-                        <h3 className="text-sm font-semibold text-violet-600 dark:text-violet-400">
-                            AI Insights Summary
-                        </h3>
-                        <span className="text-xs text-muted-foreground ml-auto hidden sm:block">
-                            Based on {aggregatedInsights.jobsAnalyzed} AI-analyzed matches
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform duration-200 ${insightsOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    <AnimatePresence initial={false}>
-                        {insightsOpen && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.25 }}
-                                className="overflow-hidden"
-                            >
-                                <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {/* Common Skill Gaps */}
-                                    {aggregatedInsights.skillGaps.length > 0 && (
-                                        <div className="space-y-2">
-                                            <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                                <XCircle className="w-3 h-3 text-red-500" />
-                                                Common Skill Gaps
-                                            </h4>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {aggregatedInsights.skillGaps.map(([skill, count]) => (
-                                                    <span
-                                                        key={skill}
-                                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md border bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
-                                                    >
-                                                        {skill}
-                                                        <span className="text-[9px] text-red-400/70">×{count}</span>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Common Strengths */}
-                                    {aggregatedInsights.strengths.length > 0 && (
-                                        <div className="space-y-2">
-                                            <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                                Your Strengths
-                                            </h4>
-                                            <ul className="space-y-1">
-                                                {aggregatedInsights.strengths.map(([strength, count]) => (
-                                                    <li key={strength} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="text-emerald-500 mt-0.5">✓</span>
-                                                        <span className="line-clamp-2">{strength}</span>
-                                                        <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-
-                                    {/* Top Recommendations */}
-                                    {aggregatedInsights.recommendations.length > 0 && (
-                                        <div className="space-y-2">
-                                            <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                                                <Lightbulb className="w-3 h-3 text-blue-500" />
-                                                Top Recommendations
-                                            </h4>
-                                            <ul className="space-y-1">
-                                                {aggregatedInsights.recommendations.map(([rec, count]) => (
-                                                    <li key={rec} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                                                        <span className="text-blue-500 mt-0.5">→</span>
-                                                        <span className="line-clamp-2">{rec}</span>
-                                                        <span className="text-[9px] text-muted-foreground/50 ml-auto">({count})</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
                 </motion.div>
             )}
 
