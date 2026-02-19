@@ -108,7 +108,7 @@ def rematch_job(job_id: int):
         db.close()
 
 
-def _do_rematch_by_gap(skill: str, job_ids: list):
+def _do_rematch(label: str, job_ids: list):
     """Background worker: rematch a list of job IDs. Runs in a thread."""
     from backend.services.matcher_service import get_job_matcher
     matcher = get_job_matcher()
@@ -143,15 +143,42 @@ def _do_rematch_by_gap(skill: str, job_ids: list):
             match_record.match_engine = "gemini"
             db.commit()
             updated += 1
-            logger.info(f"rematch-by-gap '{skill}': updated job {job_id} ({job.title} @ {job.company})")
+            logger.info(f"{label}: updated job {job_id} ({job.title} @ {job.company})")
         except Exception as e:
-            logger.error(f"rematch-by-gap '{skill}': failed job {job_id}: {e}")
+            logger.error(f"{label}: failed job {job_id}: {e}")
             db.rollback()
             failed += 1
         finally:
             db.close()
 
-    logger.info(f"rematch-by-gap '{skill}' complete: updated={updated}, skipped={skipped}, failed={failed}")
+    logger.info(f"{label} complete: updated={updated}, skipped={skipped}, failed={failed}")
+
+
+@router.post("/rematch-stale", dependencies=[Depends(_require_admin)])
+def rematch_stale(background_tasks: BackgroundTasks):
+    """Re-run Gemini matching for all jobs with match_engine='gemini' but no ai_match_score (stale results)."""
+    db = SessionLocal()
+    try:
+        stale = db.query(MatchResult.job_id).filter(
+            MatchResult.match_engine == "gemini",
+            MatchResult.ai_match_score == None,
+        ).all()
+        job_ids = [r.job_id for r in stale]
+    finally:
+        db.close()
+
+    if not job_ids:
+        return {"status": "none_found", "queued": 0}
+
+    t = threading.Thread(target=_do_rematch, args=("rematch-stale", job_ids), daemon=True)
+    t.start()
+
+    logger.info(f"rematch-stale: queued {len(job_ids)} jobs in background")
+    return {"status": "started", "queued": len(job_ids)}
+
+
+def _do_rematch_by_gap(skill: str, job_ids: list):
+    _do_rematch(f"rematch-by-gap '{skill}'", job_ids)
 
 
 @router.post("/rematch-by-gap", dependencies=[Depends(_require_admin)])
