@@ -9,6 +9,7 @@ This module provides AI-powered job matching that:
 
 import json
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
@@ -25,6 +26,40 @@ from src.matching.requirements import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _build_domain_label_map() -> Dict[str, str]:
+    """Build a flat key→description map from data/domain_expertise.json."""
+    path = Path(__file__).parent.parent.parent / "data" / "domain_expertise.json"
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        label_map = {}
+        for category in data.get("domains", {}).values():
+            for key, info in category.items():
+                if isinstance(info, dict) and "description" in info:
+                    label_map[key] = info["description"]
+        return label_map
+    except Exception:
+        return {}
+
+
+_DOMAIN_LABELS: Dict[str, str] = _build_domain_label_map()
+
+
+def _format_domains(domains: List[str]) -> str:
+    """Format domain keys as 'Description (key)' for Gemini prompts.
+
+    E.g. ['financial_services', 'fintech'] →
+         'Financial services and capital markets (financial_services), Financial technology and services (fintech)'
+    """
+    if not domains:
+        return "Not specified"
+    parts = []
+    for key in domains:
+        label = _DOMAIN_LABELS.get(key)
+        parts.append(f"{label} ({key})" if label else key)
+    return ", ".join(parts)
 
 # AI Matching prompt - comprehensive evaluation
 AI_MATCH_PROMPT = """You are an expert job matching assistant. Evaluate how well this candidate matches the job requirements.
@@ -291,7 +326,7 @@ class GeminiMatcher:
         return AI_MATCH_PROMPT.format(
             resume_skills=", ".join(resume_skills[:30]),
             experience_years=experience_years,
-            resume_domains=", ".join(resume_domains) if resume_domains else "Not specified",
+            resume_domains=_format_domains(resume_domains),
             recent_roles=", ".join(recent_roles[:5]) if recent_roles else "Not specified",
             job_title=job_title,
             company=company,
@@ -322,7 +357,7 @@ class GeminiMatcher:
         return AI_MATCH_SIMPLE_PROMPT.format(
             resume_skills=", ".join(resume_skills[:30]),
             experience_years=experience_years,
-            resume_domains=", ".join(resume_domains) if resume_domains else "Not specified",
+            resume_domains=_format_domains(resume_domains),
             job_title=job_title,
             company=company,
             description=job_description
