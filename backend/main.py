@@ -98,6 +98,9 @@ async def startup_event():
             ("scheduled_searches", "weekdays_only", "BOOLEAN DEFAULT FALSE"),
             # user curation (heart/ignore) on match results
             ("match_results", "user_status", "VARCHAR(20)"),
+            # repost detection
+            ("job_postings", "is_repost", "BOOLEAN DEFAULT FALSE"),
+            ("job_postings", "repost_count", "INTEGER DEFAULT 0"),
         ]
 
         with engine.connect() as conn:

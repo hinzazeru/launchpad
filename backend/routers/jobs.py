@@ -51,6 +51,10 @@ class JobResponse(BaseModel):
     # User curation
     user_status: Optional[str] = None
 
+    # Repost tracking
+    is_repost: bool = False
+    repost_count: int = 0
+
     model_config = {"from_attributes": True}
 
 
@@ -213,6 +217,8 @@ async def list_jobs(
             experience_required=job.experience_required,
             match_engine=match.match_engine,
             user_status=match.user_status,
+            is_repost=job.is_repost or False,
+            repost_count=job.repost_count or 0,
         ))
 
     return JobListResponse(
@@ -308,6 +314,8 @@ async def get_job(job_id: int, session: Session = Depends(get_db)):
         experience_required=job.experience_required,
         match_engine=match.match_engine,
         user_status=match.user_status,
+        is_repost=job.is_repost or False,
+        repost_count=job.repost_count or 0,
     )
 
 

@@ -261,6 +261,37 @@ def get_existing_job_keys(
     return existing
 
 
+def get_existing_jobs_for_repost_check(
+    db: Session, pairs: List[Tuple[str, str]], batch_size: int = 100
+) -> dict:
+    """Return existing job info keyed by (title, company) for repost detection.
+
+    Returns:
+        Dict mapping (normalized_title, normalized_company) →
+        (job_id, posting_date, repost_count)
+    """
+    result = {}
+    for i in range(0, len(pairs), batch_size):
+        batch = pairs[i:i + batch_size]
+        conditions = [
+            and_(
+                func.lower(func.trim(JobPosting.title)) == title,
+                func.lower(func.trim(JobPosting.company)) == company,
+            )
+            for title, company in batch
+        ]
+        rows = db.query(
+            func.lower(func.trim(JobPosting.title)),
+            func.lower(func.trim(JobPosting.company)),
+            JobPosting.id,
+            JobPosting.posting_date,
+            JobPosting.repost_count,
+        ).filter(or_(*conditions)).all()
+        for title, company, job_id, posting_date, repost_count in rows:
+            result[(title, company)] = (job_id, posting_date, repost_count or 0)
+    return result
+
+
 def deduplicate_existing_jobs(db: Session) -> int:
     """Remove duplicate job postings, keeping the one with the highest ID.
 

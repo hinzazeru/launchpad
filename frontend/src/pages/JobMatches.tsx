@@ -387,6 +387,11 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
                                         <Calendar className="w-3 h-3" />
                                         {formatDate(job.posting_date)}
                                     </span>
+                                    {job.is_repost && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                            ↺ Reposted{job.repost_count && job.repost_count > 1 ? ` ×${job.repost_count}` : ''}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 

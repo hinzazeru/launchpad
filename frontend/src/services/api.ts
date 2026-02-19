@@ -67,6 +67,10 @@ export interface Job {
 
   // User curation
   user_status?: 'hearted' | 'ignored' | null;
+
+  // Repost tracking
+  is_repost?: boolean;
+  repost_count?: number;
 }
 
 export interface JobListResponse {

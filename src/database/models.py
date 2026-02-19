@@ -57,6 +57,10 @@ class JobPosting(Base):
     requirements_extracted_at = Column(DateTime, nullable=True)
     requirements_extraction_model = Column(String(50), nullable=True)  # e.g., "gemini-2.0-flash"
 
+    # Repost tracking
+    is_repost = Column(Boolean, default=False, nullable=False)
+    repost_count = Column(Integer, default=0, nullable=False)  # times seen reposted
+
     # Relationships
     match_results = relationship("MatchResult", back_populates="job_posting")
     application_tracking = relationship(

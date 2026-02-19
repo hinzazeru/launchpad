@@ -331,7 +331,7 @@ class BrightDataJobProvider(JobProvider):
         """
         from src.database.db import SessionLocal
         from src.database.models import JobPosting
-        from src.database.crud import get_existing_job_keys
+        from src.database.crud import get_existing_job_keys, get_existing_jobs_for_repost_check
         from src.importers.validators import normalize_job_data, validate_job_posting
 
         # Try to initialize Gemini for domain extraction and requirements extraction
@@ -382,14 +382,25 @@ class BrightDataJobProvider(JobProvider):
             # Phase 2: Bulk check for existing jobs (1 query instead of N)
             if normalized_jobs:
                 all_keys = [dk for _, dk in normalized_jobs]
-                existing_keys = get_existing_job_keys(session, all_keys)
-                logger.debug(f"Bulk duplicate check: {len(all_keys)} candidates, {len(existing_keys)} already exist")
+                existing_jobs = get_existing_jobs_for_repost_check(session, all_keys)
+                logger.debug(f"Bulk duplicate check: {len(all_keys)} candidates, {len(existing_jobs)} already exist")
             else:
-                existing_keys = set()
+                existing_jobs = {}
 
-            # Phase 3: Create job objects for new entries only
+            # Phase 3: Create job objects for new entries; update posting_date for reposts
+            repost_count_updated = 0
             for normalized_job, dedup_key in normalized_jobs:
-                if dedup_key in existing_keys:
+                if dedup_key in existing_jobs:
+                    existing_id, existing_date, existing_repost_count = existing_jobs[dedup_key]
+                    incoming_date = normalized_job.get('posting_date')
+                    if incoming_date and existing_date and incoming_date > existing_date:
+                        existing_obj = session.query(JobPosting).filter(JobPosting.id == existing_id).first()
+                        if existing_obj:
+                            existing_obj.posting_date = incoming_date
+                            existing_obj.is_repost = True
+                            existing_obj.repost_count = existing_repost_count + 1
+                            repost_count_updated += 1
+                            logger.debug(f"Repost detected: {existing_obj.title} @ {existing_obj.company} (repost #{existing_obj.repost_count})")
                     continue
 
                 job_posting = JobPosting(
@@ -409,6 +420,10 @@ class BrightDataJobProvider(JobProvider):
 
                 new_job_postings.append(job_posting)
                 imported_count += 1
+
+            if repost_count_updated:
+                session.commit()
+                logger.info(f"Updated {repost_count_updated} reposted jobs")
 
             # Bulk add and commit (with unique constraint fallback)
             if new_job_postings:
