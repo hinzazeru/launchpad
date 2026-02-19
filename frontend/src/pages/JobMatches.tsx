@@ -387,9 +387,6 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
                                         <Calendar className="w-3 h-3" />
                                         {formatDate(job.posting_date)}
                                     </span>
-                                    <span className="font-mono text-[10px] text-muted-foreground/50">
-                                        #{job.id}
-                                    </span>
                                 </div>
                             </div>
 
@@ -686,6 +683,9 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
                                             </p>
                                         </div>
                                     )}
+                                    <span className="font-mono text-[10px] text-muted-foreground/40">
+                                        #{job.id}
+                                    </span>
                                 </div>
                             </motion.div>
                         )}
