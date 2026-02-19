@@ -129,6 +129,8 @@ def _do_rematch(label: str, job_ids: list):
                 skipped += 1
                 continue
 
+            match_record.match_score = result.get("overall_score", 0) * 100
+            match_record.matching_skills = result.get("matching_skills", [])
             match_record.ai_match_score = result.get("ai_match_score")
             match_record.skills_score = result.get("ai_skills_score")
             match_record.experience_score = result.get("ai_experience_score")
