@@ -99,11 +99,13 @@ def rematch_job(job_id: int):
         db.commit()
 
         gaps = result.get("skill_gaps_detailed") or []
-        logger.info(f"rematch-job {job_id}: success, {len(gaps)} gaps")
+        matched = result.get("matching_skills") or []
+        logger.info(f"rematch-job {job_id}: success, {len(matched)} matched skills, {len(gaps)} gaps")
         return {
             "status": "updated",
             "job_id": job_id,
             "ai_match_score": result.get("ai_match_score"),
+            "matching_skills": matched,
             "skill_gaps": [g.get("skill") if isinstance(g, dict) else str(g) for g in gaps],
         }
     finally:
