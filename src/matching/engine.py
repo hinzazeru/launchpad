@@ -267,8 +267,15 @@ class JobMatcher:
         if not self.gemini_matcher:
             return None
 
-        # Get structured requirements if available
+        # Get structured requirements if available — but only use them if they
+        # contain actual skill lists. Empty must_have_skills forces the simple
+        # prompt which includes the full description and yields better skill matches.
         structured_requirements = getattr(job, 'structured_requirements', None)
+        if structured_requirements:
+            must_have = structured_requirements.get('must_have_skills') or []
+            nice_to_have = structured_requirements.get('nice_to_have_skills') or []
+            if not must_have and not nice_to_have:
+                structured_requirements = None  # fall back to simple prompt
 
         # Get recent roles from resume job_titles
         recent_roles = resume.job_titles[:5] if resume.job_titles else []
