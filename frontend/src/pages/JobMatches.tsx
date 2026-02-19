@@ -507,7 +507,7 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
 
                                     {/* AI Analysis - New AI Matcher */}
                                     {job.match_engine === 'gemini' && (
-                                        <div className="space-y-4 p-3 rounded-lg bg-violet-500/5 border border-violet-500/20">
+                                        <div className="space-y-4">
                                             {/* Score Breakdown */}
                                             {(job.skills_score || job.experience_score || job.domain_score) && (
                                                 <div className="grid grid-cols-4 gap-2 text-center">
