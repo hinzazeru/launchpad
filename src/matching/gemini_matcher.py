@@ -398,6 +398,12 @@ class GeminiMatcher:
             cleaned = clean_json_text(response_text)
             result = json.loads(cleaned)
 
+            # Debug: log raw skill_matches from Gemini response
+            raw_skill_matches = result.get("skill_matches", [])
+            logger.debug(f"Gemini raw skill_matches for {job_title}: {raw_skill_matches}")
+            if not raw_skill_matches:
+                logger.info(f"Gemini returned empty skill_matches for {job_title}. overall_score={result.get('overall_score')}")
+
             # Build skill matches
             skill_matches = []
             for m in result.get("skill_matches", []):
