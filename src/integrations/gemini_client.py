@@ -479,6 +479,65 @@ If no specific domains are required, respond with:
 {{"domains": [], "reasoning": "Generic role with no specific domain requirements"}}
 """
 
+COMBINED_ENRICHMENT_PROMPT = """Analyze this job posting and return ALL of the following in a single JSON response.
+
+**Company:** {company}
+**Job Title:** {title}
+
+**Job Description:**
+{description}
+
+---
+
+## Task 1: Industry Domains
+Identify industry domains and technology platforms REQUIRED or strongly preferred for this role.
+- Base decisions on the COMPANY'S ACTUAL BUSINESS and role requirements
+- Only include explicitly required or strongly emphasized domains
+- Do NOT include domains just because a generic word appears (e.g., "healthcare benefits" ≠ healthcare industry)
+
+Valid domains:
+Industries: ecommerce, fintech, banking, investment_management, asset_management, financial_services, b2b, b2b_saas, healthcare, edtech, adtech, martech, logistics, real_estate, gaming, media, cybersecurity, hr_tech, legal_tech, construction, travel, automotive, agriculture, energy, government, nonprofit
+Platforms: salesforce, shopify, sap, oracle, workday, adobe, hubspot, stripe, twilio, zendesk, servicenow, atlassian, snowflake, databricks
+Technologies: headless_cms, composable, blockchain, ai_ml, data_engineering, devops, mobile, iot, ar_vr, voice
+
+## Task 2: Job Summary
+Write a concise 2-3 sentence summary (under 50 words total).
+- Be specific, avoid generic phrases
+- Do NOT start with "This role", "The candidate", or repeat the job title
+- Focus on what the person will DO and standout requirements
+- Natural prose, no bullet points
+
+## Task 3: Structured Requirements
+Extract structured job requirements:
+- Distinguish MUST-HAVE (required/essential) from NICE-TO-HAVE (preferred/bonus) skills
+- For each skill: name, context (how it is used, or null), level (beginner/intermediate/advanced/expert), years (or null)
+- Seniority: entry, mid, senior, staff, principal, director
+- Role focus: technical (IC work), strategic (leadership/vision), or hybrid
+- Key responsibilities: top 5-7 items
+
+**Response format (JSON only, no markdown):**
+{{
+  "domains": ["domain1", "domain2"],
+  "domain_reasoning": "Brief explanation of why these domains apply",
+  "summary": "2-3 sentence job summary here",
+  "must_have_skills": [
+    {{"name": "Python", "context": "for backend development", "level": "advanced", "years": 3}}
+  ],
+  "nice_to_have_skills": [
+    {{"name": "Kubernetes", "context": null, "level": "intermediate", "years": null}}
+  ],
+  "min_years": 5,
+  "max_years": 10,
+  "seniority_level": "senior",
+  "required_domains": ["fintech"],
+  "preferred_domains": ["payments"],
+  "role_focus": "hybrid",
+  "key_responsibilities": ["Lead product roadmap", "Partner with engineering", "Define metrics"]
+}}
+
+Use null for unknown values. If no specific domains are required, use an empty list.
+"""
+
 
 class GeminiClient:
     """Base Gemini client for API connectivity and health checks.
@@ -918,6 +977,104 @@ class GeminiRequirementsExtractor:
             return None
         except Exception as e:
             logger.error(f"Gemini requirements extraction error: {e}")
+            return None
+
+    def extract_all(
+        self,
+        description: str,
+        title: str = "",
+        company: str = ""
+    ) -> Optional[Dict]:
+        """Extract domains, summary, and structured requirements in a single Gemini call.
+
+        Combines what was previously three separate API calls (domain extraction,
+        summarization, requirements extraction) into one, cutting enrichment call
+        volume by 3× and eliminating the per-worker burst pattern.
+
+        Args:
+            description: Job description text
+            title: Job title
+            company: Company name
+
+        Returns:
+            Dict with keys: domains, domain_reasoning, summary,
+            and all structured_requirements fields. Returns None on failure.
+        """
+        if not self.is_available():
+            logger.warning("Gemini not available for combined enrichment")
+            return None
+
+        if not description:
+            return None
+
+        # Truncate to prevent token overflow (use tightest individual limit)
+        max_chars = 8000
+        if len(description) > max_chars:
+            description = description[:max_chars] + "..."
+
+        prompt = COMBINED_ENRICHMENT_PROMPT.format(
+            title=title or "Unknown",
+            company=company or "Unknown",
+            description=description
+        )
+
+        try:
+            response = _rate_limiter.call_with_retry(
+                self.model.generate_content,
+                prompt,
+                generation_config=types.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=1500,
+                    response_mime_type="application/json",
+                )
+            )
+
+            response_text = ""
+            if response.candidates and response.candidates[0].content.parts:
+                try:
+                    response_text = response.text or ""
+                except ValueError:
+                    parts = []
+                    for part in response.candidates[0].content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            parts.append(part.text)
+                    response_text = "".join(parts)
+            else:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
+                logger.warning(
+                    f"Gemini combined enrichment returned no content for '{title}'. "
+                    f"Finish reason: {finish_reason}"
+                )
+                return None
+
+            cleaned_text = clean_json_text(response_text)
+            raw = json.loads(cleaned_text)
+
+            # Extract and validate domains
+            valid_domains = [d for d in raw.get("domains", []) if d in VALID_DOMAINS]
+
+            # Normalize the requirements portion
+            normalized_reqs = self._normalize_result(raw)
+
+            from datetime import datetime
+            return {
+                # Domain extraction fields
+                "domains": valid_domains,
+                "domain_reasoning": raw.get("domain_reasoning", ""),
+                # Summary field
+                "summary": raw.get("summary", "").strip() or None,
+                # Structured requirements fields (flattened from normalized_reqs)
+                **normalized_reqs,
+                "extraction_model": self.model_name,
+                "extraction_timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse Gemini combined enrichment response for '{title}': {e}")
+            logger.debug(f"Raw text: {response_text if 'response_text' in locals() else 'N/A'}")
+            return None
+        except Exception as e:
+            logger.error(f"Gemini combined enrichment error for '{title}': {e}")
             return None
 
     def _normalize_result(self, result: Dict) -> Dict:
