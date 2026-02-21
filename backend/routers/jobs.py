@@ -173,8 +173,8 @@ async def list_jobs(
 
     jobs = []
     for job, match in unique_results:
-        matching_skills = match.matching_skills or []
-        required_skills = job.required_skills or []
+        matching_skills = [s for s in (match.matching_skills or []) if s]
+        required_skills = [s for s in (job.required_skills or []) if s]
         # Calculate skill gaps (required but not matched)
         matching_skills_lower = {s.lower() for s in matching_skills}
         skill_gaps = [s for s in required_skills if s.lower() not in matching_skills_lower]
@@ -272,8 +272,8 @@ async def get_job(job_id: int, session: Session = Depends(get_db)):
 
     job, match = result
 
-    matching_skills = match.matching_skills or []
-    required_skills = job.required_skills or []
+    matching_skills = [s for s in (match.matching_skills or []) if s]
+    required_skills = [s for s in (job.required_skills or []) if s]
     matching_skills_lower = {s.lower() for s in matching_skills}
     skill_gaps = [s for s in required_skills if s.lower() not in matching_skills_lower]
 
