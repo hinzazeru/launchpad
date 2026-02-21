@@ -415,7 +415,7 @@ class GeminiMatcher:
                 logger.info(
                     f"DBG {job_title}: sm={sm_count} strengths={st_count} "
                     f"parts={parts_info} text_len={len(response_text)} "
-                    f"snippet={response_text[200:500]!r}"
+                    f"full_text={response_text!r}"
                 )
 
             # Build skill matches
