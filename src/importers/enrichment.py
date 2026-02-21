@@ -27,49 +27,12 @@ def _extract_for_job(
 ) -> Dict:
     """Run all Gemini extractions for a single job (thread-safe, no ORM access).
 
-    When requirements_extractor is available, uses extract_all() to combine
-    domain extraction, summarization, and requirements into a single API call
-    (1 call instead of 3). Falls back to separate calls when only the domain
-    extractor is present.
-
     Returns a dict of extracted fields to apply to the ORM object.
     """
     result = {}
 
-    if requirements_extractor:
-        # Single combined call: domains + summary + requirements in one round-trip
-        try:
-            combined = requirements_extractor.extract_all(
-                description=description,
-                title=title,
-                company=company
-            )
-            if combined:
-                domains = combined.get('domains', [])
-                result['required_domains'] = domains if domains else None
-                result['domain_extraction_method'] = 'llm'
-
-                summary = combined.get('summary')
-                if summary:
-                    result['summary'] = summary
-
-                # Build structured_requirements from the combined result
-                req_fields = (
-                    'must_have_skills', 'nice_to_have_skills', 'min_years', 'max_years',
-                    'seniority_level', 'required_domains', 'preferred_domains',
-                    'role_focus', 'key_responsibilities', 'extraction_model',
-                    'extraction_timestamp',
-                )
-                structured = {k: combined[k] for k in req_fields if k in combined}
-                if structured:
-                    result['structured_requirements'] = structured
-                    result['requirements_extracted_at'] = datetime.utcnow()
-                    result['requirements_extraction_model'] = requirements_extractor.model_name
-        except Exception as e:
-            logger.warning(f"Gemini combined enrichment failed for {title}: {e}")
-
-    elif gemini_extractor:
-        # Fallback: separate domain + summary calls (no requirements extractor)
+    if gemini_extractor:
+        # Extract domains
         try:
             domain_result = gemini_extractor.extract_domains(
                 description=description,
@@ -83,6 +46,7 @@ def _extract_for_job(
         except Exception as e:
             logger.warning(f"Gemini domain extraction failed for {title}: {e}")
 
+        # Generate summary
         try:
             summary = gemini_extractor.summarize_job(
                 description=description,
@@ -93,6 +57,20 @@ def _extract_for_job(
                 result['summary'] = summary
         except Exception as e:
             logger.warning(f"Gemini summarization failed for {title}: {e}")
+
+    if requirements_extractor:
+        try:
+            requirements = requirements_extractor.extract_requirements(
+                description=description,
+                title=title,
+                company=company
+            )
+            if requirements:
+                result['structured_requirements'] = requirements
+                result['requirements_extracted_at'] = datetime.utcnow()
+                result['requirements_extraction_model'] = requirements_extractor.model_name
+        except Exception as e:
+            logger.warning(f"Requirements extraction failed for {title}: {e}")
 
     return result
 
