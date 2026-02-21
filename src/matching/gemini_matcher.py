@@ -101,6 +101,7 @@ Key Responsibilities:
 - Consider skill transferability (e.g., "React" skills transfer to "Vue")
 - Seniority mismatch (too senior OR too junior) should impact score
 - Write all text concisely without "the candidate" or third-person references
+- skill_matches is REQUIRED — map every Must-Have and Nice-to-Have skill above to the closest skill in the candidate's profile. A match score above 60 must have at least 3 skill_matches entries.
 - For skill_gaps, focus on ACTIONABLE, SPECIFIC skills the candidate could learn:
   * ✅ INCLUDE: Specific tools (e.g., "Kubernetes", "GraphQL"), frameworks, technologies, certifications
   * ✅ INCLUDE: Domain-specific skills (e.g., "Financial Modeling", "Clinical Trials")
@@ -151,6 +152,7 @@ Description:
 
 **Important Guidelines:**
 - Write all text concisely without "the candidate" or third-person references
+- skill_matches is REQUIRED — scan the job description for specific skills, tools, and technologies, then map each to the closest skill in the candidate's profile listed above. A match score above 60 must have at least 3 skill_matches entries.
 - For skill_gaps, focus on ACTIONABLE, SPECIFIC skills the candidate could learn:
   * ✅ INCLUDE: Specific tools (e.g., "Kubernetes", "GraphQL"), frameworks, technologies, certifications
   * ✅ INCLUDE: Domain-specific skills (e.g., "Financial Modeling", "Clinical Trials")
@@ -165,7 +167,7 @@ Description:
   "experience_score": 0-100,
   "seniority_fit": 0-100,
   "domain_score": 0-100,
-  "skill_matches": [{{"job_skill": "skill", "resume_skill": "matching skill", "confidence": 0.0-1.0, "context": "reason"}}],
+  "skill_matches": [{{"job_skill": "SQL", "resume_skill": "SQL", "confidence": 1.0, "context": "Direct match"}}, {{"job_skill": "data analysis", "resume_skill": "Data Modeling", "confidence": 0.8, "context": "Related skill"}}],
   "skill_gaps": [{{"skill": "missing skill", "importance": "must_have|nice_to_have", "transferable_from": "related skill or null"}}],
   "strengths": ["strength 1", "strength 2"],
   "concerns": ["concern 1"],
