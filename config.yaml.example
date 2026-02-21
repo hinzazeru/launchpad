@@ -216,7 +216,11 @@ gemini:
   # Can also be set via env vars: GEMINI_RATE_LIMIT_MIN_INTERVAL_MS,
   #   GEMINI_RATE_LIMIT_MAX_RETRIES, GEMINI_RATE_LIMIT_COOLDOWN_S
   rate_limit:
-    min_interval_ms: 400             # Milliseconds between API calls
+    # Standard flash models (gemini-2.0-flash) — used for enrichment
+    min_interval_ms: 400             # Milliseconds between calls (~150 RPM on Paid Tier 1)
+    # Thinking/reasoning models (gemini-2.5-*, gemini-3-*) — used for matching & bullets
+    # These have lower RPM limits due to higher token usage per call
+    thinking_min_interval_ms: 2000   # Milliseconds between calls (~30 RPM, conservative)
     max_retries: 2                   # Retries on 429 before tripping circuit breaker
     circuit_breaker_cooldown_s: 120  # Seconds to skip calls after quota exhaustion
 

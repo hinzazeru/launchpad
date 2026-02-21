@@ -289,39 +289,72 @@ class GeminiRateLimiter:
         raise last_error
 
 
-def _create_rate_limiter() -> GeminiRateLimiter:
-    """Create a rate limiter using config-driven parameters.
+# Model name substrings that identify thinking/reasoning models.
+# These have lower RPM limits than standard flash models and need a slower interval.
+_THINKING_MODEL_KEYWORDS = ("2.5", "3-", "3.", "-thinking")
 
-    Reads gemini.rate_limit.* values so the interval can be tuned per API tier
-    without a code deploy. Falls back to Paid Tier 1 defaults (400ms, ~150 RPM).
 
-    Tier reference:
-      Free tier:    4000-6000 ms  (10-15 RPM)
-      Paid Tier 1:   400 ms       (~150 RPM)  ← default
-      Paid Tier 2:   120 ms       (~500 RPM)
+def _is_thinking_model(model_name: str) -> bool:
+    """Return True if model_name is a thinking/reasoning model."""
+    return any(kw in model_name for kw in _THINKING_MODEL_KEYWORDS)
+
+
+_rate_limiter_cache: Dict[str, GeminiRateLimiter] = {}
+_rate_limiter_cache_lock = threading.Lock()
+
+
+def get_rate_limiter(model_name: str) -> GeminiRateLimiter:
+    """Get (or create) a rate limiter calibrated for the given model.
+
+    Thinking models (gemini-2.5-*, gemini-3-*, etc.) get a separate, slower
+    limiter because they have lower RPM limits than standard flash models.
+    Limiters are cached by model name so the same instance is shared across
+    all callers using the same model.
+
+    Args:
+        model_name: The Gemini model name (e.g. "gemini-2.0-flash")
+
+    Returns:
+        A GeminiRateLimiter calibrated for that model family
     """
+    with _rate_limiter_cache_lock:
+        if model_name not in _rate_limiter_cache:
+            _rate_limiter_cache[model_name] = _build_rate_limiter(model_name)
+        return _rate_limiter_cache[model_name]
+
+
+def _build_rate_limiter(model_name: str) -> GeminiRateLimiter:
+    """Create a rate limiter with config-driven parameters for the given model."""
     try:
         config = get_config()
-        min_interval_ms = config.get("gemini.rate_limit.min_interval_ms", 400)
+        is_thinking = _is_thinking_model(model_name)
+
+        if is_thinking:
+            min_interval_ms = config.get("gemini.rate_limit.thinking_min_interval_ms", 2000)
+        else:
+            min_interval_ms = config.get("gemini.rate_limit.min_interval_ms", 400)
+
         max_retries = config.get("gemini.rate_limit.max_retries", 2)
         cooldown = config.get("gemini.rate_limit.circuit_breaker_cooldown_s", 120.0)
+        model_type = "thinking" if is_thinking else "flash"
         limiter = GeminiRateLimiter(
             min_interval=min_interval_ms / 1000.0,
             max_retries=int(max_retries),
             circuit_breaker_cooldown=float(cooldown),
         )
         logger.debug(
-            f"Gemini rate limiter: min_interval={min_interval_ms}ms, "
-            f"max_retries={max_retries}, cooldown={cooldown}s"
+            f"Gemini rate limiter ({model_type}, {model_name}): "
+            f"min_interval={min_interval_ms}ms, max_retries={max_retries}, cooldown={cooldown}s"
         )
         return limiter
     except Exception as e:
-        logger.warning(f"Failed to read rate limiter config, using defaults: {e}")
-        return GeminiRateLimiter(min_interval=0.4, max_retries=2, circuit_breaker_cooldown=120.0)
+        logger.warning(f"Failed to read rate limiter config for {model_name}, using defaults: {e}")
+        default_interval = 2.0 if _is_thinking_model(model_name) else 0.4
+        return GeminiRateLimiter(min_interval=default_interval, max_retries=2, circuit_breaker_cooldown=120.0)
 
 
-# Shared rate limiter instance (config-driven, created once at import time)
-_rate_limiter = _create_rate_limiter()
+# Module-level default for backward compatibility (flash model interval)
+_rate_limiter = get_rate_limiter("gemini-2.0-flash")
 
 
 def _load_valid_domains() -> List[str]:
@@ -530,6 +563,7 @@ class GeminiClient:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
+                self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"GeminiClient initialized with model: {self.model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize GeminiClient: {e}")
@@ -561,7 +595,7 @@ class GeminiClient:
             start_time = time.perf_counter()
 
             # Minimal test prompt - just ask for a single word
-            response = _rate_limiter.call_with_retry(
+            response = self._rate_limiter.call_with_retry(
                 self.model.generate_content,
                 "Respond with only the word 'OK'.",
                 generation_config=types.GenerationConfig(
@@ -616,6 +650,7 @@ class GeminiDomainExtractor:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
+                self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini extractor initialized with model: {self.model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
@@ -661,7 +696,7 @@ class GeminiDomainExtractor:
         )
 
         try:
-            response = _rate_limiter.call_with_retry(
+            response = self._rate_limiter.call_with_retry(
                 self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
@@ -778,7 +813,7 @@ class GeminiDomainExtractor:
         )
 
         try:
-            response = _rate_limiter.call_with_retry(
+            response = self._rate_limiter.call_with_retry(
                 self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
@@ -859,6 +894,7 @@ class GeminiRequirementsExtractor:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
+                self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini requirements extractor initialized with model: {self.model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini requirements extractor: {e}")
@@ -903,7 +939,7 @@ class GeminiRequirementsExtractor:
         )
 
         try:
-            response = _rate_limiter.call_with_retry(
+            response = self._rate_limiter.call_with_retry(
                 self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
@@ -1045,6 +1081,7 @@ class GeminiMatchReranker:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
+                self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini re-ranker initialized with model: {self.model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini re-ranker: {e}")
@@ -1133,7 +1170,7 @@ class GeminiMatchReranker:
         )
 
         try:
-            response = _rate_limiter.call_with_retry(
+            response = self._rate_limiter.call_with_retry(
                 self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
@@ -1257,6 +1294,7 @@ class GeminiBulletRewriter:
             try:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
+                self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini bullet rewriter initialized with model: {self.model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini bullet rewriter: {e}")
@@ -1408,7 +1446,7 @@ class GeminiBulletRewriter:
                 }
             ]
 
-            response = _rate_limiter.call_with_retry(
+            response = self._rate_limiter.call_with_retry(
                 self.model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(

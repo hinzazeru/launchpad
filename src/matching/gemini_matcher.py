@@ -17,7 +17,7 @@ import google.generativeai as genai
 from google.generativeai import types
 
 from src.config import get_config
-from src.integrations.gemini_client import clean_json_text, _rate_limiter
+from src.integrations.gemini_client import clean_json_text, get_rate_limiter
 from src.matching.requirements import (
     StructuredRequirements,
     GeminiMatchResult,
@@ -196,6 +196,8 @@ class GeminiMatcher:
                 genai.configure(api_key=self.api_key)
                 self.model = genai.GenerativeModel(self.model_name)
                 self.batch_model = genai.GenerativeModel(self.batch_model_name)
+                self._rate_limiter = get_rate_limiter(self.model_name)
+                self._batch_rate_limiter = get_rate_limiter(self.batch_model_name)
                 logger.info(f"GeminiMatcher initialized with model: {self.model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize GeminiMatcher: {e}")
@@ -261,7 +263,8 @@ class GeminiMatcher:
             )
 
         try:
-            response = _rate_limiter.call_with_retry(
+            rate_limiter = self._batch_rate_limiter if use_batch_model else self._rate_limiter
+            response = rate_limiter.call_with_retry(
                 model.generate_content,
                 prompt,
                 generation_config=types.GenerationConfig(
