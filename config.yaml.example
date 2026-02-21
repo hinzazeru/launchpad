@@ -208,6 +208,18 @@ gemini:
   api_key: "YOUR_GEMINI_API_KEY_HERE"  # Get from https://aistudio.google.com/app/apikey
   model: "gemini-2.5-flash"  # Main model for match re-ranking
 
+  # Rate limiter — tune this to match your Gemini API tier
+  # Tier reference:
+  #   Free tier:    min_interval_ms: 5000   (10-15 RPM)
+  #   Paid Tier 1:  min_interval_ms: 400    (~150 RPM)  ← default
+  #   Paid Tier 2:  min_interval_ms: 120    (~500 RPM)
+  # Can also be set via env vars: GEMINI_RATE_LIMIT_MIN_INTERVAL_MS,
+  #   GEMINI_RATE_LIMIT_MAX_RETRIES, GEMINI_RATE_LIMIT_COOLDOWN_S
+  rate_limit:
+    min_interval_ms: 400             # Milliseconds between API calls
+    max_retries: 2                   # Retries on 429 before tripping circuit breaker
+    circuit_breaker_cooldown_s: 120  # Seconds to skip calls after quota exhaustion
+
   # Domain Extraction & Summarization (during job import)
   extractor:
     model: "gemini-2.0-flash"  # Non-thinking model - faster & cheaper for simple tasks

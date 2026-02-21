@@ -80,7 +80,7 @@ def enrich_jobs_parallel(
     gemini_extractor,
     requirements_extractor,
     session,
-    max_workers: int = 3,
+    max_workers: int = 2,
 ) -> int:
     """Enrich jobs with Gemini extraction using thread pool.
 

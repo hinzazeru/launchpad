@@ -36,6 +36,9 @@ ENV_OVERRIDES: Dict[str, str] = {
     "matching.engine": "MATCHING_ENGINE",
     "scheduling.enabled": "SCHEDULING_ENABLED",
     "admin.token": "ADMIN_TOKEN",
+    "gemini.rate_limit.min_interval_ms": "GEMINI_RATE_LIMIT_MIN_INTERVAL_MS",
+    "gemini.rate_limit.max_retries": "GEMINI_RATE_LIMIT_MAX_RETRIES",
+    "gemini.rate_limit.circuit_breaker_cooldown_s": "GEMINI_RATE_LIMIT_COOLDOWN_S",
 }
 
 

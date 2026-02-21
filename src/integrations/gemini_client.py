@@ -289,8 +289,39 @@ class GeminiRateLimiter:
         raise last_error
 
 
-# Shared rate limiter (Paid Tier 1: ~150 RPM, circuit breaker trips after 2 retries)
-_rate_limiter = GeminiRateLimiter(min_interval=0.4, max_retries=2, circuit_breaker_cooldown=120.0)
+def _create_rate_limiter() -> GeminiRateLimiter:
+    """Create a rate limiter using config-driven parameters.
+
+    Reads gemini.rate_limit.* values so the interval can be tuned per API tier
+    without a code deploy. Falls back to Paid Tier 1 defaults (400ms, ~150 RPM).
+
+    Tier reference:
+      Free tier:    4000-6000 ms  (10-15 RPM)
+      Paid Tier 1:   400 ms       (~150 RPM)  ← default
+      Paid Tier 2:   120 ms       (~500 RPM)
+    """
+    try:
+        config = get_config()
+        min_interval_ms = config.get("gemini.rate_limit.min_interval_ms", 400)
+        max_retries = config.get("gemini.rate_limit.max_retries", 2)
+        cooldown = config.get("gemini.rate_limit.circuit_breaker_cooldown_s", 120.0)
+        limiter = GeminiRateLimiter(
+            min_interval=min_interval_ms / 1000.0,
+            max_retries=int(max_retries),
+            circuit_breaker_cooldown=float(cooldown),
+        )
+        logger.debug(
+            f"Gemini rate limiter: min_interval={min_interval_ms}ms, "
+            f"max_retries={max_retries}, cooldown={cooldown}s"
+        )
+        return limiter
+    except Exception as e:
+        logger.warning(f"Failed to read rate limiter config, using defaults: {e}")
+        return GeminiRateLimiter(min_interval=0.4, max_retries=2, circuit_breaker_cooldown=120.0)
+
+
+# Shared rate limiter instance (config-driven, created once at import time)
+_rate_limiter = _create_rate_limiter()
 
 
 def _load_valid_domains() -> List[str]:
