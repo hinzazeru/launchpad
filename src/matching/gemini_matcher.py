@@ -406,6 +406,18 @@ class GeminiMatcher:
             cleaned = clean_json_text(response_text)
             result = json.loads(cleaned)
 
+            # Debug: log skill_matches and strengths counts for diagnosis
+            sm_count = len(result.get("skill_matches") or [])
+            st_count = len(result.get("strengths") or [])
+            if sm_count == 0 or st_count == 0:
+                # Log parts info to understand structure
+                parts_info = [(getattr(p, 'thought', False), len(getattr(p, 'text', '') or '')) for p in response.candidates[0].content.parts]
+                logger.info(
+                    f"DBG {job_title}: sm={sm_count} strengths={st_count} "
+                    f"parts={parts_info} text_len={len(response_text)} "
+                    f"snippet={response_text[200:500]!r}"
+                )
+
             # Build skill matches
             skill_matches = []
             for m in result.get("skill_matches", []):
