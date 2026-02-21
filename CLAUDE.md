@@ -94,6 +94,7 @@ frontend/src/
 14. **Environment Variable Config Overrides**: `src/config.py` checks env vars before YAML values via the `ENV_OVERRIDES` mapping. This enables Railway/cloud deployments where secrets are injected as env vars. Config.yaml is optional — if missing, the app runs on env vars and defaults only. Boolean coercion handles `"true"/"false"` strings automatically.
 
 15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. Both Apify and BrightData providers share this helper.
+    - **3 separate calls per job (intentional)**: Domain extraction, summarization, and requirements extraction are kept as 3 individual Gemini calls rather than 1 combined call. Combining them into a single prompt was tested and significantly reduced extraction accuracy — focused single-task prompts produce better results. Do not attempt to merge these into one call to save API quota.
 
 16. **Railway Deployment**: The app is deployed on Railway at `https://launchpad-production-1ce9.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
 
