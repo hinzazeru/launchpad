@@ -40,6 +40,7 @@ ENV_OVERRIDES: Dict[str, str] = {
     "gemini.rate_limit.thinking_min_interval_ms": "GEMINI_RATE_LIMIT_THINKING_MIN_INTERVAL_MS",
     "gemini.rate_limit.max_retries": "GEMINI_RATE_LIMIT_MAX_RETRIES",
     "gemini.rate_limit.circuit_breaker_cooldown_s": "GEMINI_RATE_LIMIT_COOLDOWN_S",
+    "gemini.matcher.concurrency": "GEMINI_MATCHER_CONCURRENCY",
 }
 
 
