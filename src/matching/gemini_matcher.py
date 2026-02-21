@@ -271,13 +271,16 @@ class GeminiMatcher:
                 prompt,
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
-                    max_output_tokens=2048,  # Increased to prevent truncation of complex responses
+                    # max_output_tokens covers thinking + output tokens for gemini-2.5-* models.
+                    # The thinking process consumes ~2000 tokens; the full JSON response needs
+                    # ~500-1000 tokens. 8192 gives ample room for both (previous 2048 was
+                    # exhausted by thinking alone, leaving only ~50 tokens for output).
+                    max_output_tokens=8192,
                     # NOTE: response_mime_type="application/json" intentionally omitted.
-                    # Thinking models (gemini-2.5-*) return minimal/empty arrays in JSON mode
-                    # due to interference between thinking tokens and constrained generation.
+                    # Thinking models (gemini-2.5-*) return empty arrays in constrained JSON mode.
                     # clean_json_text() handles extracting JSON from free-form responses.
                 ),
-                request_options={"timeout": 60},  # 60s timeout per call
+                request_options={"timeout": 120},  # Extended to 120s for thinking model
             )
 
             # Parse response with candidate context for filtering
@@ -405,18 +408,6 @@ class GeminiMatcher:
         try:
             cleaned = clean_json_text(response_text)
             result = json.loads(cleaned)
-
-            # Debug: log skill_matches and strengths counts for diagnosis
-            sm_count = len(result.get("skill_matches") or [])
-            st_count = len(result.get("strengths") or [])
-            if sm_count == 0 or st_count == 0:
-                # Log parts info to understand structure
-                parts_info = [(getattr(p, 'thought', False), len(getattr(p, 'text', '') or '')) for p in response.candidates[0].content.parts]
-                logger.info(
-                    f"DBG {job_title}: sm={sm_count} strengths={st_count} "
-                    f"parts={parts_info} text_len={len(response_text)} "
-                    f"full_text={response_text!r}"
-                )
 
             # Build skill matches
             skill_matches = []
