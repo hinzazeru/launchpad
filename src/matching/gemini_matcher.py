@@ -272,10 +272,10 @@ class GeminiMatcher:
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
                     # max_output_tokens covers thinking + output tokens for gemini-2.5-* models.
-                    # The thinking process consumes ~2000 tokens; the full JSON response needs
-                    # ~500-1000 tokens. 4096 gives ~2000 tokens for output after thinking
-                    # (previous 2048 was exhausted by thinking alone, leaving ~50 tokens for output).
-                    max_output_tokens=4096,
+                    # The thinking process consumes ~2000-6000 tokens; the full JSON response
+                    # needs ~500-1000 tokens. 8192 reliably provides enough room for both
+                    # (2048 was exhausted by thinking alone; 4096 had 70% truncation rate).
+                    max_output_tokens=8192,
                     # NOTE: response_mime_type="application/json" intentionally omitted.
                     # Thinking models (gemini-2.5-*) return empty arrays in constrained JSON mode.
                     # clean_json_text() handles extracting JSON from free-form responses.

@@ -46,7 +46,9 @@ Configuration (config.yaml):
 
 import json
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -658,27 +660,17 @@ class JobMatcher:
         if min_score is None:
             min_score = self.config.get_min_match_score()
 
-        matches = []
         gemini_stats = GeminiStats() if track_gemini_stats else None
+        concurrency = self.config.get("gemini.matcher.concurrency", 1)
 
-        for job in jobs:
-            match_result = self.match_job(resume, job, gemini_stats=gemini_stats)
-
-            # Only include if meets minimum score
-            if match_result['overall_score'] >= min_score:
-                # Add job details to match result
-                match_result['job'] = job
-                match_result['job_id'] = job.id
-                match_result['job_title'] = job.title
-                match_result['company'] = job.company
-                match_result['location'] = job.location
-                match_result['url'] = job.url
-                match_result['posting_date'] = job.posting_date
-                match_result['description'] = job.description
-                match_result['experience_required'] = job.experience_required
-                match_result['required_domains'] = job.required_domains or []
-
-                matches.append(match_result)
+        # Use concurrent matching when Gemini is active and concurrency > 1.
+        # The GeminiRateLimiter (threading.Lock) serialises API calls across threads,
+        # so concurrent threads simply pipeline their calls through the rate limiter
+        # instead of waiting for each to fully complete before starting the next.
+        if concurrency > 1 and self.gemini_matcher and self.gemini_matcher.is_available():
+            matches = self._match_jobs_concurrent(resume, jobs, min_score, concurrency, gemini_stats)
+        else:
+            matches = self._match_jobs_sequential(resume, jobs, min_score, gemini_stats)
 
         # Sort by overall score (descending)
         matches.sort(key=lambda x: x['overall_score'], reverse=True)
@@ -696,6 +688,94 @@ class JobMatcher:
             )
 
         return matches, gemini_stats
+
+    def _match_jobs_sequential(
+        self,
+        resume: Resume,
+        jobs: List[JobPosting],
+        min_score: float,
+        gemini_stats: Optional[GeminiStats],
+    ) -> List[Dict]:
+        """Sequential implementation of job matching (used when concurrency=1)."""
+        matches = []
+        for job in jobs:
+            match_result = self.match_job(resume, job, gemini_stats=gemini_stats)
+            if match_result['overall_score'] >= min_score:
+                match_result.update(self._job_detail_fields(job))
+                matches.append(match_result)
+        return matches
+
+    def _match_jobs_concurrent(
+        self,
+        resume: Resume,
+        jobs: List[JobPosting],
+        min_score: float,
+        concurrency: int,
+        gemini_stats: Optional[GeminiStats],
+    ) -> List[Dict]:
+        """Concurrent implementation of job matching using ThreadPoolExecutor.
+
+        Each worker thread calls match_job() independently. The GeminiRateLimiter
+        (threading.Lock) serialises API calls, so threads effectively pipeline their
+        Gemini requests — each starts its call as soon as the previous thread's rate
+        limit window expires, rather than waiting for the previous call to complete.
+        """
+        stats_lock = threading.Lock()
+        matches = []
+        matches_lock = threading.Lock()
+
+        def _match_one(job: JobPosting) -> None:
+            """Worker: match a single job and append to shared results list."""
+            t0 = time.perf_counter()
+            try:
+                # match_job is thread-safe: reads-only from shared state,
+                # and all Gemini calls are serialised by the rate limiter lock.
+                result = self.match_job(resume, job, gemini_stats=None)
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+
+                if gemini_stats is not None:
+                    with stats_lock:
+                        gemini_stats.attempted += 1
+                        if result.get('match_engine') == 'gemini':
+                            gemini_stats.succeeded += 1
+                            gemini_stats.add_timing(elapsed_ms)
+                        elif result.get('match_engine') == 'nlp' and self._should_use_gemini(job):
+                            # Gemini was attempted but fell back to NLP
+                            gemini_stats.add_failure("nlp_fallback")
+
+                if result['overall_score'] >= min_score:
+                    result.update(self._job_detail_fields(job))
+                    with matches_lock:
+                        matches.append(result)
+
+            except Exception as e:
+                logger.error(f"Unexpected error matching '{job.title}': {e}", exc_info=True)
+                if gemini_stats is not None:
+                    with stats_lock:
+                        gemini_stats.add_failure("exception")
+
+        with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="matcher") as executor:
+            futures = [executor.submit(_match_one, job) for job in jobs]
+            # Wait for all to finish (exceptions are caught inside _match_one)
+            for f in as_completed(futures):
+                f.result()  # Re-raise any unexpected uncaught exceptions
+
+        return matches
+
+    def _job_detail_fields(self, job: JobPosting) -> Dict:
+        """Return the job-detail fields appended to every match result."""
+        return {
+            'job': job,
+            'job_id': job.id,
+            'job_title': job.title,
+            'company': job.company,
+            'location': job.location,
+            'url': job.url,
+            'posting_date': job.posting_date,
+            'description': job.description,
+            'experience_required': job.experience_required,
+            'required_domains': job.required_domains or [],
+        }
 
     def save_match_results(
         self,
