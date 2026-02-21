@@ -405,9 +405,13 @@ class GeminiMatcher:
 
             # Debug: log raw skill_matches from Gemini response
             raw_skill_matches = result.get("skill_matches", [])
-            logger.debug(f"Gemini raw skill_matches for {job_title}: {raw_skill_matches}")
             if not raw_skill_matches:
-                logger.info(f"Gemini returned empty skill_matches for {job_title}. overall_score={result.get('overall_score')}")
+                logger.info(
+                    f"Gemini returned empty skill_matches for {job_title}. "
+                    f"overall_score={result.get('overall_score')} | "
+                    f"response_keys={list(result.keys())} | "
+                    f"raw_response={response_text[:300]}"
+                )
 
             # Build skill matches
             skill_matches = []
