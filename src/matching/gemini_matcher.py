@@ -272,7 +272,10 @@ class GeminiMatcher:
                 generation_config=types.GenerationConfig(
                     temperature=0.2,  # Low for consistent scoring
                     max_output_tokens=2048,  # Increased to prevent truncation of complex responses
-                    response_mime_type="application/json",
+                    # NOTE: response_mime_type="application/json" intentionally omitted.
+                    # Thinking models (gemini-2.5-*) return minimal/empty arrays in JSON mode
+                    # due to interference between thinking tokens and constrained generation.
+                    # clean_json_text() handles extracting JSON from free-form responses.
                 ),
                 request_options={"timeout": 60},  # 60s timeout per call
             )
@@ -402,16 +405,6 @@ class GeminiMatcher:
         try:
             cleaned = clean_json_text(response_text)
             result = json.loads(cleaned)
-
-            # Debug: log raw skill_matches from Gemini response
-            raw_skill_matches = result.get("skill_matches", [])
-            if not raw_skill_matches:
-                logger.info(
-                    f"Gemini returned empty skill_matches for {job_title}. "
-                    f"overall_score={result.get('overall_score')} | "
-                    f"response_keys={list(result.keys())} | "
-                    f"raw_response={response_text[:300]}"
-                )
 
             # Build skill matches
             skill_matches = []
