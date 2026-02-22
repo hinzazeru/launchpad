@@ -215,10 +215,26 @@ class GeminiRateLimiter:
     backoff on 429 errors. Includes a circuit breaker that stops retrying
     for a cooldown period after repeated 429s, so batch operations fail
     fast instead of blocking the worker for minutes.
+
+    Two-tier rate limiting is supported via the ``upstream`` parameter.
+    Per-model limiters should pass the shared API-key-level limiter as
+    ``upstream`` so that the combined call rate across all models stays
+    within the project's quota.  The key-level limiter itself has no
+    upstream (``upstream=None``).
+
+    Call flow for a per-model limiter with an upstream:
+        1. upstream._acquire_slot()  — enforce shared per-key minimum gap
+        2. self._acquire_slot()      — enforce per-model minimum gap on top
+        3. make the API call
     """
 
-    def __init__(self, min_interval: float = 0.4, max_retries: int = 2,
-                 circuit_breaker_cooldown: float = 120.0):
+    def __init__(
+        self,
+        min_interval: float = 0.4,
+        max_retries: int = 2,
+        circuit_breaker_cooldown: float = 120.0,
+        upstream: Optional["GeminiRateLimiter"] = None,
+    ):
         self._min_interval = min_interval
         self._max_retries = max_retries
         self._last_call_time = 0.0
@@ -226,14 +242,20 @@ class GeminiRateLimiter:
         # Circuit breaker: skip calls entirely after repeated 429s
         self._circuit_open_until = 0.0
         self._circuit_breaker_cooldown = circuit_breaker_cooldown
+        # Shared key-level gate (None for the key limiter itself)
+        self._upstream = upstream
 
     @property
     def circuit_open(self) -> bool:
         """Check if circuit breaker is tripped (quota exhausted)."""
         return time.monotonic() < self._circuit_open_until
 
-    def wait(self) -> None:
-        """Block until enough time has passed since the last call."""
+    def _acquire_slot(self) -> None:
+        """Claim one rate-limit slot (thread-safe).
+
+        Blocks until the minimum interval has elapsed since the last slot
+        was claimed by any thread using this limiter instance.
+        """
         with self._lock:
             now = time.monotonic()
             elapsed = now - self._last_call_time
@@ -241,11 +263,29 @@ class GeminiRateLimiter:
                 time.sleep(self._min_interval - elapsed)
             self._last_call_time = time.monotonic()
 
+    def wait(self) -> None:
+        """Block until both the shared key limit and per-model limit allow the call.
+
+        Waits for the upstream (shared API-key-level limiter) first, then for
+        this limiter's own per-model minimum interval.  If there is no upstream,
+        only the per-model interval is enforced.
+        """
+        if self._upstream is not None:
+            self._upstream._acquire_slot()
+        self._acquire_slot()
+
+    def _trip_circuit_breaker(self) -> None:
+        """Open this limiter's circuit breaker for the full cooldown period."""
+        self._circuit_open_until = time.monotonic() + self._circuit_breaker_cooldown
+
     def call_with_retry(self, fn, *args, **kwargs):
         """Call fn with rate limiting and retry on 429 errors.
 
         If the circuit breaker is open (recent 429 quota exhaustion),
-        raises immediately without making an API call.
+        raises immediately without making an API call.  When quota is
+        exhausted after all retries, trips both this limiter's circuit
+        breaker AND the upstream (shared key-level) circuit breaker so
+        that all models pause during the cooldown.
 
         Args:
             fn: Callable that makes the Gemini API call
@@ -259,6 +299,8 @@ class GeminiRateLimiter:
         """
         if self.circuit_open:
             raise Exception("Gemini rate limit circuit breaker open — skipping call (quota exhausted)")
+        if self._upstream is not None and self._upstream.circuit_open:
+            raise Exception("Gemini API key quota exhausted (shared circuit breaker open)")
 
         last_error = None
         for attempt in range(self._max_retries + 1):
@@ -277,8 +319,10 @@ class GeminiRateLimiter:
                         )
                         time.sleep(backoff)
                     else:
-                        # All retries exhausted — trip circuit breaker
-                        self._circuit_open_until = time.monotonic() + self._circuit_breaker_cooldown
+                        # All retries exhausted — trip both local and key-level circuit breakers
+                        self._trip_circuit_breaker()
+                        if self._upstream is not None:
+                            self._upstream._trip_circuit_breaker()
                         logger.warning(
                             f"Gemini quota exhausted after {self._max_retries + 1} attempts. "
                             f"Circuit breaker open for {self._circuit_breaker_cooldown}s — "
@@ -289,33 +333,96 @@ class GeminiRateLimiter:
         raise last_error
 
 
-# Model name substrings that identify thinking/reasoning models.
-# These have lower RPM limits than standard flash models and need a slower interval.
-_THINKING_MODEL_KEYWORDS = ("2.5", "3-", "3.", "-thinking")
+# Explicit prefix list for known thinking/reasoning model names.
+# These have lower RPM limits and need a slower per-call interval.
+# Config override: gemini.rate_limit.thinking_model_prefixes (list of strings)
+# Use model-name PREFIXES rather than broad version substrings — "2.5" would
+# also match hypothetical names like "gemini-1.25-pro" and can't distinguish
+# gemini-2.5-flash from a future gemini-2.5-flash-lite that may not be a thinking model.
+_DEFAULT_THINKING_MODEL_PREFIXES = [
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash-8b",
+    "gemini-exp-",          # experimental models are typically thinking variants
+]
 
 
 def _is_thinking_model(model_name: str) -> bool:
-    """Return True if model_name is a thinking/reasoning model."""
-    return any(kw in model_name for kw in _THINKING_MODEL_KEYWORDS)
+    """Return True if model_name is a known thinking/reasoning model.
+
+    Uses an explicit prefix allowlist (config: gemini.rate_limit.thinking_model_prefixes)
+    rather than broad version-number substrings. When a new thinking model is released,
+    add its prefix to the config or the default list above — a wrong classification
+    will produce a logged warning, not a silent misconfiguration.
+    """
+    try:
+        config = get_config()
+        prefixes = config.get(
+            "gemini.rate_limit.thinking_model_prefixes",
+            _DEFAULT_THINKING_MODEL_PREFIXES,
+        )
+    except Exception:
+        prefixes = _DEFAULT_THINKING_MODEL_PREFIXES
+    is_thinking = any(model_name.startswith(p) for p in prefixes)
+    if is_thinking:
+        logger.debug(f"Model '{model_name}' classified as thinking model (slower rate limit)")
+    return is_thinking
 
 
 _rate_limiter_cache: Dict[str, GeminiRateLimiter] = {}
 _rate_limiter_cache_lock = threading.Lock()
 
+# Shared per-API-key limiter (lazily created on first use, never at import time).
+# ALL per-model limiters gate through this first, so the combined call rate across
+# all models never exceeds the project's quota.
+_shared_key_limiter: Optional[GeminiRateLimiter] = None
+_shared_key_limiter_lock = threading.Lock()
+
+
+def _get_shared_key_limiter() -> GeminiRateLimiter:
+    """Return (or lazily create) the shared per-API-key rate limiter.
+
+    The Gemini quota is per project/API key, not per model.  A single shared
+    limiter ensures that the combined rate from all models (enrichment flash +
+    matching thinking) stays within the key's RPM cap.
+
+    Config: ``gemini.rate_limit.global_min_interval_ms`` (default 400 ms = 150 RPM).
+    """
+    global _shared_key_limiter
+    with _shared_key_limiter_lock:
+        if _shared_key_limiter is None:
+            try:
+                config = get_config()
+                min_interval_ms = config.get("gemini.rate_limit.global_min_interval_ms", 400)
+                max_retries = config.get("gemini.rate_limit.max_retries", 2)
+                cooldown = config.get("gemini.rate_limit.circuit_breaker_cooldown_s", 120.0)
+            except Exception:
+                min_interval_ms, max_retries, cooldown = 400, 2, 120.0
+            _shared_key_limiter = GeminiRateLimiter(
+                min_interval=min_interval_ms / 1000.0,
+                max_retries=int(max_retries),
+                circuit_breaker_cooldown=float(cooldown),
+                upstream=None,  # The key limiter is the root — no further upstream
+            )
+            logger.debug(
+                f"Gemini shared key limiter: global_min_interval={min_interval_ms}ms, "
+                f"max_retries={max_retries}, cooldown={cooldown}s"
+            )
+        return _shared_key_limiter
+
 
 def get_rate_limiter(model_name: str) -> GeminiRateLimiter:
-    """Get (or create) a rate limiter calibrated for the given model.
+    """Get (or create) a per-model rate limiter backed by the shared key-level gate.
 
-    Thinking models (gemini-2.5-*, gemini-3-*, etc.) get a separate, slower
-    limiter because they have lower RPM limits than standard flash models.
-    Limiters are cached by model name so the same instance is shared across
-    all callers using the same model.
+    Each model gets its own limiter calibrated to the model's RPM limit.
+    All limiters share a common upstream (``_get_shared_key_limiter()``) so
+    the combined call rate across every model stays within the API key's quota.
 
     Args:
         model_name: The Gemini model name (e.g. "gemini-2.0-flash")
 
     Returns:
-        A GeminiRateLimiter calibrated for that model family
+        A GeminiRateLimiter calibrated for that model, backed by the shared key limiter.
     """
     with _rate_limiter_cache_lock:
         if model_name not in _rate_limiter_cache:
@@ -324,7 +431,11 @@ def get_rate_limiter(model_name: str) -> GeminiRateLimiter:
 
 
 def _build_rate_limiter(model_name: str) -> GeminiRateLimiter:
-    """Create a rate limiter with config-driven parameters for the given model."""
+    """Create a per-model rate limiter with config-driven parameters.
+
+    The returned limiter gates through the shared key-level limiter (upstream)
+    first, then enforces the model-specific minimum interval on top.
+    """
     try:
         config = get_config()
         is_thinking = _is_thinking_model(model_name)
@@ -341,6 +452,7 @@ def _build_rate_limiter(model_name: str) -> GeminiRateLimiter:
             min_interval=min_interval_ms / 1000.0,
             max_retries=int(max_retries),
             circuit_breaker_cooldown=float(cooldown),
+            upstream=_get_shared_key_limiter(),
         )
         logger.debug(
             f"Gemini rate limiter ({model_type}, {model_name}): "
@@ -350,11 +462,12 @@ def _build_rate_limiter(model_name: str) -> GeminiRateLimiter:
     except Exception as e:
         logger.warning(f"Failed to read rate limiter config for {model_name}, using defaults: {e}")
         default_interval = 2.0 if _is_thinking_model(model_name) else 0.4
-        return GeminiRateLimiter(min_interval=default_interval, max_retries=2, circuit_breaker_cooldown=120.0)
-
-
-# Module-level default for backward compatibility (flash model interval)
-_rate_limiter = get_rate_limiter("gemini-2.0-flash")
+        return GeminiRateLimiter(
+            min_interval=default_interval,
+            max_retries=2,
+            circuit_breaker_cooldown=120.0,
+            upstream=_get_shared_key_limiter(),
+        )
 
 
 def _load_valid_domains() -> List[str]:

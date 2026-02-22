@@ -720,6 +720,18 @@ class JobMatcher:
         Gemini requests — each starts its call as soon as the previous thread's rate
         limit window expires, rather than waiting for the previous call to complete.
         """
+        # Pre-load all ORM attributes that worker threads will access.
+        # SQLAlchemy lazy-loading is not safe from non-owning threads; touching
+        # every attribute here forces the queries to run in the main thread so
+        # workers only read already-materialised Python values.
+        _ = resume.skills, resume.experience_years, resume.domains, resume.job_titles
+        for job in jobs:
+            _ = (
+                job.id, job.title, job.company, job.location, job.url,
+                job.description, job.experience_required, job.posting_date,
+                job.required_domains, job.required_skills, job.structured_requirements,
+            )
+
         stats_lock = threading.Lock()
         matches = []
         matches_lock = threading.Lock()
@@ -735,13 +747,15 @@ class JobMatcher:
 
                 if gemini_stats is not None:
                     with stats_lock:
-                        gemini_stats.attempted += 1
-                        if result.get('match_engine') == 'gemini':
-                            gemini_stats.succeeded += 1
-                            gemini_stats.add_timing(elapsed_ms)
-                        elif result.get('match_engine') == 'nlp' and self._should_use_gemini(job):
-                            # Gemini was attempted but fell back to NLP
-                            gemini_stats.add_failure("nlp_fallback")
+                        if self._should_use_gemini(job):
+                            # Gemini was attempted for this job
+                            gemini_stats.attempted += 1
+                            if result.get('match_engine') == 'gemini':
+                                gemini_stats.succeeded += 1
+                                gemini_stats.add_timing(elapsed_ms)
+                            else:
+                                # Gemini was tried but fell back to NLP
+                                gemini_stats.add_failure("nlp_fallback")
 
                 if result['overall_score'] >= min_score:
                     result.update(self._job_detail_fields(job))
@@ -754,18 +768,23 @@ class JobMatcher:
                     with stats_lock:
                         gemini_stats.add_failure("exception")
 
+        # The ThreadPoolExecutor context manager waits for all futures on exit.
+        # _match_one swallows all exceptions internally (logging them), so there
+        # are no exceptions to propagate from the futures.
         with ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="matcher") as executor:
-            futures = [executor.submit(_match_one, job) for job in jobs]
-            # Wait for all to finish (exceptions are caught inside _match_one)
-            for f in as_completed(futures):
-                f.result()  # Re-raise any unexpected uncaught exceptions
+            for job in jobs:
+                executor.submit(_match_one, job)
 
         return matches
 
     def _job_detail_fields(self, job: JobPosting) -> Dict:
-        """Return the job-detail fields appended to every match result."""
+        """Return the job-detail fields appended to every match result.
+
+        Only plain/scalar values are included — no raw ORM objects.
+        Storing the ORM object in the result dict is unsafe after the
+        session closes (DetachedInstanceError on unloaded relations).
+        """
         return {
-            'job': job,
             'job_id': job.id,
             'job_title': job.title,
             'company': job.company,
@@ -841,17 +860,30 @@ class JobMatcher:
                     'match_confidence': match.get('match_confidence'),
                 })
 
+            # Strip None entries from all list fields before writing to the database.
+            # Gemini can emit null items in JSON arrays; cleaning here keeps the DB
+            # correct so every read path gets non-null lists without defensive filtering.
+            def _clean_list(lst) -> list:
+                return [x for x in (lst or []) if x is not None]
+
+            if 'ai_strengths' in match_fields:
+                match_fields['ai_strengths'] = _clean_list(match_fields.get('ai_strengths'))
+            if 'ai_concerns' in match_fields:
+                match_fields['ai_concerns'] = _clean_list(match_fields.get('ai_concerns'))
+            if 'ai_recommendations' in match_fields:
+                match_fields['ai_recommendations'] = _clean_list(match_fields.get('ai_recommendations'))
+
             result = crud.create_match_result(
                 db=db_session,
                 job_id=match['job_id'],
                 resume_id=resume_id,
                 match_score=score_as_percentage,
-                matching_skills=match['matching_skills'],
+                matching_skills=_clean_list(match.get('matching_skills')),
                 experience_alignment=experience_alignment_text,
                 engine_version=match.get('engine_version'),
                 gemini_score=gemini_score,
                 gemini_reasoning=match.get('gemini_reasoning'),
-                missing_domains=match.get('missing_domains'),
+                missing_domains=_clean_list(match.get('missing_domains')),
                 **match_fields
             )
             saved_results.append(result)

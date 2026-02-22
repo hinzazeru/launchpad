@@ -123,10 +123,9 @@ def main():
     print_header("TOP JOB MATCHES")
 
     for i, match in enumerate(matches[:10], 1):
-        job = match['job']
         separator = "=" * 80
         print(f"\n{separator}")
-        print(f"Match #{i}: {job.title} at {job.company}")
+        print(f"Match #{i}: {match['job_title']} at {match['company']}")
         print(separator)
 
         marker = " (TOP MATCH!)" if match['overall_score'] >= 0.7 else ""

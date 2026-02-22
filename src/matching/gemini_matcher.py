@@ -437,17 +437,33 @@ class GeminiMatcher:
                         transferable_from=g.get("transferable_from")
                     ))
 
+            # Sanity-check: if key list fields are all empty but overall_score is
+            # non-zero, the response was likely truncated by the token budget.
+            # Truncated thinking-model responses parse as valid JSON but have
+            # empty arrays — the only observable symptom of a token-budget miss.
+            strengths = result.get("strengths", [])
+            concerns = result.get("concerns", [])
+            recommendations = result.get("recommendations", [])
+            overall_score = float(result.get("overall_score", 0))
+            if overall_score > 0 and not skill_matches and not strengths and not concerns:
+                logger.warning(
+                    f"Gemini response for '{job_title}' has a non-zero score ({overall_score}) "
+                    f"but empty skill_matches/strengths/concerns — possible token-budget truncation. "
+                    f"Response length: {len(response_text)} chars. "
+                    f"Consider increasing max_output_tokens if this recurs."
+                )
+
             return GeminiMatchResult(
-                overall_score=float(result.get("overall_score", 0)),
+                overall_score=overall_score,
                 skills_score=float(result.get("skills_score", 0)),
                 experience_score=float(result.get("experience_score", 0)),
                 seniority_fit=float(result.get("seniority_fit", 0)),
                 domain_score=float(result.get("domain_score", 0)),
                 skill_matches=skill_matches,
                 skill_gaps=skill_gaps,
-                strengths=result.get("strengths", []),
-                concerns=result.get("concerns", []),
-                recommendations=result.get("recommendations", []),
+                strengths=strengths,
+                concerns=concerns,
+                recommendations=recommendations,
                 confidence=float(result.get("confidence", 0)),
                 reasoning=result.get("reasoning", "")
             )

@@ -116,3 +116,154 @@ class TestSkillGapFiltering:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---------------------------------------------------------------------------
+# Truncation warning in _parse_response() (Issue #8)
+# ---------------------------------------------------------------------------
+
+import json
+import logging
+from unittest.mock import MagicMock
+
+
+def _make_mock_response(text: str):
+    """Build a minimal mock Gemini SDK response object with one text part."""
+    part = MagicMock()
+    part.text = text
+    candidate = MagicMock()
+    candidate.content.parts = [part]
+    response = MagicMock()
+    response.candidates = [candidate]
+    return response
+
+
+# Minimal valid JSON that would result from token-budget truncation:
+# the model outputs scores but runs out of tokens before filling arrays.
+_TRUNCATED_JSON = json.dumps({
+    "overall_score": 75,
+    "skills_score": 70,
+    "experience_score": 80,
+    "seniority_fit": 65,
+    "domain_score": 60,
+    "skill_matches": [],
+    "skill_gaps": [],
+    "strengths": [],
+    "concerns": [],
+    "recommendations": [],
+    "confidence": 0.8,
+    "reasoning": "Good match overall.",
+})
+
+# Full normal response — arrays are populated.
+_FULL_JSON = json.dumps({
+    "overall_score": 75,
+    "skills_score": 70,
+    "experience_score": 80,
+    "seniority_fit": 65,
+    "domain_score": 60,
+    "skill_matches": [
+        {"job_skill": "Python", "resume_skill": "Python", "confidence": 1.0, "context": "Direct match"}
+    ],
+    "skill_gaps": [],
+    "strengths": ["Strong Python background"],
+    "concerns": ["Limited Kubernetes experience"],
+    "recommendations": ["Highlight backend projects"],
+    "confidence": 0.85,
+    "reasoning": "Strong technical match.",
+})
+
+# Score is 0 and all arrays empty — legitimate result, NOT truncation.
+_ZERO_SCORE_EMPTY_JSON = json.dumps({
+    "overall_score": 0,
+    "skills_score": 0,
+    "experience_score": 0,
+    "seniority_fit": 0,
+    "domain_score": 0,
+    "skill_matches": [],
+    "skill_gaps": [],
+    "strengths": [],
+    "concerns": [],
+    "recommendations": [],
+    "confidence": 0.1,
+    "reasoning": "No match.",
+})
+
+
+class TestTruncationWarning:
+    """Tests for the token-budget truncation sanity check in _parse_response()."""
+
+    @pytest.fixture
+    def matcher(self):
+        """GeminiMatcher with Gemini disabled (no API key required)."""
+        return GeminiMatcher()
+
+    def test_warning_emitted_when_score_nonzero_and_all_arrays_empty(
+        self, matcher, caplog
+    ):
+        """A non-zero score with empty skill_matches/strengths/concerns triggers a warning.
+
+        This is the fingerprint of a truncated thinking-model response: the model
+        outputs scores but runs out of the token budget before filling insight arrays.
+        """
+        with caplog.at_level(logging.WARNING, logger="src.matching.gemini_matcher"):
+            result = matcher._parse_response(
+                _make_mock_response(_TRUNCATED_JSON), "Test Job Title"
+            )
+        assert "token-budget truncation" in caplog.text, (
+            "Expected truncation warning to be logged, but it was not. "
+            f"Log output: {caplog.text!r}"
+        )
+        # The warning is observational — _parse_response must still return a result
+        assert result is not None, "Should return a GeminiMatchResult even when truncation is suspected"
+
+    def test_no_warning_when_score_is_zero(self, matcher, caplog):
+        """A zero score with empty arrays is a legitimate result — no warning."""
+        with caplog.at_level(logging.WARNING, logger="src.matching.gemini_matcher"):
+            matcher._parse_response(
+                _make_mock_response(_ZERO_SCORE_EMPTY_JSON), "Test Job Title"
+            )
+        assert "token-budget truncation" not in caplog.text, (
+            "Should NOT warn when overall_score == 0 (legit null result)"
+        )
+
+    def test_no_warning_when_arrays_populated(self, matcher, caplog):
+        """Normal full response with skill_matches and strengths — no truncation warning."""
+        with caplog.at_level(logging.WARNING, logger="src.matching.gemini_matcher"):
+            matcher._parse_response(
+                _make_mock_response(_FULL_JSON), "Test Job Title"
+            )
+        assert "token-budget truncation" not in caplog.text, (
+            "Should NOT warn when response arrays are populated"
+        )
+
+    def test_no_warning_when_only_strengths_present(self, matcher, caplog):
+        """If at least one insight array is non-empty, the response is not truncated."""
+        data = json.loads(_TRUNCATED_JSON)
+        data["strengths"] = ["Solid Python background"]  # one array has content
+        with caplog.at_level(logging.WARNING, logger="src.matching.gemini_matcher"):
+            matcher._parse_response(
+                _make_mock_response(json.dumps(data)), "Test Job Title"
+            )
+        assert "token-budget truncation" not in caplog.text
+
+    def test_result_fields_correct_despite_truncation_warning(self, matcher):
+        """The returned GeminiMatchResult should reflect the parsed JSON values."""
+        result = matcher._parse_response(
+            _make_mock_response(_TRUNCATED_JSON), "Test Job"
+        )
+        assert result is not None
+        assert result.overall_score == pytest.approx(75.0)
+        assert result.skill_matches == []
+        assert result.strengths == []
+
+    def test_response_length_included_in_warning(self, matcher, caplog):
+        """The warning message should include the response length for debugging."""
+        with caplog.at_level(logging.WARNING, logger="src.matching.gemini_matcher"):
+            matcher._parse_response(
+                _make_mock_response(_TRUNCATED_JSON), "Engineer Role"
+            )
+        # The warning should mention response length so devs can see how much was returned
+        assert "chars" in caplog.text or "length" in caplog.text, (
+            f"Warning should mention response length. Log: {caplog.text!r}"
+        )

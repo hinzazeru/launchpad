@@ -128,9 +128,9 @@ class TestSchedulerCRUD:
         create_response = client.post("/api/scheduler/schedules", json=payload)
         schedule_id = create_response.json()["id"]
 
-        # Delete it
+        # Delete it — DELETE returns 204 No Content
         response = client.delete(f"/api/scheduler/schedules/{schedule_id}")
-        assert response.status_code == 200
+        assert response.status_code == 204
 
         # Verify it's gone
         get_response = client.get(f"/api/scheduler/schedules/{schedule_id}")
