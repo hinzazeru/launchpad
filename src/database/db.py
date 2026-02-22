@@ -15,10 +15,16 @@ Base = declarative_base()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///linkedin_job_matcher.db")
 
 # Create engine
+_pool_kwargs = (
+    {}
+    if "sqlite" in DATABASE_URL
+    else {"pool_size": 3, "max_overflow": 2, "pool_recycle": 300}
+)
 engine = create_engine(
     DATABASE_URL,
     echo=False,  # Set to True for SQL query logging
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    **_pool_kwargs,
 )
 
 # Create session factory

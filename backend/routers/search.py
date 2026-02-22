@@ -508,6 +508,7 @@ async def search_jobs(request: JobSearchRequest):
             if duplicate_count > 0:
                 logger.info(f"Removed {duplicate_count} duplicate jobs from Apify results")
             jobs = list(seen_raw.values())
+            del seen_raw  # Free dedup dict
 
         jobs_fetched = len(jobs) if jobs else 0
 
@@ -610,7 +611,9 @@ async def search_jobs(request: JobSearchRequest):
                         continue
                 
                 all_jobs = fetched_job_objects
-                
+                del fetched_job_objects  # No longer needed; raw API list also done
+                del jobs                 # Free raw API response list
+
                 # Filter out low-quality jobs (sparse descriptions)
                 min_description_length = 200
                 quality_jobs = [
@@ -1470,7 +1473,7 @@ async def _execute_search_job_async(search_id: str):
                         )
                     )
 
-                all_jobs = query.all()
+                all_jobs = query.limit(500).all()
 
                 # Filter low quality
                 min_description_length = 200
@@ -1486,6 +1489,7 @@ async def _execute_search_job_async(search_id: str):
                     )):
                         seen_jobs[dedup_key] = job
                 all_jobs = list(seen_jobs.values())
+                del seen_jobs  # Free dedup dict
 
                 update_progress('matching', 55, f"Analyzing {len(all_jobs)} jobs...",
                                jobs_found=jobs_fetched, jobs_imported=jobs_imported)

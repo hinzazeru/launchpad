@@ -18,6 +18,7 @@ Related Skills:
 
 import logging
 import threading
+from collections import OrderedDict
 from typing import List, Tuple, Dict, Optional
 from sentence_transformers import SentenceTransformer, util
 import numpy as np
@@ -44,7 +45,8 @@ class SkillsMatcher:
                            This improves performance by computing embeddings once at startup.
         """
         self.model = SentenceTransformer(model_name)
-        self._cache = {}  # Cache embeddings for performance
+        self._cache = OrderedDict()  # Bounded LRU cache: skill -> embedding
+        self._cache_max_size = 2000   # Max embeddings kept in memory
         self._cache_lock = threading.Lock()  # Thread safety for cache access
 
         # Pre-cache embeddings if skills provided
@@ -77,6 +79,8 @@ class SkillsMatcher:
 
             for skill, emb in zip(uncached, embeddings):
                 self._cache[skill] = emb
+                if len(self._cache) > self._cache_max_size:
+                    self._cache.popitem(last=False)  # Evict LRU entry
 
             logger.info(f"Pre-cached {len(uncached)} skill embeddings (total cache: {len(self._cache)})")
             return len(uncached)
@@ -246,25 +250,27 @@ class SkillsMatcher:
             numpy array of embeddings
         """
         with self._cache_lock:
-            # Check cache for each skill
+            # Collect cache hits and mark as recently used; collect misses
+            result_map = {}
             uncached_skills = []
-            uncached_indices = []
 
-            for i, skill in enumerate(skills):
-                if skill not in self._cache:
+            for skill in skills:
+                if skill in self._cache:
+                    self._cache.move_to_end(skill)  # Mark as recently used
+                    result_map[skill] = self._cache[skill]
+                else:
                     uncached_skills.append(skill)
-                    uncached_indices.append(i)
 
             # Compute embeddings for uncached skills
             if uncached_skills:
                 new_embeddings = self.model.encode(uncached_skills, convert_to_tensor=False)
                 for skill, embedding in zip(uncached_skills, new_embeddings):
+                    result_map[skill] = embedding  # Keep in result regardless of eviction
                     self._cache[skill] = embedding
+                    if len(self._cache) > self._cache_max_size:
+                        self._cache.popitem(last=False)  # Evict LRU entry
 
-            # Retrieve all embeddings from cache
-            embeddings = [self._cache[skill] for skill in skills]
-
-            return np.array(embeddings)
+            return np.array([result_map[skill] for skill in skills])
 
     def find_skill_gaps(
         self,
@@ -297,7 +303,7 @@ class SkillsMatcher:
     def clear_cache(self):
         """Clear the embedding cache."""
         with self._cache_lock:
-            self._cache = {}
+            self._cache = OrderedDict()
 
 
 def create_skills_matcher(

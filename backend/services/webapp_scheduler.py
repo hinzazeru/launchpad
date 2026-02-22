@@ -275,9 +275,13 @@ class WebAppScheduler:
                 db.rollback()
         finally:
             db.close()
-        
+            # Release the model singleton to reclaim ~80MB+ between scheduled runs.
+            # It will be re-loaded on the next search (~5-10s reload time).
+            from backend.services.matcher_service import release_job_matcher
+            release_job_matcher()
+
         return result
-    
+
     async def _run_search_pipeline(
         self,
         db: Session,
@@ -498,12 +502,12 @@ class WebAppScheduler:
                 if not force_rematch and schedule.last_run_at:
                     query = query.filter(JobPosting.import_date >= schedule.last_run_at)
 
-                all_jobs = query.all()
-                
+                all_jobs = query.limit(500).all()
+
                 # Filter low-quality jobs
                 min_description_length = 200
                 all_jobs = [j for j in all_jobs if j.description and len(j.description) >= min_description_length]
-                
+
                 # Deduplicate
                 seen_jobs = {}
                 for job in all_jobs:
@@ -514,6 +518,7 @@ class WebAppScheduler:
                     )):
                         seen_jobs[dedup_key] = job
                 all_jobs = list(seen_jobs.values())
+                del seen_jobs  # Free dedup dict
 
                 # Track jobs skipped by smart rematch
                 jobs_skipped = total_eligible - len(all_jobs)
