@@ -68,3 +68,7 @@ frontend/node_modules/
 # Process files
 *.pid
 .webapp.pid
+
+# Experiment result data files
+scripts/*.json
+scripts/*.csv
