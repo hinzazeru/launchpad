@@ -40,7 +40,7 @@ backend/
 │   └── enrichment.py        # Parallel Gemini extraction (domains, summaries, requirements)
 ├── integrations/
 │   ├── sheets_connector.py  # Google Sheets export
-│   └── gemini_client.py     # Gemini AI client (google-generativeai)
+│   └── gemini_client.py     # Gemini AI client (google-genai)
 └── config.py                # YAML + env var config loader (ENV_OVERRIDES)
 
 Dockerfile                   # Multi-stage build (Node frontend + Python backend, CPU-only PyTorch)
@@ -241,14 +241,13 @@ When modifying features, these files often need synchronized updates:
 2. Apify API has rate limits and costs per call
 3. Telegram bot can only run one instance at a time (polling conflict)
 4. Google Sheets/Gmail OAuth tokens require local browser flow — not available on Railway without volume mounts
-5. `google.generativeai` SDK is deprecated; migration to `google.genai` is pending
 
 ## Dependencies
 
 Key packages and why they're used:
 - `python-telegram-bot`: Telegram bot framework with JobQueue scheduling
 - `sentence-transformers`: NLP embeddings for semantic skill matching
-- `google-generativeai`: Google Gemini AI SDK
+- `google-genai`: Google Gemini AI SDK
 - `SQLAlchemy`: Database ORM
 - `apify-client`: LinkedIn job data via Apify actors
 - `google-api-python-client`: Google Sheets integration
