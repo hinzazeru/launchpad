@@ -119,18 +119,18 @@ Valid role focus: technical, strategic, hybrid"""
 
 def call_gemini_combined(prompt: str, config, model_override: str = None) -> str:
     """Call Gemini API with the combined prompt, return raw response text."""
-    import google.generativeai as genai
-    from google.generativeai import types
+    from google import genai
+    from google.genai import types
 
     model_name = model_override or config.get("gemini.extractor.model", "gemini-2.0-flash")
     api_key = config.get("gemini.api_key")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name)
+    client = genai.Client(api_key=api_key)
 
     response = _rate_limiter.call_with_retry(
-        model.generate_content,
-        prompt,
-        generation_config=types.GenerationConfig(
+        client.models.generate_content,
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
             temperature=0.1,
             max_output_tokens=1500,
             response_mime_type="application/json",

@@ -20,7 +20,7 @@ from src.database.db import get_db_session
 from src.database.models import JobPosting
 from src.matching.skill_extractor import extract_salary_from_description
 from src.config import get_config
-import google.generativeai as genai
+from google import genai
 
 SAMPLE_SIZE = 40
 GEMINI_SLEEP = 0.5  # seconds between calls — stay under 0.4s rate limit with buffer
@@ -37,11 +37,11 @@ Job description:
 OUTPUT_CSV = os.path.join(os.path.dirname(__file__), "salary_experiment_results.csv")
 
 
-def call_gemini(model, description: str) -> Optional[str]:
+def call_gemini(client, model_name: str, description: str) -> Optional[str]:
     """Ask Gemini to extract salary from description. Returns the extracted string or None."""
     prompt = GEMINI_PROMPT.format(description=description[:DESCRIPTION_TRUNCATE])
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=model_name, contents=prompt)
         result = response.text.strip()
         if result.lower() == "none":
             return None
@@ -88,8 +88,7 @@ def main():
         sys.exit(1)
 
     model_name = config.get("gemini.matcher.model", "gemini-2.0-flash")
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name)
+    client = genai.Client(api_key=api_key)
     print(f"Using Gemini model: {model_name}\n")
 
     # ── Run experiment ─────────────────────────────────────────────────────────
@@ -100,7 +99,7 @@ def main():
         db_salary = job.salary or None
 
         regex_result = extract_salary_from_description(job.description)
-        gemini_result = call_gemini(model, job.description)
+        gemini_result = call_gemini(client, model_name, job.description)
 
         outcome = classify_outcome(regex_result, gemini_result)
 

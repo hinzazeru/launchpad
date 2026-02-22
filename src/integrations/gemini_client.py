@@ -198,8 +198,8 @@ def _fix_json_structure(text: str) -> str:
     
     return text
 
-import google.generativeai as genai
-from google.generativeai import types
+from google import genai
+from google.genai import types
 
 from pathlib import Path
 
@@ -309,7 +309,7 @@ class GeminiRateLimiter:
                 return fn(*args, **kwargs)
             except Exception as e:
                 error_str = str(e)
-                if '429' in error_str or 'Resource exhausted' in error_str:
+                if '429' in error_str or 'Resource exhausted' in error_str or 'RESOURCE_EXHAUSTED' in error_str:
                     last_error = e
                     if attempt < self._max_retries:
                         backoff = min(2 ** attempt * 5, 30)  # 5s, 10s, cap 30s
@@ -670,12 +670,11 @@ class GeminiClient:
         self.enabled = self.config.get("gemini.enabled", False)
         self.api_key = self.config.get("gemini.api_key")
         self.model_name = self.config.get("gemini.matcher.model", "gemini-2.5-flash")
-        self.model = None
+        self.client = None
 
         if self.enabled and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(self.model_name)
+                self.client = genai.Client(api_key=self.api_key)
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"GeminiClient initialized with model: {self.model_name}")
             except Exception as e:
@@ -684,7 +683,7 @@ class GeminiClient:
 
     def is_available(self) -> bool:
         """Check if Gemini is available and properly configured."""
-        return self.enabled and self.model is not None
+        return self.enabled and self.client is not None
 
     def test_connection(self) -> Dict:
         """Test Gemini API connectivity with a minimal request.
@@ -709,9 +708,10 @@ class GeminiClient:
 
             # Minimal test prompt - just ask for a single word
             response = self._rate_limiter.call_with_retry(
-                self.model.generate_content,
-                "Respond with only the word 'OK'.",
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents="Respond with only the word 'OK'.",
+                config=types.GenerateContentConfig(
                     temperature=0.0,
                     max_output_tokens=10,
                 )
@@ -761,8 +761,7 @@ class GeminiDomainExtractor:
 
         if self.enabled and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(self.model_name)
+                self.client = genai.Client(api_key=self.api_key)
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini extractor initialized with model: {self.model_name}")
             except Exception as e:
@@ -771,7 +770,7 @@ class GeminiDomainExtractor:
 
     def is_available(self) -> bool:
         """Check if Gemini extraction is available."""
-        return self.enabled and self.model is not None
+        return self.enabled and self.client is not None
 
 
     def extract_domains(
@@ -810,9 +809,10 @@ class GeminiDomainExtractor:
 
         try:
             response = self._rate_limiter.call_with_retry(
-                self.model.generate_content,
-                prompt,
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     temperature=0.1,  # Low temperature for consistent results
                     max_output_tokens=self.domain_max_tokens,
                     response_mime_type="application/json",
@@ -836,10 +836,10 @@ class GeminiDomainExtractor:
                 finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
 
                 # Handle specific finish reasons
-                if finish_reason == 2:  # MAX_TOKENS
+                if finish_reason and finish_reason.name == "MAX_TOKENS":
                     logger.warning(f"Gemini response truncated (MAX_TOKENS) for domain extraction: {title}")
                     return {"domains": [], "reasoning": "Response incomplete - token limit exceeded"}
-                elif finish_reason == 3:  # SAFETY
+                elif finish_reason and finish_reason.name == "SAFETY":
                     logger.warning(f"Gemini response blocked for domain extraction: {title}")
                     return {"domains": [], "reasoning": "Response blocked by content filter"}
                 else:
@@ -927,9 +927,10 @@ class GeminiDomainExtractor:
 
         try:
             response = self._rate_limiter.call_with_retry(
-                self.model.generate_content,
-                prompt,
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     temperature=0.3,  # Slightly higher for more natural writing
                     max_output_tokens=self.summary_max_tokens,
                 )
@@ -939,9 +940,9 @@ class GeminiDomainExtractor:
                 finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
 
                 # Handle specific finish reasons
-                if finish_reason == 2:  # MAX_TOKENS
+                if finish_reason and finish_reason.name == "MAX_TOKENS":
                     logger.warning(f"Gemini summary truncated (MAX_TOKENS) for: {title}")
-                elif finish_reason == 3:  # SAFETY
+                elif finish_reason and finish_reason.name == "SAFETY":
                     logger.warning(f"Gemini summary blocked for: {title}")
                 else:
                     logger.warning(f"Gemini returned no summary. Finish reason: {finish_reason}")
@@ -1001,12 +1002,11 @@ class GeminiRequirementsExtractor:
         # Use fast model for extraction
         self.model_name = self.config.get("gemini.extractor.model", "gemini-2.0-flash")
         self.api_key = self.config.get("gemini.api_key")
-        self.model = None
+        self.client = None
 
         if self.enabled and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(self.model_name)
+                self.client = genai.Client(api_key=self.api_key)
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini requirements extractor initialized with model: {self.model_name}")
             except Exception as e:
@@ -1015,7 +1015,7 @@ class GeminiRequirementsExtractor:
 
     def is_available(self) -> bool:
         """Check if Gemini extraction is available."""
-        return self.enabled and self.model is not None
+        return self.enabled and self.client is not None
 
     def extract_requirements(
         self,
@@ -1053,9 +1053,10 @@ class GeminiRequirementsExtractor:
 
         try:
             response = self._rate_limiter.call_with_retry(
-                self.model.generate_content,
-                prompt,
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     temperature=0.1,  # Low temperature for consistent extraction
                     max_output_tokens=1024,  # Needs more tokens for detailed output
                     response_mime_type="application/json",
@@ -1192,8 +1193,7 @@ class GeminiMatchReranker:
 
         if self.enabled and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(self.model_name)
+                self.client = genai.Client(api_key=self.api_key)
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini re-ranker initialized with model: {self.model_name}")
             except Exception as e:
@@ -1202,7 +1202,7 @@ class GeminiMatchReranker:
 
     def is_available(self) -> bool:
         """Check if Gemini re-ranking is available."""
-        return self.enabled and self.model is not None
+        return self.enabled and self.client is not None
 
     def rerank_matches(
         self,
@@ -1284,9 +1284,10 @@ class GeminiMatchReranker:
 
         try:
             response = self._rate_limiter.call_with_retry(
-                self.model.generate_content,
-                prompt,
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     temperature=0.2,  # Low for consistent scoring
                     max_output_tokens=2048,  # Increased to prevent truncation
                     response_mime_type="application/json",
@@ -1300,14 +1301,14 @@ class GeminiMatchReranker:
                 # Handle specific finish reasons with enhanced logging
                 job_title = match.get('job_title', 'Unknown')
                 company = match.get('company', 'Unknown')
-                
-                if finish_reason == 2:  # MAX_TOKENS
+
+                if finish_reason and finish_reason.name == "MAX_TOKENS":
                     logger.warning(
                         f"❌ GEMINI FALLBACK → NLP | Reason: MAX_TOKENS (response truncated) | "
                         f"Job: '{job_title}' @ {company}"
                     )
                     return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
-                elif finish_reason == 3:  # SAFETY
+                elif finish_reason and finish_reason.name == "SAFETY":
                     logger.warning(
                         f"❌ GEMINI FALLBACK → NLP | Reason: SAFETY (content filter) | "
                         f"Job: '{job_title}' @ {company}"
@@ -1405,8 +1406,7 @@ class GeminiBulletRewriter:
 
         if self.enabled and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(self.model_name)
+                self.client = genai.Client(api_key=self.api_key)
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 logger.info(f"Gemini bullet rewriter initialized with model: {self.model_name}")
             except Exception as e:
@@ -1415,7 +1415,7 @@ class GeminiBulletRewriter:
 
     def is_available(self) -> bool:
         """Check if Gemini rewriting is available."""
-        return self.enabled and self.model is not None
+        return self.enabled and self.client is not None
 
     def extract_requirements(self, job_description: str) -> List[str]:
         """Extract key requirements from a job description.
@@ -1539,35 +1539,22 @@ class GeminiBulletRewriter:
         )
 
         try:
-            # Safety settings to prevent false positives on professional content
-            safety_settings = [
-                {
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                   {
-                    "category": "HARM_CATEGORY_HATE_SPEECH",
-                     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                },
-                {
-                     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                }
-            ]
-
             response = self._rate_limiter.call_with_retry(
-                self.model.generate_content,
-                prompt,
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     temperature=self.temperature,
                     max_output_tokens=self.max_tokens,
                     response_mime_type="application/json",
+                    # Safety settings to prevent false positives on professional content
+                    safety_settings=[
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",       threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                    ],
                 ),
-                safety_settings=safety_settings
             )
 
             # (Duplicate call removed)
@@ -1577,14 +1564,13 @@ class GeminiBulletRewriter:
                 finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
 
                 # Handle specific finish reasons
-                # finish_reason: 1=STOP, 2=MAX_TOKENS, 3=SAFETY, 4=RECITATION, 5=OTHER
-                if finish_reason == 2:  # MAX_TOKENS
+                if finish_reason and finish_reason.name == "MAX_TOKENS":
                     logger.warning("Gemini response truncated (MAX_TOKENS) for bullet rewrite")
                     return {
                         "analysis": "Response incomplete - input too large. Try shorter job description.",
                         "suggestions": []
                     }
-                elif finish_reason == 3:  # SAFETY
+                elif finish_reason and finish_reason.name == "SAFETY":
                     logger.warning("Gemini response blocked by safety filter")
                     # Log safety ratings for debugging
                     if response.candidates and response.candidates[0].safety_ratings:

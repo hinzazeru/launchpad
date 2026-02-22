@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
-import google.generativeai as genai
-from google.generativeai import types
+from google import genai
+from google.genai import types
 
 from src.config import get_config
 from src.integrations.gemini_client import clean_json_text, get_rate_limiter
@@ -190,14 +190,11 @@ class GeminiMatcher:
         # Faster model for batch operations
         self.batch_model_name = self.config.get("gemini.matcher.batch_model", "gemini-2.0-flash")
         self.api_key = self.config.get("gemini.api_key")
-        self.model = None
-        self.batch_model = None
+        self.client = None
 
         if self.enabled and self.api_key:
             try:
-                genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel(self.model_name)
-                self.batch_model = genai.GenerativeModel(self.batch_model_name)
+                self.client = genai.Client(api_key=self.api_key)
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 self._batch_rate_limiter = get_rate_limiter(self.batch_model_name)
                 logger.info(f"GeminiMatcher initialized with model: {self.model_name}")
@@ -207,7 +204,7 @@ class GeminiMatcher:
 
     def is_available(self) -> bool:
         """Check if Gemini matching is available."""
-        return self.enabled and self.model is not None
+        return self.enabled and self.client is not None
 
     def match_job(
         self,
@@ -241,7 +238,7 @@ class GeminiMatcher:
             logger.warning("GeminiMatcher not available")
             return None
 
-        model = self.batch_model if use_batch_model else self.model
+        model_name = self.batch_model_name if use_batch_model else self.model_name
 
         # Build prompt based on whether we have structured requirements
         if structured_requirements:
@@ -267,9 +264,10 @@ class GeminiMatcher:
         try:
             rate_limiter = self._batch_rate_limiter if use_batch_model else self._rate_limiter
             response = rate_limiter.call_with_retry(
-                model.generate_content,
-                prompt,
-                generation_config=types.GenerationConfig(
+                self.client.models.generate_content,
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
                     temperature=0.2,  # Low for consistent scoring
                     # max_output_tokens covers thinking + output tokens for gemini-2.5-* models.
                     # The thinking process consumes ~2000-6000 tokens; the full JSON response
