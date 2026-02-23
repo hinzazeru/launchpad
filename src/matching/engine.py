@@ -302,7 +302,17 @@ class JobMatcher:
                 'experience_score': result.experience_score / 100,
                 'domain_score': result.domain_score / 100,
                 'seniority_fit': result.seniority_fit / 100,
-                'matching_skills': [m.resume_skill for m in result.skill_matches],
+                # Flatten comma-joined resume_skill strings and deduplicate.
+                # Gemini sometimes packs multiple skills into one resume_skill value
+                # (e.g. "SQL, Analytics, Snowflake") and can map several job skills to
+                # the same resume skill, causing duplicate chips in the UI.
+                'matching_skills': list(dict.fromkeys(
+                    s.strip()
+                    for m in result.skill_matches
+                    if m.resume_skill
+                    for s in m.resume_skill.split(',')
+                    if s.strip()
+                )),
                 'skill_gaps': [g.skill for g in result.skill_gaps],
                 'matching_domains': [],  # Not tracked separately in AI mode
                 'missing_domains': [],
