@@ -303,13 +303,14 @@ class JobMatcher:
                 'domain_score': result.domain_score / 100,
                 'seniority_fit': result.seniority_fit / 100,
                 # Flatten comma-joined resume_skill strings and deduplicate.
-                # Gemini sometimes packs multiple skills into one resume_skill value
-                # (e.g. "SQL, Analytics, Snowflake") and can map several job skills to
-                # the same resume skill, causing duplicate chips in the UI.
+                # Only include skill_matches above 0.75 confidence to suppress
+                # low-confidence stretches (e.g. "Fintech" → "Hypergrowth Startup
+                # Experience") that mislead the user into thinking unrelated skills
+                # appear in the job description.
                 'matching_skills': list(dict.fromkeys(
                     s.strip()
                     for m in result.skill_matches
-                    if m.resume_skill
+                    if m.resume_skill and m.confidence >= 0.75
                     for s in m.resume_skill.split(',')
                     if s.strip()
                 )),
