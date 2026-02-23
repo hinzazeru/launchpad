@@ -194,7 +194,13 @@ class GeminiMatcher:
 
         if self.enabled and self.api_key:
             try:
-                self.client = genai.Client(api_key=self.api_key)
+                # Extended timeout for thinking models (gemini-2.5-*) which can take 30-90s.
+                # Configured at client level — generate_content() has no request_options param
+                # in google-genai SDK.
+                self.client = genai.Client(
+                    api_key=self.api_key,
+                    http_options=types.HttpOptions(timeout=120_000),  # 120s in ms
+                )
                 self._rate_limiter = get_rate_limiter(self.model_name)
                 self._batch_rate_limiter = get_rate_limiter(self.batch_model_name)
                 logger.info(f"GeminiMatcher initialized with model: {self.model_name}")
@@ -278,7 +284,6 @@ class GeminiMatcher:
                     # Thinking models (gemini-2.5-*) return empty arrays in constrained JSON mode.
                     # clean_json_text() handles extracting JSON from free-form responses.
                 ),
-                request_options={"timeout": 120},  # Extended to 120s for thinking model
             )
 
             # Parse response with candidate context for filtering
