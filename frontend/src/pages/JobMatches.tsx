@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useJobs, useAnalyticsMarket, useUpdateJobStatus } from '@/services/api';
 import type { Job } from '@/services/api';
@@ -25,6 +25,7 @@ import {
     Heart,
     EyeOff,
     SlidersHorizontal,
+    Microscope,
 } from 'lucide-react';
 import {
     Select,
@@ -232,6 +233,11 @@ function SkillTag({ skill, variant }: { skill: string; variant: 'matched' | 'gap
 // Job Card Component
 function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onStatusChange: (jobId: number, status: string | null) => void }) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const navigate = useNavigate();
+
+    const handleAnalyze = (jobId: string) => {
+        navigate('/analyze', { state: { jobId } });
+    };
 
     // Parse experience
     let resumeYears = 0;
@@ -353,6 +359,13 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
                                         >
                                             <ExternalLink className="w-4 h-4" />
                                         </a>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleAnalyze(String(job.id)); }}
+                                            className="p-1.5 rounded-full text-gray-400 hover:text-purple-500 hover:bg-purple-50 transition-colors"
+                                            title="Analyze resume for this role"
+                                        >
+                                            <Microscope className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
@@ -676,9 +689,18 @@ function JobCard({ job, index, onStatusChange }: { job: Job; index: number; onSt
                                             </p>
                                         </div>
                                     )}
-                                    <span className="font-mono text-[10px] text-muted-foreground/40">
-                                        #{job.id}
-                                    </span>
+                                    <div className="flex items-center justify-between">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleAnalyze(String(job.id)); }}
+                                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                        >
+                                            <Microscope className="w-4 h-4" />
+                                            Analyze Resume
+                                        </button>
+                                        <span className="font-mono text-[10px] text-muted-foreground/40">
+                                            #{job.id}
+                                        </span>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 // api is mostly used inside hooks now, but maybe needed for types
 import { useJobs, useResumes, useGeminiStatus, useAnalyzeResume, useGenerateSuggestions, useSaveLikedBullet } from '@/services/api';
@@ -269,6 +270,7 @@ function RoleCard({
 
 export function Dashboard() {
   const toast = useToastActions();
+  const location = useLocation();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'analysis' | 'history'>('analysis');
@@ -350,6 +352,17 @@ export function Dashboard() {
       localStorage.setItem(SELECTIONS_STORAGE_KEY, JSON.stringify(bulletSelections));
     }
   }, [bulletSelections]);
+
+  // Pre-select job when navigating from JobMatches
+  useEffect(() => {
+    const incomingJobId = (location.state as { jobId?: string })?.jobId;
+    if (incomingJobId) {
+      setSelectedJobId(String(incomingJobId));
+      setActiveTab('analysis');
+      // Clear router state so navigating away and back doesn't re-select
+      window.history.replaceState({}, '');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize bullet selections when analysis result changes
   useEffect(() => {
