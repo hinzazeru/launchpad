@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 // api is mostly used inside hooks now, but maybe needed for types
 import { useJobs, useResumes, useGeminiStatus, useAnalyzeResume, useGenerateSuggestions, useSaveLikedBullet } from '@/services/api';
-import type { AnalyzeResponse, RoleAnalysis } from '@/services/api';
+import type { AnalyzeResponse, RoleAnalysis, Job } from '@/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,6 +35,7 @@ import {
   Lightbulb,
   XCircle,
   History,
+  MapPin,
 } from 'lucide-react';
 
 import { useDebounce } from '@/hooks/use-debounce';
@@ -267,6 +268,106 @@ function RoleCard({
   );
 }
 
+
+// Collapsible AI Insights panel shown in the selected job preview card
+function CollapsibleAIInsights({ job }: { job: Job }) {
+  const [open, setOpen] = useState(false);
+  const hasInsights =
+    (job.ai_strengths?.length ?? 0) > 0 ||
+    (job.ai_concerns?.length ?? 0) > 0 ||
+    (job.ai_recommendations?.length ?? 0) > 0 ||
+    (job.skill_gaps_detailed?.length ?? 0) > 0;
+
+  if (!hasInsights) return null;
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/50">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between w-full text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-500 transition-colors"
+      >
+        <span className="flex items-center gap-1.5">
+          <Bot className="w-3.5 h-3.5" />
+          AI Match Insights
+        </span>
+        <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-3.5 h-3.5" />
+        </motion.div>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-3">
+              {(job.ai_strengths?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Strengths
+                  </p>
+                  <ul className="space-y-0.5">
+                    {job.ai_strengths?.map((s, i) => (
+                      <li key={i} className="text-[11px] text-muted-foreground">• {s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(job.ai_concerns?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> Concerns
+                  </p>
+                  <ul className="space-y-0.5">
+                    {job.ai_concerns?.map((c, i) => (
+                      <li key={i} className="text-[11px] text-muted-foreground">• {c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(job.ai_recommendations?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
+                    <Lightbulb className="w-3 h-3" /> Focus Areas
+                  </p>
+                  <ul className="space-y-0.5">
+                    {job.ai_recommendations?.map((r, i) => (
+                      <li key={i} className="text-[11px] text-muted-foreground">→ {r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(job.skill_gaps_detailed?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
+                    <XCircle className="w-3 h-3" /> Key Gaps
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {job.skill_gaps_detailed?.map((gap, i) => (
+                      <span
+                        key={i}
+                        className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${
+                          gap.importance === 'must_have'
+                            ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                        }`}
+                      >
+                        {gap.skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export function Dashboard() {
   const toast = useToastActions();
@@ -694,479 +795,364 @@ export function Dashboard() {
           </TabsList>
 
           <TabsContent value="analysis" className="mt-0">
+            <div className="space-y-4 pb-32">
 
-        {/* Mobile: compact job/resume summary shown after analysis */}
-        {analysisResult && selectedJob && (
-          <div className="lg:hidden flex items-center gap-3 p-3 mb-4 rounded-lg bg-muted/50 border border-border/50">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{selectedJob.title}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {selectedJob.company}{selectedResume ? ` • ${selectedResume.name}` : ''}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => setAnalysisResult(null)}>
-              Change
-            </Button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Selection — hidden on mobile once results are shown */}
-          <div className={"lg:col-span-1 space-y-4" + (analysisResult ? " hidden lg:block" : "")}>
-            {/* Job Selection */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-md bg-primary/10">
-                    <Briefcase className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Select Job</CardTitle>
-                    <CardDescription className="text-xs">{jobs.length} jobs available</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
+              {/* 1. Filters bar — always visible, compact horizontal */}
+              <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-card border border-border/50">
+                <div className="relative flex-1 min-w-[160px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Search jobs..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9 bg-background/50"
+                    className="pl-9 bg-background/50 h-9 text-sm"
                   />
                 </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground flex items-center gap-1">
-                      <ArrowUpDown className="h-3 w-3" /> Sort
-                    </label>
-                    <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                      <SelectTrigger className="h-8 text-xs bg-background/50">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="score">Match Score</SelectItem>
-                        <SelectItem value="date">Date Posted</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Calendar className="h-3 w-3" /> Date
-                    </label>
-                    <Select value={recency} onValueChange={setRecency}>
-                      <SelectTrigger className="h-8 text-xs bg-background/50">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Any time</SelectItem>
-                        <SelectItem value="1">Past 24h</SelectItem>
-                        <SelectItem value="3">Past 3 days</SelectItem>
-                        <SelectItem value="7">Past 7 days</SelectItem>
-                        <SelectItem value="14">Past 14 days</SelectItem>
-                        <SelectItem value="30">Past 30 days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm text-gray-500">Min Score: {minScore}%</label>
+                <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                  <SelectTrigger className="h-9 w-[130px] bg-background/50 text-xs">
+                    <ArrowUpDown className="h-3 w-3 mr-1.5 text-muted-foreground flex-shrink-0" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="score">Match Score</SelectItem>
+                    <SelectItem value="date">Date Posted</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={recency} onValueChange={setRecency}>
+                  <SelectTrigger className="h-9 w-[130px] bg-background/50 text-xs">
+                    <Calendar className="h-3 w-3 mr-1.5 text-muted-foreground flex-shrink-0" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Any time</SelectItem>
+                    <SelectItem value="1">Past 24h</SelectItem>
+                    <SelectItem value="3">Past 3 days</SelectItem>
+                    <SelectItem value="7">Past 7 days</SelectItem>
+                    <SelectItem value="14">Past 14 days</SelectItem>
+                    <SelectItem value="30">Past 30 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Min: {minScore}%</span>
                   <input
                     type="range"
                     min="0"
                     max="100"
                     value={minScore}
                     onChange={(e) => setMinScore(Number(e.target.value))}
-                    className="w-full"
+                    className="w-20 accent-primary"
                   />
                 </div>
+              </div>
 
-                <Select
-                  value={selectedJobId}
-                  onValueChange={(value) => {
-                    setSelectedJobId(value);
-                    setAnalysisResult(null);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a job..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {jobs.map((job) => (
-                      <SelectItem key={job.id} value={job.id.toString()}>
-                        <div className="flex items-center gap-2">
-                          <span className="truncate flex-1">
-                            {job.title.replace(/Senior Product Manager/g, "SPM")} <span className="text-muted-foreground font-normal ml-1">at {job.company}</span>
-                          </span>
-                          <Badge variant="secondary" className="text-xs">
-                            {job.match_score.toFixed(0)}%
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedJob && (
-                  <div className="p-3 bg-muted rounded-lg text-sm">
-                    <a
-                      href={selectedJob.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-foreground hover:text-primary hover:underline block transition-colors"
-                    >
-                      {selectedJob.title}
-                    </a>
-                    <p className="text-muted-foreground">{selectedJob.company}</p>
-                    <div className="flex flex-col gap-0.5 mt-1">
-                      {selectedJob.location && (
-                        <p className="text-muted-foreground text-xs">{selectedJob.location}</p>
-                      )}
-                      {selectedJob.salary && (
-                        <p className="text-emerald-500 text-xs font-medium">{selectedJob.salary}</p>
-                      )}
-                    </div>
-                    {selectedJob.domains.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {selectedJob.domains.map((domain) => (
-                          <span
-                            key={domain}
-                            className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted border border-border/60 text-muted-foreground"
-                          >
-                            {domain}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* AI Match Insights */}
-                    {selectedJob.match_engine === 'gemini' && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="mt-3 pt-3 border-t border-border/50 space-y-2"
-                      >
-                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                          <Bot className="w-3 h-3" />
-                          AI Match Insights
-                        </div>
-
-                        {/* Strengths */}
-                        {(selectedJob.ai_strengths?.length ?? 0) > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Strengths
-                            </p>
-                            <ul className="space-y-0.5">
-                              {selectedJob.ai_strengths?.slice(0, 2).map((s, i) => (
-                                <li key={i} className="text-[11px] text-muted-foreground line-clamp-1">• {s}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Concerns */}
-                        {(selectedJob.ai_concerns?.length ?? 0) > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" /> Concerns
-                            </p>
-                            <ul className="space-y-0.5">
-                              {selectedJob.ai_concerns?.slice(0, 2).map((c, i) => (
-                                <li key={i} className="text-[11px] text-muted-foreground line-clamp-1">• {c}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Recommendations */}
-                        {(selectedJob.ai_recommendations?.length ?? 0) > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
-                              <Lightbulb className="w-3 h-3" /> Focus Areas
-                            </p>
-                            <ul className="space-y-0.5">
-                              {selectedJob.ai_recommendations?.slice(0, 2).map((r, i) => (
-                                <li key={i} className="text-[11px] text-muted-foreground line-clamp-1">→ {r}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Skill Gaps */}
-                        {(selectedJob.skill_gaps_detailed?.length ?? 0) > 0 && (
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-red-600 dark:text-red-400 font-medium flex items-center gap-1">
-                              <XCircle className="w-3 h-3" /> Key Gaps
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {selectedJob.skill_gaps_detailed?.slice(0, 4).map((gap, i) => (
-                                <span
-                                  key={i}
-                                  className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${
-                                    gap.importance === 'must_have'
-                                      ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                                  }`}
-                                >
-                                  {gap.skill}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-
-                    {/* NLP Match Badge */}
-                    {selectedJob.match_engine !== 'gemini' && (
-                      <div className="mt-2 pt-2 border-t border-border/50">
-                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                          NLP Matched
+              {/* 2. Job dropdown — full width */}
+              <Select
+                value={selectedJobId}
+                onValueChange={(value) => {
+                  setSelectedJobId(value);
+                  setAnalysisResult(null);
+                }}
+              >
+                <SelectTrigger className="w-full h-11 bg-card border-border/50">
+                  <Briefcase className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
+                  <SelectValue placeholder={`Choose from ${jobs.length} jobs…`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {jobs.map((job) => (
+                    <SelectItem key={job.id} value={job.id.toString()}>
+                      <div className="flex items-center gap-2 w-full">
+                        <span className="truncate flex-1 min-w-0">
+                          {job.title} <span className="text-muted-foreground font-normal">at {job.company}</span>
                         </span>
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          Run analysis with Gemini enabled for AI insights
-                        </p>
+                        <Badge variant="secondary" className="text-xs flex-shrink-0">
+                          {job.match_score.toFixed(0)}%
+                        </Badge>
                       </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            {/* Resume Selection */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-md bg-violet-500/10">
-                    <FileText className="w-4 h-4 text-violet-500" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base">Select Resume</CardTitle>
-                    <CardDescription className="text-xs">{resumes.length} resumes in library</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Select
-                  value={selectedResumeFilename}
-                  onValueChange={(value) => {
-                    setSelectedResumeFilename(value);
-                    setAnalysisResult(null);
-                  }}
-                >
-                  <SelectTrigger className="bg-background/50">
-                    <SelectValue placeholder="Choose a resume..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {resumes.map((resume) => (
-                      <SelectItem key={resume.filename} value={resume.filename}>
-                        {resume.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedResume && (
-                  <div className="p-3 bg-muted/50 rounded-lg text-sm border border-border/50">
-                    <p className="font-medium text-foreground">{selectedResume.name}</p>
-                    <p className="text-muted-foreground text-xs">{selectedResume.format} format</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Analyze Button */}
-            <Button
-              onClick={runAnalysis}
-              disabled={!selectedJob || !selectedResume || analyzeMutation.isPending}
-              className="w-full"
-              size="lg"
-            >
-              {analyzeMutation.isPending ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                'Analyze Resume'
-              )}
-            </Button>
-
-            {!geminiAvailable && (
-              <p className="text-xs text-yellow-600 text-center">
-                Gemini AI not configured. Add API key to config.yaml for AI suggestions.
-              </p>
-            )}
-          </div>
-
-          {/* Right Column - Results */}
-          <div className="lg:col-span-2">
-            {analyzeMutation.isPending ? (
-              <FadeIn>
-                <AnalysisResultSkeleton />
-              </FadeIn>
-            ) : analysisResult ? (
-              <FadeIn>
-                <div className="space-y-6">
-                  {/* Stats Bar - matching JobMatches design */}
+              {/* 3. Selected job preview card */}
+              <AnimatePresence>
+                {selectedJob && (
                   <motion.div
-                    className="grid grid-cols-2 sm:grid-cols-4 gap-2"
-                    initial={{ opacity: 0, y: 10 }}
+                    key={selectedJob.id}
+                    initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
                   >
-                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0">
-                        <TrendingUp className="w-3.5 h-3.5 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{(analysisResult.overall_alignment * 100).toFixed(0)}%</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Overall Score</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-1.5 rounded-md bg-blue-500/10 flex-shrink-0">
-                        <FileText className="w-3.5 h-3.5 text-blue-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{analysisResult.total_bullets}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Bullets</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-1.5 rounded-md bg-amber-500/10 flex-shrink-0">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{analysisResult.low_scoring_bullets}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Low Scoring</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <div className="p-1.5 rounded-md bg-emerald-500/10 flex-shrink-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{totalModifications}</p>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Modified</p>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Summary Card */}
-                  <Card className="border-border/50">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-md bg-violet-500/10">
-                          <Sparkles className="w-4 h-4 text-violet-500" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">Analysis Results</CardTitle>
-                          {analysisResult.job_title && (
-                            <CardDescription className="text-xs">
-                              {analysisResult.job_title} at {analysisResult.job_company}
-                            </CardDescription>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {/* Progress Bar */}
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Alignment Score</span>
-                            <span className="font-medium">{(analysisResult.overall_alignment * 100).toFixed(0)}%</span>
+                    <Card className="border-border/50 overflow-hidden">
+                      {/* Score color strip */}
+                      <div className={`h-1 w-full ${
+                        selectedJob.match_score >= 75 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
+                        selectedJob.match_score >= 60 ? 'bg-gradient-to-r from-amber-500 to-amber-400' :
+                        'bg-gradient-to-r from-red-500 to-red-400'
+                      }`} />
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <a
+                              href={selectedJob.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-[15px] leading-tight hover:text-primary transition-colors line-clamp-1"
+                            >
+                              {selectedJob.title}
+                            </a>
+                            <p className="text-sm text-muted-foreground mt-0.5">{selectedJob.company}</p>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                              {selectedJob.location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 flex-shrink-0" />
+                                  <span className="truncate max-w-[140px]">{selectedJob.location}</span>
+                                </span>
+                              )}
+                              {selectedJob.salary && (
+                                <span className="text-emerald-500 font-medium">{selectedJob.salary}</span>
+                              )}
+                            </div>
+                            {selectedJob.domains.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {selectedJob.domains.map((domain) => (
+                                  <span
+                                    key={domain}
+                                    className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted border border-border/60 text-muted-foreground"
+                                  >
+                                    {domain}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <Progress
-                            value={analysisResult.overall_alignment * 100}
-                            indicatorClassName={
-                              analysisResult.overall_alignment >= 0.7 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
-                                analysisResult.overall_alignment >= 0.5 ? 'bg-gradient-to-r from-amber-500 to-amber-400' : 'bg-gradient-to-r from-red-500 to-red-400'
-                            }
-                            className="h-2"
-                          />
+                          {/* Score badge */}
+                          <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-bold border ${
+                            selectedJob.match_score >= 75
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                              : selectedJob.match_score >= 60
+                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                              : 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
+                          }`}>
+                            {selectedJob.match_score.toFixed(0)}%
+                          </div>
                         </div>
 
-                        {/* Export Section */}
-                        {selectedResume && selectedJob && (
-                          <div className="pt-4 border-t border-border/50">
-                            <ExportButton
-                              resumeFilename={selectedResume.filename}
-                              company={selectedJob.company}
-                              selections={bulletSelections}
-                              disabled={analyzeMutation.isPending}
+                        {/* Collapsible AI insights */}
+                        {selectedJob.match_engine === 'gemini' && <CollapsibleAIInsights job={selectedJob} />}
+
+                        {/* NLP badge */}
+                        {selectedJob.match_engine !== 'gemini' && (
+                          <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2">
+                            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                              NLP Matched
+                            </span>
+                            <p className="text-[10px] text-muted-foreground">Enable Gemini for AI insights</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* 4. Analysis results */}
+              {analyzeMutation.isPending ? (
+                <FadeIn>
+                  <AnalysisResultSkeleton />
+                </FadeIn>
+              ) : analysisResult ? (
+                <FadeIn>
+                  <div className="space-y-6">
+                    {/* Stats bar */}
+                    <motion.div
+                      className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-primary/10 flex-shrink-0">
+                          <TrendingUp className="w-3.5 h-3.5 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{(analysisResult.overall_alignment * 100).toFixed(0)}%</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Overall Score</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-blue-500/10 flex-shrink-0">
+                          <FileText className="w-3.5 h-3.5 text-blue-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{analysisResult.total_bullets}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Bullets</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-amber-500/10 flex-shrink-0">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{analysisResult.low_scoring_bullets}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Low Scoring</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="p-1.5 rounded-md bg-emerald-500/10 flex-shrink-0">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight">{totalModifications}</p>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Modified</p>
+                        </div>
+                      </div>
+                    </motion.div>
+
+                    {/* Summary card */}
+                    <Card className="border-border/50">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-md bg-violet-500/10">
+                            <Sparkles className="w-4 h-4 text-violet-500" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">Analysis Results</CardTitle>
+                            {analysisResult.job_title && (
+                              <CardDescription className="text-xs">
+                                {analysisResult.job_title} at {analysisResult.job_company}
+                              </CardDescription>
+                            )}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Alignment Score</span>
+                              <span className="font-medium">{(analysisResult.overall_alignment * 100).toFixed(0)}%</span>
+                            </div>
+                            <Progress
+                              value={analysisResult.overall_alignment * 100}
+                              indicatorClassName={
+                                analysisResult.overall_alignment >= 0.7 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' :
+                                  analysisResult.overall_alignment >= 0.5 ? 'bg-gradient-to-r from-amber-500 to-amber-400' :
+                                    'bg-gradient-to-r from-red-500 to-red-400'
+                              }
+                              className="h-2"
                             />
                           </div>
+                          {selectedResume && selectedJob && (
+                            <div className="pt-4 border-t border-border/50">
+                              <ExportButton
+                                resumeFilename={selectedResume.filename}
+                                company={selectedJob.company}
+                                selections={bulletSelections}
+                                disabled={analyzeMutation.isPending}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Role cards */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Role Analysis</h3>
+                        {geminiAvailable && (
+                          <Button
+                            onClick={generateAllSuggestions}
+                            disabled={isGeneratingAll || generatingRole !== null}
+                            variant="outline"
+                            size="sm"
+                          >
+                            {isGeneratingAll ? (
+                              <><Loader2 className="h-4 w-4 animate-spin" />Generating All…</>
+                            ) : (
+                              <><Sparkles className="h-4 w-4" />Generate All Suggestions</>
+                            )}
+                          </Button>
                         )}
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Role Cards */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold">Role Analysis</h3>
-                      {geminiAvailable && (
-                        <Button
-                          onClick={generateAllSuggestions}
-                          disabled={isGeneratingAll || generatingRole !== null}
-                          variant="outline"
-                          size="sm"
-                        >
-                          {isGeneratingAll ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Generating All...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="h-4 w-4" />
-                              Generate All Suggestions
-                            </>
-                          )}
-                        </Button>
-                      )}
+                      {analysisResult.roles.map((role, index) => {
+                        const roleKey = `${role.company}_${role.title}`;
+                        return (
+                          <RoleCard
+                            key={index}
+                            role={role}
+                            roleKey={roleKey}
+                            index={index}
+                            onGenerateSuggestions={generateSuggestions}
+                            isGenerating={generatingRole === index}
+                            suggestions={roleSuggestions[index]}
+                            bulletSelections={bulletSelections[roleKey] || []}
+                            onBulletSelect={(bulletIndex, optionId, text, type) =>
+                              handleBulletSelect(roleKey, bulletIndex, optionId, text, type)
+                            }
+                            onLike={(original, rewritten) =>
+                              handleLikeBullet(role.title, role.company, original, rewritten)
+                            }
+                          />
+                        );
+                      })}
                     </div>
-                    {analysisResult.roles.map((role, index) => {
-                      const roleKey = `${role.company}_${role.title}`;
-                      return (
-                        <RoleCard
-                          key={index}
-                          role={role}
-                          roleKey={roleKey}
-                          index={index}
-                          onGenerateSuggestions={generateSuggestions}
-                          isGenerating={generatingRole === index}
-                          suggestions={roleSuggestions[index]}
-                          bulletSelections={bulletSelections[roleKey] || []}
-                          onBulletSelect={(bulletIndex, optionId, text, type) =>
-                            handleBulletSelect(roleKey, bulletIndex, optionId, text, type)
-                          }
-                          onLike={(original, rewritten) =>
-                            handleLikeBullet(role.title, role.company, original, rewritten)
-                          }
-                        />
-                      );
-                    })}
                   </div>
+                </FadeIn>
+              ) : (
+                <Card className="flex items-center justify-center min-h-[280px] border-border/50 border-dashed">
+                  <div className="text-center text-muted-foreground p-8">
+                    <Search className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="font-medium">Select a job above</p>
+                    <p className="text-sm mt-1 opacity-70">Then pick a resume below and click Analyze Resume</p>
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            {/* 5. Sticky bottom action bar */}
+            <div className="fixed bottom-[52px] sm:bottom-0 left-0 right-0 z-40 border-t border-border/50 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+                <div className="flex-1">
+                  <Select
+                    value={selectedResumeFilename}
+                    onValueChange={(value) => {
+                      setSelectedResumeFilename(value);
+                      setAnalysisResult(null);
+                    }}
+                  >
+                    <SelectTrigger className="bg-background/50 h-10">
+                      <FileText className="h-4 w-4 mr-2 text-muted-foreground flex-shrink-0" />
+                      <SelectValue placeholder="Choose a resume…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {resumes.map((resume) => (
+                        <SelectItem key={resume.filename} value={resume.filename}>
+                          {resume.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </FadeIn>
-            ) : (
-              <Card className="h-full flex items-center justify-center min-h-[400px] border-border/50">
-                <div className="text-center text-muted-foreground">
-                  <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">Select a job and resume</p>
-                  <p className="text-sm mt-1">Then click "Analyze Resume" to see results</p>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <Button
+                    onClick={runAnalysis}
+                    disabled={!selectedJob || !selectedResume || analyzeMutation.isPending}
+                    className="h-10"
+                  >
+                    {analyzeMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" />Analyzing…</>
+                    ) : (
+                      'Analyze Resume'
+                    )}
+                  </Button>
+                  {!geminiAvailable && (
+                    <p className="text-[10px] text-yellow-600">Gemini not configured</p>
+                  )}
                 </div>
-              </Card>
-            )}
-          </div>
-        </div>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="history" className="mt-0">
