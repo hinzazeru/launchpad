@@ -22,20 +22,8 @@ export interface BulletEditorProps {
   onSelect: (optionId: string, text: string, type: 'original' | 'ai' | 'custom') => void;
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const color = score >= 70 ? 'success' : score >= 50 ? 'warning' : 'destructive';
-  return (
-    <Badge variant={color} className="text-xs">
-      {score.toFixed(0)}%
-    </Badge>
-  );
-}
-
 export function BulletEditor({
   original,
-  score,
-  matchedKeywords = [],
-  missingKeywords = [],
   aiSuggestions = [],
   analysis,
   selectedOption,
@@ -91,26 +79,9 @@ export function BulletEditor({
         className="w-full p-4 flex items-start justify-between gap-4 hover:bg-muted/50 text-left transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-foreground line-clamp-2">{selectedText}</p>
-
-          {/* Keywords summary */}
-          {matchedKeywords.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {matchedKeywords.slice(0, 3).map((kw, i) => (
-                <Badge key={i} variant="success" className="text-xs">{kw}</Badge>
-              ))}
-              {matchedKeywords.length > 3 && (
-                <Badge variant="secondary" className="text-xs">
-                  +{matchedKeywords.length - 3} more
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
+        <p className="flex-1 min-w-0 text-sm text-foreground line-clamp-2">{selectedText}</p>
 
         <div className="flex items-center gap-2 shrink-0">
-          <ScoreBadge score={score} />
           {selectedOption !== 'original' && (
             <Badge variant="default" className="text-xs">Modified</Badge>
           )}
@@ -143,10 +114,14 @@ export function BulletEditor({
               <label
                 key={option.id}
                 className={cn(
-                  'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors group',
-                  selectedOption === option.id
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border bg-card hover:border-muted-foreground/50'
+                  'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all group',
+                  option.type === 'ai'
+                    ? selectedOption === option.id
+                      ? 'border-violet-500/60 bg-violet-500/10 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.15)]'
+                      : 'border-violet-500/20 bg-violet-500/[0.04] hover:border-violet-500/40 hover:bg-violet-500/[0.08]'
+                    : selectedOption === option.id
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border bg-card hover:border-muted-foreground/50'
                 )}
               >
                 <input
@@ -161,11 +136,11 @@ export function BulletEditor({
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">{option.label}</span>
                       {option.type === 'ai' && (
-                        <Badge variant="default" className="text-xs">AI</Badge>
+                        <Badge variant="default" className="text-xs bg-violet-500/20 text-violet-400 border-violet-500/30 hover:bg-violet-500/20">AI</Badge>
                       )}
                     </div>
 
-                    {/* Like Button for AI Options - always visible */}
+                    {/* Like Button for AI Options */}
                     {option.type === 'ai' && onLike && (
                       <Button
                         variant="ghost"
@@ -210,7 +185,7 @@ export function BulletEditor({
                       setIsEditingCustom(true);
                     }
                   }}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 text-primary focus:ring-primary"
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -270,22 +245,6 @@ export function BulletEditor({
               )}
             </div>
           </div>
-
-          {/* All Keywords */}
-          {matchedKeywords.length > 0 && (
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Keywords
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {matchedKeywords.map((kw, i) => (
-                  <Badge key={`m-${i}`} variant="success" className="text-xs">
-                    {kw}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
