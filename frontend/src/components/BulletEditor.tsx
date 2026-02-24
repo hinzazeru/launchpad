@@ -95,17 +95,14 @@ export function BulletEditor({
           <p className="text-sm text-foreground line-clamp-2">{selectedText}</p>
 
           {/* Keywords summary */}
-          {(matchedKeywords.length > 0 || missingKeywords.length > 0) && (
+          {matchedKeywords.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {matchedKeywords.slice(0, 3).map((kw, i) => (
                 <Badge key={i} variant="success" className="text-xs">{kw}</Badge>
               ))}
-              {missingKeywords.slice(0, 3).map((kw, i) => (
-                <Badge key={i} variant="warning" className="text-xs">{kw}</Badge>
-              ))}
-              {(matchedKeywords.length + missingKeywords.length > 6) && (
+              {matchedKeywords.length > 3 && (
                 <Badge variant="secondary" className="text-xs">
-                  +{matchedKeywords.length + missingKeywords.length - 6} more
+                  +{matchedKeywords.length - 3} more
                 </Badge>
               )}
             </div>
@@ -275,7 +272,7 @@ export function BulletEditor({
           </div>
 
           {/* All Keywords */}
-          {(matchedKeywords.length > 0 || missingKeywords.length > 0) && (
+          {matchedKeywords.length > 0 && (
             <div className="pt-2 border-t border-border">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Keywords
@@ -283,11 +280,6 @@ export function BulletEditor({
               <div className="flex flex-wrap gap-1">
                 {matchedKeywords.map((kw, i) => (
                   <Badge key={`m-${i}`} variant="success" className="text-xs">
-                    {kw}
-                  </Badge>
-                ))}
-                {missingKeywords.map((kw, i) => (
-                  <Badge key={`x-${i}`} variant="warning" className="text-xs">
                     {kw}
                   </Badge>
                 ))}
