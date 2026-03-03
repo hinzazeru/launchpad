@@ -2,9 +2,9 @@
     "$schema": "./resume_schema.json",
     "version": "1.0",
     "metadata": {
-        "name": "Hinza's Resume",
-        "description": "Converted from resume.txt",
-        "last_updated": "2026-01-21",
+        "name": "Alex Chen's Resume",
+        "description": "Example resume for a Senior Product Manager",
+        "last_updated": "2026-01-01",
         "tags": [
             "product",
             "data",
@@ -12,14 +12,14 @@
         ]
     },
     "contact": {
-        "name": "Hinza",
-        "email": "test@test,com",
+        "name": "Alex Chen",
+        "email": "alex.chen@example.com",
         "phone": "",
-        "location": "Toronto, ON",
+        "location": "New York, NY",
         "linkedin": "",
         "website": ""
     },
-    "summary": "Senior Product Manager with 10+ years leading B2B data and analytics products in fintech and financial services. Track record of driving $10M+ ARR growth, launching new verticals, and scaling enterprise SaaS platforms. Deep expertise in data products, platforms, and go-to-market strategy. I combine technical fluency (data engineering background) with commercial acumen to deliver products customers love and businesses need.",
+    "summary": "Senior Product Manager with 10+ years leading B2B data and analytics products in fintech and financial services. Track record of driving $10M+ ARR growth, launching new verticals, and scaling enterprise SaaS platforms. Deep expertise in data products, platforms, and go-to-market strategy. Combines technical fluency (data engineering background) with commercial acumen to deliver products customers love and businesses need.",
     "skills": {
         "technical": [
             "SQL",
@@ -59,8 +59,8 @@
     },
     "experience": [
         {
-            "company": "ISS-Stoxx",
-            "title": "Vice President - Product, Governance QualityScore",
+            "company": "Nexus Analytics Corp",
+            "title": "Vice President - Product, Data Intelligence",
             "location": "",
             "start_date": "2023-05",
             "end_date": "Present",
@@ -68,7 +68,7 @@
             "description": "",
             "bullets": [
                 {
-                    "text": "Owned strategy and execution for a flagship B2B data product, growing $10M+ global ARR portfolio across 50+ clients",
+                    "text": "Owned strategy and execution for a flagship B2B data product, growing $12M+ global ARR portfolio across 60+ clients",
                     "keywords": [
                         "strategy",
                         "B2B data",
@@ -76,20 +76,20 @@
                         "portfolio growth"
                     ],
                     "metrics": {
-                        "arr": "$10M+",
-                        "clients": "50+"
+                        "arr": "$12M+",
+                        "clients": "60+"
                     }
                 },
                 {
-                    "text": "Expanded emerging market coverage by 17%, acquiring 3 new enterprise clients",
+                    "text": "Expanded emerging market coverage by 20%, acquiring 4 new enterprise clients",
                     "keywords": [
                         "market coverage",
                         "enterprise clients",
                         "expansion"
                     ],
                     "metrics": {
-                        "coverage_growth": "17%",
-                        "new_clients": "3"
+                        "coverage_growth": "20%",
+                        "new_clients": "4"
                     }
                 },
                 {
@@ -101,44 +101,44 @@
                     ]
                 },
                 {
-                    "text": "Established market leadership by spearheading the integration of AI governance and SEC InfoSec regulations, creating a defensible competitive moat",
+                    "text": "Established market leadership by spearheading the integration of AI governance and regulatory compliance frameworks, creating a defensible competitive moat",
                     "keywords": [
                         "AI governance",
-                        "SEC regulations",
+                        "regulatory compliance",
                         "competitive moat"
                     ]
                 },
                 {
-                    "text": "Drove a LinkedIn campaign that achieved a 3.8% response rate to the call to action, the highest-performing initiative of 2024",
+                    "text": "Drove a digital campaign that achieved a 4.1% response rate to the call to action, the highest-performing initiative of 2024",
                     "keywords": [
-                        "LinkedIn campaign",
+                        "digital campaign",
                         "marketing",
                         "response rate"
                     ],
                     "metrics": {
-                        "response_rate": "3.8%"
+                        "response_rate": "4.1%"
                     }
                 },
                 {
-                    "text": "Directed rollout of global roadmap intake process, cutting prioritization cycles by 25% and increasing stakeholder satisfaction",
+                    "text": "Directed rollout of global roadmap intake process, cutting prioritization cycles by 30% and increasing stakeholder satisfaction",
                     "keywords": [
                         "roadmap",
                         "process improvement",
                         "prioritization"
                     ],
                     "metrics": {
-                        "cycle_reduction": "25%"
+                        "cycle_reduction": "30%"
                     }
                 }
             ],
             "technologies": [
-                "LinkedIn Campaign Manager",
                 "Jira",
-                "Confluence"
+                "Confluence",
+                "Salesforce"
             ]
         },
         {
-            "company": "Ontario Teachers' Pension Plan",
+            "company": "Meridian Capital Group",
             "title": "Senior Manager, Product and Insights",
             "location": "",
             "start_date": "2018-12",
@@ -147,19 +147,19 @@
             "description": "",
             "bullets": [
                 {
-                    "text": "Optimized investment decision-making for desks managing $13B+ AUM by leading the development of 4 pre-trade analytical tools",
+                    "text": "Optimized investment decision-making for desks managing $15B+ AUM by leading the development of 4 pre-trade analytical tools",
                     "keywords": [
                         "investment decision-making",
                         "analytical tools",
                         "AUM"
                     ],
                     "metrics": {
-                        "aum": "$13B+",
+                        "aum": "$15B+",
                         "tools_developed": "4"
                     }
                 },
                 {
-                    "text": "Enhanced investment agility for $10B Equity portfolio by rebuilding data pipelines using Azure and Python, improving processing speed by 38% to enable real-time trading decisions",
+                    "text": "Enhanced investment agility for $8B Equity portfolio by rebuilding data pipelines using Azure and Python, improving processing speed by 42% to enable real-time trading decisions",
                     "keywords": [
                         "data pipelines",
                         "Azure",
@@ -167,35 +167,35 @@
                         "processing speed"
                     ],
                     "metrics": {
-                        "portfolio_size": "$10B",
-                        "speed_improvement": "38%"
+                        "portfolio_size": "$8B",
+                        "speed_improvement": "42%"
                     }
                 },
                 {
-                    "text": "Productized pre-trade automation for $3B credit portfolio, eliminating 100+ manual hours per quarter and reducing operational risk through workflow redesign and API integrations",
+                    "text": "Productized pre-trade automation for $2.5B credit portfolio, eliminating 120+ manual hours per quarter and reducing operational risk through workflow redesign and API integrations",
                     "keywords": [
                         "automation",
                         "operational risk",
                         "API integrations"
                     ],
                     "metrics": {
-                        "portfolio_size": "$3B",
-                        "hours_saved": "100+/quarter"
+                        "portfolio_size": "$2.5B",
+                        "hours_saved": "120+/quarter"
                     }
                 },
                 {
-                    "text": "Developed and deployed a PowerBI-driven root cause analysis solution for trading execution, leading to a 22% reduction in errors by providing actionable insights to the trading desk.",
+                    "text": "Developed and deployed a PowerBI-driven root cause analysis solution for trading execution, leading to a 25% reduction in errors by providing actionable insights to the trading desk",
                     "keywords": [
                         "PowerBI",
                         "root cause analysis",
                         "trading execution"
                     ],
                     "metrics": {
-                        "error_reduction": "22%"
+                        "error_reduction": "25%"
                     }
                 },
                 {
-                    "text": "Designed and implemented an end-to-end automated pipeline for quarterly executive reporting across 7 desks, improving timeliness of insights and data accuracy for strategic reviews",
+                    "text": "Designed and implemented an end-to-end automated pipeline for quarterly executive reporting across 8 desks, improving timeliness of insights and data accuracy for strategic reviews",
                     "keywords": [
                         "automated pipeline",
                         "reporting",
@@ -210,7 +210,7 @@
             ]
         },
         {
-            "company": "Citco Canada Inc.",
+            "company": "Vantage Fund Services",
             "title": "Business Intelligence Product Specialist",
             "location": "",
             "start_date": "2008-09",
@@ -219,50 +219,50 @@
             "description": "",
             "bullets": [
                 {
-                    "text": "Built and scaled B2B enterprise analytics platform from 8 to 400+ hedge fund clients managing $500B+ AUM, driving 28% YoY user growth through customer-driven product iteration",
+                    "text": "Built and scaled B2B enterprise analytics platform from 10 to 350+ hedge fund clients managing $400B+ AUM, driving 25% YoY user growth through customer-driven product iteration",
                     "keywords": [
                         "B2B enterprise",
                         "scaling",
                         "user growth"
                     ],
                     "metrics": {
-                        "clients_growth": "8 to 400+",
-                        "aum": "$500B+",
-                        "yoy_growth": "28%"
+                        "clients_growth": "10 to 350+",
+                        "aum": "$400B+",
+                        "yoy_growth": "25%"
                     }
                 },
                 {
-                    "text": "Generated $540K/year in new ARR by prioritizing high-value features using product telemetry and customer feedback",
+                    "text": "Generated $480K/year in new ARR by prioritizing high-value features using product telemetry and customer feedback",
                     "keywords": [
                         "ARR",
                         "product telemetry",
                         "customer feedback"
                     ],
                     "metrics": {
-                        "revenue": "$540K/year"
+                        "revenue": "$480K/year"
                     }
                 },
                 {
-                    "text": "Conducted 45+ client interviews annually to refine data workflows and uncover product opportunities, resulting in 98% on-time delivery rate for NAV reporting",
+                    "text": "Conducted 40+ client interviews annually to refine data workflows and uncover product opportunities, resulting in 97% on-time delivery rate for NAV reporting",
                     "keywords": [
                         "client interviews",
                         "data workflows",
                         "NAV reporting"
                     ],
                     "metrics": {
-                        "interviews": "45+/year",
-                        "delivery_rate": "98%"
+                        "interviews": "40+/year",
+                        "delivery_rate": "97%"
                     }
                 },
                 {
-                    "text": "Championed customer service tooling upgrades, defining requirements that cut resolution time by 30%",
+                    "text": "Championed customer service tooling upgrades, defining requirements that cut resolution time by 35%",
                     "keywords": [
                         "customer service",
                         "tooling",
                         "resolution time"
                     ],
                     "metrics": {
-                        "time_reduction": "30%"
+                        "time_reduction": "35%"
                     }
                 }
             ],
@@ -275,10 +275,10 @@
     ],
     "education": [
         {
-            "institution": "Ryerson University",
+            "institution": "Westfield University",
             "degree": "Bachelor of Arts",
             "field": "Administration and Information Management",
-            "location": "Toronto, ON"
+            "location": "New York, NY"
         }
     ],
     "certifications": [],

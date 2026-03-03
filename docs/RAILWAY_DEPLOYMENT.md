@@ -4,7 +4,7 @@ LaunchPad is deployed on Railway with PostgreSQL.
 
 ## Live Deployment
 
-- **URL**: https://launchpad-production-1ce9.up.railway.app
+- **URL**: https://YOUR_APP.up.railway.app
 - **Project**: `rail-linkedin-project`
 - **Service**: `launchpad`
 - **Database**: Railway PostgreSQL (referenced via `DATABASE_URL`)

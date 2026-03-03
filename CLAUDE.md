@@ -96,7 +96,7 @@ frontend/src/
 15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. Both Apify and BrightData providers share this helper.
     - **3 separate calls per job (intentional)**: Domain extraction, summarization, and requirements extraction are kept as 3 individual Gemini calls rather than 1 combined call. Combining them into a single prompt was tested and significantly reduced extraction accuracy — focused single-task prompts produce better results. Do not attempt to merge these into one call to save API quota.
 
-16. **Railway Deployment**: The app is deployed on Railway at `https://launchpad-production-1ce9.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
+16. **Railway Deployment**: The app is deployed on Railway at `https://YOUR_APP.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
 
 ## Common Tasks
 
@@ -221,7 +221,7 @@ When modifying features, these files often need synchronized updates:
 ## Deployment
 
 - **Local**: `uvicorn backend.main:app --reload` (SQLite, frontend via Vite dev server)
-- **Railway** (production): `https://launchpad-production-1ce9.up.railway.app`
+- **Railway** (production): `https://YOUR_APP.up.railway.app`
   - Project: `rail-linkedin-project`, Service: `launchpad`
   - Database: Railway PostgreSQL (auto-referenced via `DATABASE_URL`)
   - All secrets as env vars (see `ENV_OVERRIDES` in `src/config.py`)

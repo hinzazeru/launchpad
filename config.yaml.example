@@ -29,7 +29,7 @@ brightdata:
   poll_timeout_seconds: 300  # Max wait time for results (5 minutes)
   
   # Dataset ID (don't change unless using different dataset)
-  dataset_id: "gd_lpfll7v5hcqtkxl6l"
+  dataset_id: "YOUR_BRIGHTDATA_DATASET_ID_HERE"
 
 # Default Job Search Criteria
 search:
