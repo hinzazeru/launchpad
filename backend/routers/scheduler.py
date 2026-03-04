@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List
 import uuid
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.database.db import SessionLocal, get_db
@@ -30,6 +30,7 @@ from backend.schemas.scheduler import (
     ScheduleHistoryResponse,
 )
 from backend.services.webapp_scheduler import get_scheduler
+from backend.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ router = APIRouter()
 # ============================================================================
 
 @router.get("/schedules", response_model=ScheduleListResponse)
-async def list_schedules(db: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def list_schedules(request: Request, db: Session = Depends(get_db)):
     """List all scheduled searches."""
     schedules = db.query(ScheduledSearch).order_by(
         ScheduledSearch.created_at.desc()
@@ -54,7 +56,8 @@ async def list_schedules(db: Session = Depends(get_db)):
 
 
 @router.post("/schedules", response_model=ScheduleResponse, status_code=201)
-async def create_schedule(schedule: ScheduleCreate, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def create_schedule(request: Request, schedule: ScheduleCreate, db: Session = Depends(get_db)):
     """Create a new scheduled search."""
     # Validate resume file exists
     resume_path = RESUME_LIBRARY_DIR / schedule.resume_filename
@@ -107,7 +110,8 @@ async def create_schedule(schedule: ScheduleCreate, db: Session = Depends(get_db
 
 
 @router.get("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def get_schedule(schedule_id: int, db: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_schedule(request: Request, schedule_id: int, db: Session = Depends(get_db)):
     """Get details of a specific schedule."""
     schedule = db.query(ScheduledSearch).filter(
         ScheduledSearch.id == schedule_id
@@ -120,7 +124,8 @@ async def get_schedule(schedule_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def update_schedule(schedule_id: int, schedule_update: ScheduleUpdate, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def update_schedule(request: Request, schedule_id: int, schedule_update: ScheduleUpdate, db: Session = Depends(get_db)):
     """Update an existing schedule."""
     schedule = db.query(ScheduledSearch).filter(
         ScheduledSearch.id == schedule_id
@@ -166,7 +171,8 @@ async def update_schedule(schedule_id: int, schedule_update: ScheduleUpdate, db:
 
 
 @router.delete("/schedules/{schedule_id}", status_code=204)
-async def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def delete_schedule(request: Request, schedule_id: int, db: Session = Depends(get_db)):
     """Delete a schedule."""
     schedule = db.query(ScheduledSearch).filter(
         ScheduledSearch.id == schedule_id
@@ -202,7 +208,8 @@ async def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
 # ============================================================================
 
 @router.post("/schedules/{schedule_id}/toggle", response_model=ScheduleToggleResponse)
-async def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def toggle_schedule(request: Request, schedule_id: int, db: Session = Depends(get_db)):
     """Toggle a schedule's enabled status."""
     schedule = db.query(ScheduledSearch).filter(
         ScheduledSearch.id == schedule_id
@@ -242,7 +249,8 @@ async def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/schedules/{schedule_id}/run-now", response_model=ScheduleRunNowResponse)
-async def run_schedule_now(schedule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def run_schedule_now(request: Request, schedule_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Trigger an immediate run of a schedule.
 
     The search runs in the background and returns immediately with a search ID
@@ -291,7 +299,9 @@ async def run_schedule_now(schedule_id: int, background_tasks: BackgroundTasks, 
 # ============================================================================
 
 @router.get("/schedules/{schedule_id}/history", response_model=ScheduleHistoryResponse)
+@limiter.limit("200/minute")
 async def get_schedule_history(
+    request: Request,
     schedule_id: int,
     limit: int = 10,
     db: Session = Depends(get_db)
@@ -336,7 +346,8 @@ async def get_schedule_history(
 # ============================================================================
 
 @router.get("/status", response_model=SchedulerStatus)
-async def get_scheduler_status():
+@limiter.limit("200/minute")
+async def get_scheduler_status(request: Request):
     """Get the current status of the scheduler."""
     scheduler = get_scheduler()
     status = scheduler.get_status()

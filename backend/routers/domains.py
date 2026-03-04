@@ -8,11 +8,12 @@ import json
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from src.database.db import SessionLocal
 from src.database.models import Resume
+from backend.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,8 @@ def _format_domain_name(key: str) -> str:
 
 
 @router.get("/available", response_model=AvailableDomainsResponse)
-async def get_available_domains():
+@limiter.limit("200/minute")
+async def get_available_domains(request: Request):
     """Get all available domains organized by category.
 
     Returns domains from data/domain_expertise.json organized into
@@ -120,7 +122,8 @@ async def get_available_domains():
 
 
 @router.get("/user", response_model=UserDomainsResponse)
-async def get_user_domains():
+@limiter.limit("200/minute")
+async def get_user_domains(request: Request):
     """Get the current user's domain expertise.
 
     Returns the domains stored in the most recent Resume record.
@@ -138,7 +141,8 @@ async def get_user_domains():
 
 
 @router.put("/user", response_model=UserDomainsResponse)
-async def update_user_domains(request: UpdateDomainsRequest):
+@limiter.limit("60/minute")
+async def update_user_domains(request: Request, body: UpdateDomainsRequest):
     """Update the current user's domain expertise.
 
     Validates that all provided domains exist in the valid domain list,
@@ -146,7 +150,7 @@ async def update_user_domains(request: UpdateDomainsRequest):
     """
     # Validate domains
     valid_keys = _get_all_valid_domain_keys()
-    invalid_domains = [d for d in request.domains if d not in valid_keys]
+    invalid_domains = [d for d in body.domains if d not in valid_keys]
 
     if invalid_domains:
         raise HTTPException(
@@ -165,7 +169,7 @@ async def update_user_domains(request: UpdateDomainsRequest):
             )
 
         # Update domains (deduplicate and sort for consistency)
-        resume.domains = sorted(list(set(request.domains)))
+        resume.domains = sorted(list(set(body.domains)))
         session.commit()
 
         logger.info(f"Updated user domains to: {resume.domains}")

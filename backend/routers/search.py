@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Dict, Any, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -26,6 +26,7 @@ from src.matching.engine import JobMatcher
 from src.integrations.gemini_client import get_gemini_reranker
 from backend.services.matcher_service import get_job_matcher
 from src.resume.parser import ResumeParser
+from backend.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,8 @@ class SearchResult(BaseModel):
 # Endpoints
 
 @router.get("/defaults", response_model=SearchDefaults)
-async def get_search_defaults():
+@limiter.limit("200/minute")
+async def get_search_defaults(request: Request):
     """Get default search parameters from config."""
     config = get_config()
     return SearchDefaults(
@@ -152,7 +154,8 @@ class SuggestedKeywordsResponse(BaseModel):
 
 
 @router.get("/suggested-keywords", response_model=SuggestedKeywordsResponse)
-async def get_suggested_keywords(limit: int = 7):
+@limiter.limit("200/minute")
+async def get_suggested_keywords(request: Request, limit: int = 7):
     """Get suggested keywords based on past searches and common job titles.
 
     Combines:
@@ -240,7 +243,8 @@ async def get_suggested_keywords(limit: int = 7):
 
 
 @router.post("/jobs")
-async def search_jobs(request: JobSearchRequest):
+@limiter.limit("10/minute")
+async def search_jobs(request: Request, job_req: JobSearchRequest):
     """Execute job search pipeline with SSE progress streaming.
 
     Pipeline stages:
@@ -276,7 +280,7 @@ async def search_jobs(request: JobSearchRequest):
         ))
 
         # Validate resume file
-        file_path = RESUME_LIBRARY_DIR / request.resume_filename
+        file_path = RESUME_LIBRARY_DIR / job_req.resume_filename
         try:
             validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
         except HTTPException:
@@ -293,7 +297,7 @@ async def search_jobs(request: JobSearchRequest):
                 stage=SearchStage.ERROR,
                 progress=0,
                 message="Resume not found",
-                error=f"Resume file not found: {request.resume_filename}"
+                error=f"Resume file not found: {job_req.resume_filename}"
             ))
             return
 
@@ -431,11 +435,11 @@ async def search_jobs(request: JobSearchRequest):
         yield send_progress(SearchProgress(
             stage=SearchStage.FETCHING,
             progress=15,
-            message=f"Fetching jobs for '{request.keyword}'..."
+            message=f"Fetching jobs for '{job_req.keyword}'..."
         ))
 
         # Handle remote keyword suffix
-        keyword = request.keyword.strip()
+        keyword = job_req.keyword.strip()
         is_remote_search = keyword.lower().endswith("remote")
 
         if is_remote_search:
@@ -444,8 +448,8 @@ async def search_jobs(request: JobSearchRequest):
             work_arrangement = "Remote"
         else:
             actual_keyword = keyword
-            search_location = request.location
-            work_arrangement = request.work_arrangement
+            search_location = job_req.location
+            work_arrangement = job_req.work_arrangement
 
         # Initialize jobs variable
         jobs = [] 
@@ -469,9 +473,9 @@ async def search_jobs(request: JobSearchRequest):
             jobs = await provider.search_jobs_async(
                 keywords=actual_keyword,
                 location=search_location,
-                job_type=request.job_type,
-                max_results=request.max_results,
-                experience_level=request.experience_level,
+                job_type=job_req.job_type,
+                max_results=job_req.max_results,
+                experience_level=job_req.experience_level,
                 work_arrangement=work_arrangement,
                 split_calls=True,  # Enable parallel execution
                 progress_callback=apify_progress_callback
@@ -756,7 +760,7 @@ async def search_jobs(request: JobSearchRequest):
         exported_count = 0
         sheets_url = None
 
-        if request.export_to_sheets and all_matches:
+        if job_req.export_to_sheets and all_matches:
             yield send_progress(SearchProgress(
                 stage=SearchStage.EXPORTING,
                 progress=82,
@@ -971,7 +975,8 @@ class GeminiHealthResponse(BaseModel):
 
 
 @router.get("/config/gemini-status", response_model=GeminiConfigStatus)
-async def get_gemini_config_status():
+@limiter.limit("200/minute")
+async def get_gemini_config_status(request: Request):
     """Get Gemini configuration status for frontend display.
 
     Returns configuration state so frontend can show appropriate warnings
@@ -989,7 +994,8 @@ async def get_gemini_config_status():
 
 
 @router.get("/health/gemini", response_model=GeminiHealthResponse)
-async def check_gemini_health():
+@limiter.limit("200/minute")
+async def check_gemini_health(request: Request):
     """Check Gemini API availability.
 
     Performs a lightweight test to verify Gemini API is reachable
@@ -1061,8 +1067,10 @@ def get_db():
 
 
 @router.post("/jobs/start", response_model=SearchJobStartResponse)
+@limiter.limit("10/minute")
 async def start_search_job(
-    request: JobSearchRequest,
+    request: Request,
+    job_req: JobSearchRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
@@ -1076,14 +1084,14 @@ async def start_search_job(
     search_id = str(uuid.uuid4())
 
     # Validate resume file
-    file_path = RESUME_LIBRARY_DIR / request.resume_filename
+    file_path = RESUME_LIBRARY_DIR / job_req.resume_filename
     try:
         validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
     except HTTPException:
         raise HTTPException(status_code=403, detail="Access denied - invalid resume path")
 
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail=f"Resume file not found: {request.resume_filename}")
+        raise HTTPException(status_code=404, detail=f"Resume file not found: {job_req.resume_filename}")
 
     # Create SearchJob record
     search_job = SearchJob(
@@ -1092,14 +1100,14 @@ async def start_search_job(
         stage='initializing',
         progress=0,
         message='Search queued',
-        keyword=request.keyword,
-        location=request.location,
-        job_type=request.job_type,
-        experience_level=request.experience_level,
-        work_arrangement=request.work_arrangement,
-        max_results=request.max_results,
-        resume_filename=request.resume_filename,
-        export_to_sheets=request.export_to_sheets,
+        keyword=job_req.keyword,
+        location=job_req.location,
+        job_type=job_req.job_type,
+        experience_level=job_req.experience_level,
+        work_arrangement=job_req.work_arrangement,
+        max_results=job_req.max_results,
+        resume_filename=job_req.resume_filename,
+        export_to_sheets=job_req.export_to_sheets,
         trigger_source='manual',
         expires_at=datetime.utcnow() + timedelta(hours=24)
     )
@@ -1109,7 +1117,7 @@ async def start_search_job(
     # Start background task
     background_tasks.add_task(execute_search_job, search_id)
 
-    logger.info(f"Started search job {search_id} for keyword '{request.keyword}'")
+    logger.info(f"Started search job {search_id} for keyword '{job_req.keyword}'")
 
     return SearchJobStartResponse(
         search_id=search_id,
@@ -1119,7 +1127,8 @@ async def start_search_job(
 
 
 @router.get("/jobs/{search_id}/status", response_model=SearchJobProgress)
-async def get_search_status(search_id: str, db: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_search_status(request: Request, search_id: str, db: Session = Depends(get_db)):
     """Get the current progress of a search job.
 
     Poll this endpoint every 2-3 seconds to get updates.
@@ -1149,7 +1158,8 @@ async def get_search_status(search_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/jobs/recent", response_model=SearchJobListResponse)
-async def list_recent_search_jobs(limit: int = 10, db: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def list_recent_search_jobs(request: Request, limit: int = 10, db: Session = Depends(get_db)):
     """List recent search jobs for recovery after disconnection."""
     jobs = db.query(SearchJob).order_by(SearchJob.created_at.desc()).limit(limit).all()
 
@@ -1178,7 +1188,8 @@ async def list_recent_search_jobs(limit: int = 10, db: Session = Depends(get_db)
 
 
 @router.post("/jobs/{search_id}/cancel")
-async def cancel_search_job(search_id: str, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+async def cancel_search_job(request: Request, search_id: str, db: Session = Depends(get_db)):
     """Request cancellation of a running search job.
 
     The pipeline checks for cancellation between stages and will stop

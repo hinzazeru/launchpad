@@ -8,7 +8,7 @@ Provides aggregated analytics data for the dashboard:
 - Performance metrics
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
@@ -22,6 +22,7 @@ import time
 
 from src.database.db import get_db
 from src.database.models import JobPosting, MatchResult, SearchPerformance, APICallMetric, ScheduledSearch
+from backend.limiter import limiter
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -215,7 +216,8 @@ class GeminiUsageResponse(BaseModel):
 # --- Endpoints ---
 
 @router.get("/summary", response_model=SummaryMetrics)
-async def get_summary(session: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_summary(request: Request, session: Session = Depends(get_db)):
     """Get summary metrics for the analytics cards.
 
     Returns:
@@ -257,7 +259,9 @@ async def get_summary(session: Session = Depends(get_db)):
 
 
 @router.get("/skills", response_model=SkillsAnalytics)
+@limiter.limit("200/minute")
 async def get_skills_analytics(
+    request: Request,
     top_n: int = 10,
     session: Session = Depends(get_db)
 ):
@@ -339,7 +343,9 @@ async def get_skills_analytics(
 
 
 @router.get("/market", response_model=MarketAnalytics)
+@limiter.limit("200/minute")
 async def get_market_analytics(
+    request: Request,
     top_n: int = 10,
     min_score: float = 60,
     session: Session = Depends(get_db)
@@ -400,7 +406,9 @@ async def get_market_analytics(
 
 
 @router.get("/timeline", response_model=TimelineAnalytics)
+@limiter.limit("200/minute")
 async def get_timeline_analytics(
+    request: Request,
     days: int = 30,
     session: Session = Depends(get_db)
 ):
@@ -463,7 +471,8 @@ async def get_timeline_analytics(
 
 
 @router.get("/score-distribution")
-async def get_score_distribution(session: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_score_distribution(request: Request, session: Session = Depends(get_db)):
     """Get match score distribution in buckets.
 
     Returns counts for buckets: 0-50%, 50-70%, 70-85%, 85%+
@@ -505,7 +514,9 @@ async def get_score_distribution(session: Session = Depends(get_db)):
 
 
 @router.get("/matching-distribution", response_model=MatchingDistribution)
+@limiter.limit("200/minute")
 async def get_matching_distribution(
+    request: Request,
     days: int = 30,
     session: Session = Depends(get_db)
 ):
@@ -575,7 +586,8 @@ async def get_matching_distribution(
 
 
 @router.get("/performance/summary", response_model=PerformanceSummary)
-async def get_performance_summary(session: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_performance_summary(request: Request, session: Session = Depends(get_db)):
     """Get aggregated system performance metrics (30 days)."""
     cache_key = "perf_summary"
     cached = _get_cached(cache_key)
@@ -678,7 +690,9 @@ async def get_performance_summary(session: Session = Depends(get_db)):
 
 
 @router.get("/performance/timeline", response_model=PerformanceTimeline)
+@limiter.limit("200/minute")
 async def get_performance_timeline(
+    request: Request,
     days: int = 30,
     session: Session = Depends(get_db)
 ):
@@ -725,7 +739,9 @@ async def get_performance_timeline(
 
 
 @router.get("/performance/breakdown", response_model=PerformanceBreakdown)
+@limiter.limit("200/minute")
 async def get_performance_breakdown(
+    request: Request,
     days: int = 7,
     session: Session = Depends(get_db)
 ):
@@ -783,7 +799,9 @@ async def get_performance_breakdown(
 
 
 @router.get("/performance/api-latency")
+@limiter.limit("200/minute")
 async def get_api_latency(
+    request: Request,
     days: int = 7,
     session: Session = Depends(get_db)
 ) -> Dict[str, ApiLatencyDetail]:
@@ -849,7 +867,9 @@ async def get_api_latency(
 
 
 @router.get("/performance/recent-searches", response_model=RecentSearchesResponse)
+@limiter.limit("200/minute")
 async def get_recent_searches(
+    request: Request,
     limit: int = 20,
     session: Session = Depends(get_db)
 ):
@@ -902,7 +922,9 @@ async def get_recent_searches(
 
 
 @router.get("/gemini-usage", response_model=GeminiUsageResponse)
+@limiter.limit("200/minute")
 async def get_gemini_usage(
+    request: Request,
     days: int = 30,
     session: Session = Depends(get_db)
 ):
@@ -1024,7 +1046,9 @@ class ScheduledSearchesSummaryResponse(BaseModel):
 
 
 @router.get("/performance/scheduled-summary", response_model=ScheduledSearchesSummaryResponse)
+@limiter.limit("200/minute")
 async def get_scheduled_search_summary(
+    request: Request,
     days: int = 30,
     session: Session = Depends(get_db)
 ):

@@ -13,6 +13,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from backend.limiter import limiter
 
 # Configure root logger so all app loggers output to stdout
 logging.basicConfig(
@@ -41,6 +45,10 @@ app = FastAPI(
     description="API for analyzing resumes against job descriptions and generating AI-powered suggestions",
     version="1.0.0"
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # CORS middleware for React frontend (only needed in dev mode)
 if not PRODUCTION:

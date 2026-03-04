@@ -1,23 +1,24 @@
 """Router for managing liked bullet points."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 
 from src.database.db import get_db
 from src.database.models import LikedBullet
+from backend.limiter import limiter
 
 router = APIRouter()
 
 
 class LikedBulletCreate(BaseModel):
     """Request model for saving a liked bullet."""
-    original_text: str
-    rewritten_text: str
-    role_title: Optional[str] = None
-    company: Optional[str] = None
+    original_text: str = Field(..., max_length=2000)
+    rewritten_text: str = Field(..., max_length=2000)
+    role_title: Optional[str] = Field(None, max_length=200)
+    company: Optional[str] = Field(None, max_length=200)
     job_id: Optional[int] = None
 
 
@@ -43,7 +44,9 @@ class PaginatedLikedBulletsResponse(BaseModel):
 
 
 @router.post("", response_model=LikedBulletResponse)
+@limiter.limit("60/minute")
 async def save_liked_bullet(
+    request: Request,
     bullet: LikedBulletCreate,
     session: Session = Depends(get_db)
 ):
@@ -64,10 +67,12 @@ async def save_liked_bullet(
 
 
 @router.get("", response_model=PaginatedLikedBulletsResponse)
+@limiter.limit("200/minute")
 async def list_liked_bullets(
-    skip: int = 0,
-    limit: int = 50,
-    role_filter: Optional[str] = None,
+    request: Request,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    role_filter: Optional[str] = Query(default=None, max_length=200),
     session: Session = Depends(get_db)
 ):
     """List liked bullet points with pagination and optional filtering."""
@@ -89,7 +94,8 @@ async def list_liked_bullets(
 
 
 @router.get("/roles", response_model=List[str])
-async def list_unique_roles(session: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def list_unique_roles(request: Request, session: Session = Depends(get_db)):
     """Get list of unique role titles for filtering."""
     results = session.query(LikedBullet.role_title).distinct().filter(
         LikedBullet.role_title.isnot(None)
@@ -98,7 +104,9 @@ async def list_unique_roles(session: Session = Depends(get_db)):
 
 
 @router.delete("/{bullet_id}")
+@limiter.limit("60/minute")
 async def delete_liked_bullet(
+    request: Request,
     bullet_id: int,
     session: Session = Depends(get_db)
 ):

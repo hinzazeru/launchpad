@@ -3,7 +3,7 @@
 Provides endpoints for managing resumes (list, upload, delete, preview).
 """
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -12,6 +12,7 @@ from datetime import datetime
 import json
 
 from src.resume.parser import ResumeParser
+from backend.limiter import limiter
 
 router = APIRouter()
 
@@ -91,7 +92,8 @@ class SuggestedDomainsResponse(BaseModel):
 
 
 @router.get("", response_model=ResumeListResponse)
-async def list_resumes():
+@limiter.limit("200/minute")
+async def list_resumes(request: Request):
     """List all saved resumes from the library."""
     resumes = []
 
@@ -170,7 +172,8 @@ async def list_resumes():
 
 
 @router.get("/{filename}")
-async def get_resume(filename: str):
+@limiter.limit("200/minute")
+async def get_resume(request: Request, filename: str):
     """Get resume content by filename."""
     file_path = RESUME_LIBRARY_DIR / filename
     validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
@@ -189,7 +192,8 @@ async def get_resume(filename: str):
 
 
 @router.get("/{filename}/preview", response_model=ResumePreview)
-async def preview_resume(filename: str):
+@limiter.limit("200/minute")
+async def preview_resume(request: Request, filename: str):
     """Get parsed preview of a resume."""
     file_path = RESUME_LIBRARY_DIR / filename
     validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
@@ -228,7 +232,8 @@ async def preview_resume(filename: str):
 
 
 @router.get("/{filename}/suggested-domains", response_model=SuggestedDomainsResponse)
-async def get_suggested_domains(filename: str):
+@limiter.limit("200/minute")
+async def get_suggested_domains(request: Request, filename: str):
     """Get AI-suggested domains from resume content.
 
     Analyzes the resume text and suggests domains based on
@@ -274,7 +279,9 @@ async def get_suggested_domains(filename: str):
 
 
 @router.post("", response_model=ResumeUploadResponse)
+@limiter.limit("20/minute")
 async def upload_resume(
+    request: Request,
     file: UploadFile = File(...),
     name: str = Form(...)
 ):
@@ -355,7 +362,8 @@ async def upload_resume(
 
 
 @router.delete("/{filename}")
-async def delete_resume(filename: str):
+@limiter.limit("20/minute")
+async def delete_resume(request: Request, filename: str):
     """Delete a resume from the library."""
     file_path = RESUME_LIBRARY_DIR / filename
     validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
@@ -375,7 +383,8 @@ async def delete_resume(filename: str):
 
 
 @router.post("/parse")
-async def parse_resume_content(content: str = Form(...)):
+@limiter.limit("60/minute")
+async def parse_resume_content(request: Request, content: str = Form(...)):
     """Parse resume content without saving.
 
     Useful for previewing uploaded content before saving.

@@ -3,13 +3,14 @@
 import json
 import logging
 import threading
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from src.config import get_config
 from src.database.db import SessionLocal
 from src.database.models import JobPosting, MatchResult, Resume
 from src.matching.skill_extractor import extract_salary_from_description
+from backend.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,8 @@ def _require_admin(credentials: HTTPAuthorizationCredentials = Depends(_bearer))
 
 
 @router.post("/backfill-salary", dependencies=[Depends(_require_admin)])
-def backfill_salary():
+@limiter.limit("10/minute")
+def backfill_salary(request: Request):
     """Re-run salary extraction on all jobs with NULL salary."""
     db = SessionLocal()
     try:
@@ -56,7 +58,8 @@ def backfill_salary():
 
 
 @router.post("/rematch-job/{job_id}", dependencies=[Depends(_require_admin)])
-def rematch_job(job_id: int):
+@limiter.limit("10/minute")
+def rematch_job(request: Request, job_id: int):
     """Re-run Gemini matching for a specific job and update the stored result."""
     from backend.services.matcher_service import get_job_matcher
 
@@ -161,7 +164,8 @@ def _do_rematch(label: str, job_ids: list):
 
 
 @router.post("/rematch-stale", dependencies=[Depends(_require_admin)])
-def rematch_stale(background_tasks: BackgroundTasks):
+@limiter.limit("10/minute")
+def rematch_stale(request: Request, background_tasks: BackgroundTasks):
     """Re-run Gemini matching for all jobs with match_engine='gemini' but no ai_match_score (stale results)."""
     db = SessionLocal()
     try:
@@ -188,7 +192,9 @@ def _do_rematch_by_gap(skill: str, job_ids: list):
 
 
 @router.post("/rematch-by-gap", dependencies=[Depends(_require_admin)])
+@limiter.limit("10/minute")
 def rematch_by_gap(
+    request: Request,
     background_tasks: BackgroundTasks,
     skill: str = Query(..., description="Skill gap text to search for (case-insensitive)"),
 ):

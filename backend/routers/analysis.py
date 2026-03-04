@@ -4,9 +4,9 @@ Provides endpoints for analyzing resumes against jobs,
 generating AI suggestions, and exporting tailored resumes.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
@@ -23,6 +23,7 @@ from src.targeting.bullet_rewriter import BulletRewriter
 from src.resume.parser import ResumeParser
 from src.database.db import SessionLocal
 from src.database.models import JobPosting, MatchResult, Resume
+from backend.limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +80,13 @@ def get_parser():
 
 class AnalyzeRequest(BaseModel):
     """Request to analyze a resume against a job."""
-    resume_content: Optional[str] = None
+    resume_content: Optional[str] = Field(None, max_length=50000)
     resume_filename: Optional[str] = None
     job_id: Optional[int] = None
-    job_description: Optional[str] = None
-    job_title: Optional[str] = None
-    job_company: Optional[str] = None
-    threshold: float = 0.7
+    job_description: Optional[str] = Field(None, max_length=20000)
+    job_title: Optional[str] = Field(None, max_length=200)
+    job_company: Optional[str] = Field(None, max_length=200)
+    threshold: float = Field(default=0.7, ge=0.0, le=1.0)
 
 
 class BulletScore(BaseModel):
@@ -120,12 +121,12 @@ class AnalyzeResponse(BaseModel):
 
 class SuggestionsRequest(BaseModel):
     """Request to generate AI suggestions for a role."""
-    resume_content: Optional[str] = None
+    resume_content: Optional[str] = Field(None, max_length=50000)
     resume_filename: Optional[str] = None
     role_index: int
-    job_title: str
-    job_company: str
-    job_description: str
+    job_title: str = Field(..., max_length=200)
+    job_company: str = Field(..., max_length=200)
+    job_description: str = Field(..., max_length=20000)
     job_id: Optional[int] = None
 
 
@@ -193,16 +194,17 @@ class AnalysisHistoryResponse(BaseModel):
 # Endpoints
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_resume(request: AnalyzeRequest):
+@limiter.limit("20/minute")
+async def analyze_resume(request: Request, body: AnalyzeRequest):
     """Analyze a resume against a job description.
 
     Provides alignment scores for each role and bullet point.
     """
     # Get resume content
-    if request.resume_content:
-        resume_text = request.resume_content
-    elif request.resume_filename:
-        file_path = RESUME_LIBRARY_DIR / request.resume_filename
+    if body.resume_content:
+        resume_text = body.resume_content
+    elif body.resume_filename:
+        file_path = RESUME_LIBRARY_DIR / body.resume_filename
         validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Resume not found")
@@ -212,15 +214,15 @@ async def analyze_resume(request: AnalyzeRequest):
         raise HTTPException(status_code=400, detail="Provide resume_content or resume_filename")
 
     # Get job description
-    job_title = request.job_title or ""
-    job_company = request.job_company or ""
+    job_title = body.job_title or ""
+    job_company = body.job_company or ""
     saved_suggestions = None  # Will be loaded if job_id provided
 
-    if request.job_id:
+    if body.job_id:
         # Single session to fetch both job and match result (avoid N+1)
         session = SessionLocal()
         try:
-            job = session.query(JobPosting).filter(JobPosting.id == request.job_id).first()
+            job = session.query(JobPosting).filter(JobPosting.id == body.job_id).first()
             if not job:
                 raise HTTPException(status_code=404, detail="Job not found")
             job_description = job.description
@@ -229,14 +231,14 @@ async def analyze_resume(request: AnalyzeRequest):
 
             # Also fetch saved suggestions in the same session
             match = session.query(MatchResult).filter(
-                MatchResult.job_id == request.job_id
+                MatchResult.job_id == body.job_id
             ).first()
             if match and match.bullet_suggestions:
                 saved_suggestions = match.bullet_suggestions
         finally:
             session.close()
-    elif request.job_description:
-        job_description = request.job_description
+    elif body.job_description:
+        job_description = body.job_description
     else:
         raise HTTPException(status_code=400, detail="Provide job_id or job_description")
 
@@ -288,7 +290,7 @@ async def analyze_resume(request: AnalyzeRequest):
                 suggestions=bs.suggestions or []
             ))
             total_bullets += 1
-            if bs.score < request.threshold:
+            if bs.score < body.threshold:
                 low_scoring_bullets += 1
 
         roles.append(RoleAnalysis(
@@ -327,16 +329,17 @@ async def analyze_resume(request: AnalyzeRequest):
 
 
 @router.post("/suggestions", response_model=SuggestionsResponse)
-async def generate_suggestions(request: SuggestionsRequest):
+@limiter.limit("20/minute")
+async def generate_suggestions(request: Request, body: SuggestionsRequest):
     """Generate AI suggestions for a specific role's bullets.
 
     Only generates suggestions for low-scoring bullets (< 70%).
     """
     # Get resume content
-    if request.resume_content:
-        resume_text = request.resume_content
-    elif request.resume_filename:
-        file_path = RESUME_LIBRARY_DIR / request.resume_filename
+    if body.resume_content:
+        resume_text = body.resume_content
+    elif body.resume_filename:
+        file_path = RESUME_LIBRARY_DIR / body.resume_filename
         validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Resume not found")
@@ -349,14 +352,14 @@ async def generate_suggestions(request: SuggestionsRequest):
     analyzer = get_analyzer()
     analyses = analyzer.analyze_all_roles(
         resume_text,
-        request.job_description,
-        request.job_title
+        body.job_description,
+        body.job_title
     )
 
-    if request.role_index >= len(analyses):
+    if body.role_index >= len(analyses):
         raise HTTPException(status_code=400, detail="Invalid role_index")
 
-    analysis = analyses[request.role_index]
+    analysis = analyses[body.role_index]
 
     # Generate suggestions
     rewriter = get_rewriter()
@@ -374,9 +377,9 @@ async def generate_suggestions(request: SuggestionsRequest):
         with perf_logger.time('generate_suggestions'):
             result = rewriter.rewrite_role_bullets(
                 analysis=analysis,
-                job_title=request.job_title,
-                company=request.job_company,
-                job_description=request.job_description
+                job_title=body.job_title,
+                company=body.job_company,
+                job_description=body.job_description
             )
             
         # Log AI API call details
@@ -417,10 +420,10 @@ async def generate_suggestions(request: SuggestionsRequest):
         })
 
     # Save to Database if job_id is provided
-    if request.job_id:
+    if body.job_id:
         session = SessionLocal()
         try:
-            match = session.query(MatchResult).filter(MatchResult.job_id == request.job_id).first()
+            match = session.query(MatchResult).filter(MatchResult.job_id == body.job_id).first()
 
             if match:
                 # Update the bullet_suggestions JSON
@@ -428,7 +431,7 @@ async def generate_suggestions(request: SuggestionsRequest):
                 current_data = dict(match.bullet_suggestions) if match.bullet_suggestions else {}
 
                 # Get role key from analysis
-                analysis = analyses[request.role_index]
+                analysis = analyses[body.role_index]
                 role_key = f"{analysis.role.company}_{analysis.role.title}"
 
                 current_data[role_key] = bullet_suggestions
@@ -444,19 +447,20 @@ async def generate_suggestions(request: SuggestionsRequest):
 
     return SuggestionsResponse(
         success=True,
-        role_index=request.role_index,
+        role_index=body.role_index,
         bullet_suggestions=bullet_suggestions
     )
 
 
 @router.post("/export", response_model=ExportResponse)
-async def export_tailored_resume(request: ExportRequest):
+@limiter.limit("20/minute")
+async def export_tailored_resume(request: Request, body: ExportRequest):
     """Export a tailored resume with selected bullet changes."""
     # Get resume content
-    if request.resume_content:
-        resume_text = request.resume_content
-    elif request.resume_filename:
-        file_path = RESUME_LIBRARY_DIR / request.resume_filename
+    if body.resume_content:
+        resume_text = body.resume_content
+    elif body.resume_filename:
+        file_path = RESUME_LIBRARY_DIR / body.resume_filename
         validate_path_within_directory(file_path, RESUME_LIBRARY_DIR)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Resume not found")
@@ -493,8 +497,8 @@ async def export_tailored_resume(request: ExportRequest):
             lines.append(role.duration)
 
         # Get selected bullets for this role
-        if role_key in request.selections:
-            for selection in request.selections[role_key]:
+        if role_key in body.selections:
+            for selection in body.selections[role_key]:
                 lines.append(f"- {selection['selected']}")
                 if selection.get('type') != 'original':
                     changes_made += 1
@@ -511,7 +515,7 @@ async def export_tailored_resume(request: ExportRequest):
     content = "\n".join(lines)
 
     # Generate filename
-    safe_company = "".join(c if c.isalnum() else "_" for c in request.company)
+    safe_company = "".join(c if c.isalnum() else "_" for c in body.company)
     date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"Resume_Tailored_{safe_company}_{date_str}.txt"
 
@@ -529,7 +533,8 @@ async def export_tailored_resume(request: ExportRequest):
 
 
 @router.get("/download/{filename}")
-async def download_tailored_resume(filename: str):
+@limiter.limit("60/minute")
+async def download_tailored_resume(request: Request, filename: str):
     """Download a previously exported tailored resume."""
     file_path = OUTPUT_DIR / filename
     validate_path_within_directory(file_path, OUTPUT_DIR)
@@ -545,7 +550,8 @@ async def download_tailored_resume(filename: str):
 
 
 @router.get("/gemini-status")
-async def gemini_status():
+@limiter.limit("200/minute")
+async def gemini_status(request: Request):
     """Check if Gemini AI is available for suggestions."""
     rewriter = get_rewriter()
     return {
@@ -555,7 +561,9 @@ async def gemini_status():
 
 
 @router.get("/history", response_model=AnalysisHistoryResponse)
+@limiter.limit("200/minute")
 async def get_analysis_history(
+    request: Request,
     search: Optional[str] = Query(None, description="Search job title"),
     resume_id: Optional[int] = Query(None, description="Filter by resume ID"),
     date_from: Optional[datetime] = Query(None, description="Filter by date from"),
@@ -729,7 +737,8 @@ class MatchSuggestionsResponse(BaseModel):
 
 
 @router.get("/history/{match_id}/suggestions", response_model=MatchSuggestionsResponse)
-async def get_match_suggestions(match_id: int):
+@limiter.limit("200/minute")
+async def get_match_suggestions(request: Request, match_id: int):
     """Get bullet suggestions detail for a specific analysis match.
 
     Returns all saved AI bullet suggestions organized by role.

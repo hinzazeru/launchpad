@@ -3,7 +3,7 @@
 Provides endpoints for listing and filtering matched jobs.
 """
 
-from fastapi import APIRouter, Query, HTTPException, Depends
+from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -12,6 +12,7 @@ from sqlalchemy import or_
 
 from src.database.db import SessionLocal, get_db
 from src.database.models import JobPosting, MatchResult
+from backend.limiter import limiter
 
 router = APIRouter()
 
@@ -75,7 +76,9 @@ class JobFilters(BaseModel):
 
 
 @router.get("", response_model=JobListResponse)
+@limiter.limit("200/minute")
 async def list_jobs(
+    request: Request,
     min_score: float = Query(0, ge=0, le=100, description="Minimum match score"),
     max_score: float = Query(100, ge=0, le=100, description="Maximum match score"),
     recency_days: Optional[int] = Query(None, ge=1, description="Jobs posted within N days"),
@@ -229,7 +232,8 @@ async def list_jobs(
 
 
 @router.get("/stats/summary")
-async def get_job_stats(session: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_job_stats(request: Request, session: Session = Depends(get_db)):
     """Get summary statistics about matched jobs."""
     from sqlalchemy import func
 
@@ -258,7 +262,8 @@ async def get_job_stats(session: Session = Depends(get_db)):
 
 
 @router.get("/{job_id}", response_model=JobResponse)
-async def get_job(job_id: int, session: Session = Depends(get_db)):
+@limiter.limit("200/minute")
+async def get_job(request: Request, job_id: int, session: Session = Depends(get_db)):
     """Get a single job by ID with full details."""
     result = (
         session.query(JobPosting, MatchResult)
@@ -331,13 +336,15 @@ class UserStatusResponse(BaseModel):
 
 
 @router.patch("/{job_id}/status", response_model=UserStatusResponse)
+@limiter.limit("60/minute")
 async def update_job_status(
+    request: Request,
     job_id: int,
-    request: UserStatusRequest,
+    body: UserStatusRequest,
     session: Session = Depends(get_db)
 ):
     """Update the user_status (hearted/ignored) for a job match."""
-    if request.user_status not in (None, 'hearted', 'ignored'):
+    if body.user_status not in (None, 'hearted', 'ignored'):
         raise HTTPException(status_code=400, detail="user_status must be 'hearted', 'ignored', or null")
 
     match = (
@@ -349,7 +356,7 @@ async def update_job_status(
     if not match:
         raise HTTPException(status_code=404, detail="Match not found for this job")
 
-    match.user_status = request.user_status
+    match.user_status = body.user_status
     session.commit()
 
     return UserStatusResponse(id=match.id, user_status=match.user_status)
@@ -373,18 +380,20 @@ class RerankResponse(BaseModel):
 
 
 @router.post("/rerank", response_model=RerankResponse)
+@limiter.limit("10/minute")
 async def rerank_jobs(
-    request: RerankRequest,
+    request: Request,
+    body: RerankRequest,
     session: Session = Depends(get_db)
 ):
     """Re-rank recent jobs using Gemini AI.
-    
+
     This endpoint triggers Gemini re-ranking for jobs posted in the last N days
     that haven't been ranked yet (or all with force=true).
     """
     from src.integrations.gemini_client import GeminiMatchReranker
     from src.database.models import Resume
-    
+
     # Initialize reranker
     reranker = GeminiMatchReranker()
     if not reranker.is_available():
@@ -392,23 +401,23 @@ async def rerank_jobs(
             status_code=503,
             detail="Gemini reranker not available. Check gemini config in config.yaml"
         )
-    
+
     # Get cutoff date
-    cutoff_date = datetime.now() - timedelta(days=request.days)
-    
+    cutoff_date = datetime.now() - timedelta(days=body.days)
+
     # Query jobs needing re-ranking
     query = (
         session.query(JobPosting, MatchResult)
         .join(MatchResult, JobPosting.id == MatchResult.job_id)
         .filter(JobPosting.posting_date >= cutoff_date)
-        .filter(MatchResult.match_score >= request.min_score)
+        .filter(MatchResult.match_score >= body.min_score)
     )
-    
-    if not request.force:
+
+    if not body.force:
         query = query.filter(MatchResult.gemini_score.is_(None))
-    
+
     query = query.order_by(MatchResult.match_score.desc())
-    query = query.limit(request.limit)
+    query = query.limit(body.limit)
     
     results = query.all()
     
