@@ -2,6 +2,9 @@
 """Quick demo - parse resume and match against existing jobs (no API call)."""
 
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.database.db import SessionLocal, init_db
 from src.resume.parser import parse_resume
 from src.resume.storage import save_resume_from_file

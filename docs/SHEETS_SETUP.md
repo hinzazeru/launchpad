@@ -146,7 +146,7 @@ If it's missing, download it again from Google Cloud Console:
 The first time you use Sheets integration, you'll need to authenticate:
 
 ```bash
-python test_sheets_export.py
+python scripts/test_sheets_export.py
 ```
 
 ### Step 2: Complete OAuth Flow
@@ -182,7 +182,7 @@ ls -l sheets_token.json
 ### Run the Demo Script
 
 ```bash
-python test_sheets_export.py
+python scripts/test_sheets_export.py
 ```
 
 **Expected Output**:
@@ -294,7 +294,7 @@ Adjust `max_skills_display` in config.yaml to show more or fewer skills.
 **Solution**:
 1. Check that `sheets.enabled: true` in config.yaml
 2. Verify `spreadsheet_id` is correct
-3. Run authentication: `python test_sheets_export.py`
+3. Run authentication: `python scripts/test_sheets_export.py`
 
 ### Error: "The caller does not have permission"
 
@@ -311,7 +311,7 @@ Adjust `max_skills_display` in config.yaml to show more or fewer skills.
 
 **Solution**:
 1. Delete `sheets_token.json`
-2. Run `python test_sheets_export.py` to re-authenticate
+2. Run `python scripts/test_sheets_export.py` to re-authenticate
 
 ### Error: "Credentials file not found"
 

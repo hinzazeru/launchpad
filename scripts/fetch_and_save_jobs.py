@@ -2,6 +2,9 @@
 """Fetch jobs from Apify and save to database - debug version."""
 
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime
 from src.database.db import SessionLocal, init_db
 from src.importers.provider_factory import get_job_provider

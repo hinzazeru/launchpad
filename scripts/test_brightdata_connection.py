@@ -7,6 +7,10 @@ It's configured to fetch only 5 jobs to minimize API usage during testing.
 
 import asyncio
 import logging
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime
 from src.importers.brightdata_provider import BrightDataJobProvider
 

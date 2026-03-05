@@ -8,6 +8,10 @@ This script:
 4. Displays spreadsheet URL for verification
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime
 from src.integrations.sheets_connector import SheetsConnector
 from src.config import get_config

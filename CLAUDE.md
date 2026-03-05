@@ -201,7 +201,7 @@ except Exception as e:
 
 - Unit tests: `tests/` directory
 - Manual bot testing: `python run_telegram_bot.py`
-- Demo scripts: `run_matching_demo.py`, `quick_match_demo.py`
+- Demo scripts: `scripts/run_matching_demo.py`, `scripts/quick_match_demo.py`
 
 ## Files to Update Together
 

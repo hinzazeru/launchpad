@@ -2,6 +2,9 @@
 """Demo script to parse resume, fetch jobs, and run matching engine."""
 
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime
 from src.database.db import SessionLocal, init_db
 from src.resume.parser import parse_resume

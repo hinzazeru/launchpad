@@ -9,9 +9,11 @@ This script provides commands to control the job scheduler:
 """
 
 import sys
+import os
 import time
 import signal
 from pathlib import Path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.scheduler.job_scheduler import JobScheduler
 from src.config import get_config

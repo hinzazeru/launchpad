@@ -86,7 +86,7 @@ email:
 Run the test script to verify setup:
 
 ```bash
-python test_email_notifications.py
+python scripts/test_email_notifications.py
 ```
 
 The script will:
@@ -236,7 +236,7 @@ To customize templates, edit these methods in the `EmailNotifier` class.
 
 After setting up email notifications:
 
-1. **Test with real job matches**: Run `python run_matching_demo.py`
+1. **Test with real job matches**: Run `python scripts/run_matching_demo.py`
 2. **Adjust threshold**: Set `notify_min_score` to your preference (0.6-0.9)
 3. **Set up scheduling**: Configure automated job searches (Task 8)
 4. **Monitor your inbox**: Check for job match notifications
@@ -247,4 +247,4 @@ For issues or questions:
 - Check this documentation
 - Review error messages in console output
 - Verify all configuration settings
-- Test with `python test_email_notifications.py`
+- Test with `python scripts/test_email_notifications.py`

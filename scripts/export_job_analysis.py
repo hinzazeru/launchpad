@@ -6,6 +6,10 @@ to a CSV file for manual review and analysis.
 """
 
 import csv
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime
 from src.database.db import SessionLocal
 from src.database.models import JobPosting, MatchResult, Resume

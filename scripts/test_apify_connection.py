@@ -9,6 +9,9 @@ Usage:
 """
 
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from datetime import datetime
 from src.config import get_config
 from src.importers.apify_provider import ApifyJobImporter
