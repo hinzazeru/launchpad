@@ -1,0 +1,36 @@
+Alex Chen
+alex.chen@example.com | linkedin.com/in/alexchen | Toronto, ON
+
+PROFESSIONAL SUMMARY
+Results-driven product manager with 8+ years of experience in B2B SaaS and fintech.
+Proven track record of leading cross-functional teams to deliver products from 0 to 1.
+Expertise in roadmap strategy, stakeholder alignment, and data-driven prioritization.
+
+EXPERIENCE
+
+Senior Product Manager | Nexus Analytics Corp | Jan 2022 – Present
+- Led end-to-end delivery of a real-time reporting platform serving 500+ enterprise clients
+- Drove 35% increase in user retention through redesigned onboarding flow
+- Managed a squad of 8 (2 engineers, 2 designers, 1 data scientist, 3 QA)
+- Defined OKRs and KPIs aligned to $12M ARR product line
+
+Product Manager | Meridian Capital Group | Mar 2018 – Dec 2021
+- Owned the portfolio analytics product used by 200+ fund managers
+- Reduced time-to-insight by 60% by shipping a new dashboard experience
+- Collaborated with compliance, risk, and quant teams to define regulatory requirements
+- Launched 4 major product releases with zero P0 incidents
+
+Associate Product Manager | Vantage Fund Services | Sep 2014 – Feb 2018
+- Built and shipped client reporting automation, saving 40+ hours/week of manual work
+- Defined API contracts with 3rd-party data vendors
+
+EDUCATION
+
+B.Sc. Computer Science | Westfield University | 2014
+
+SKILLS
+Product Strategy, Roadmapping, Agile/Scrum, SQL, Python, JIRA, Figma,
+A/B Testing, User Research, Stakeholder Management, OKRs, Data Analysis
+
+TECHNICAL
+Python, SQL, Tableau, Looker, REST APIs, PostgreSQL
