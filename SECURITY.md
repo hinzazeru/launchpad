@@ -17,7 +17,7 @@ The following files are excluded via `.gitignore`. Do not commit them, ever:
 | `.claude/settings.local.json` | Claude Code settings (may contain allowed commands with secrets) |
 
 Copy `config.yaml.example` → `config.yaml` and fill in your credentials locally.
-Copy `resume.example.txt` → `resume.txt` and replace with your actual resume.
+Copy `docs/resume.example.txt` → `resume.txt` and replace with your actual resume.
 
 ---
 

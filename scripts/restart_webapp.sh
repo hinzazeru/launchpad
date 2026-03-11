@@ -5,6 +5,8 @@
 # Handles cases where no processes are running without errors.
 #
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Kill process on port 8000 (Backend)
 PID_BACKEND=$(lsof -t -i:8000 2>/dev/null)
 if [ -n "$PID_BACKEND" ]; then
@@ -24,4 +26,4 @@ else
 fi
 
 echo -e "\033[0;32mCleanup complete. Starting web app...\033[0m"
-./run_webapp.sh "$@"
+"$SCRIPT_DIR/run_webapp.sh" "$@"

@@ -2,13 +2,15 @@
 """Run the FastAPI backend server.
 
 Usage:
-    python run_api.py                  # Development mode (default)
-    python run_api.py --production     # Production mode (serves React build)
-    python run_api.py --port 8080      # Custom port
+    python scripts/run_api.py                  # Development mode (default)
+    python scripts/run_api.py --production     # Production mode (serves React build)
+    python scripts/run_api.py --port 8080      # Custom port
 """
 
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import argparse
-import os
 import uvicorn
 
 

@@ -1,12 +1,13 @@
 #!/bin/bash
 # Restart LinkedIn Job Matcher - Telegram Bot
-# Usage: ./restart_bot.sh
+# Usage: ./scripts/restart_bot.sh
 
 set -e
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 echo "========================================"
 echo "LinkedIn Job Matcher - Bot Restart"
@@ -28,13 +29,13 @@ if pgrep -f "run_telegram_bot.py" > /dev/null 2>&1; then
 fi
 
 # Activate virtual environment
-source "$SCRIPT_DIR/venv/bin/activate"
+source "$PROJECT_ROOT/venv/bin/activate"
 
 echo ""
 echo "Starting Telegram Bot..."
 
 # Start bot in background with output logging
-nohup python run_telegram_bot.py > bot_output.log 2>&1 &
+nohup python "$SCRIPT_DIR/run_telegram_bot.py" > "$PROJECT_ROOT/bot_output.log" 2>&1 &
 BOT_PID=$!
 
 echo "  ✓ Bot started with PID: $BOT_PID"
@@ -53,7 +54,7 @@ if ps -p $BOT_PID > /dev/null 2>&1; then
     echo "  📱 Telegram Bot - Running (PID: $BOT_PID)"
     echo ""
     echo "Logs:"
-    echo "  tail -f bot_output.log"
+    echo "  tail -f $PROJECT_ROOT/bot_output.log"
     echo ""
     echo "Stop:"
     echo "  pkill -f run_telegram_bot.py"
@@ -64,7 +65,7 @@ else
     echo ""
     echo "Error log:"
     echo "----------------------------------------"
-    tail -20 bot_output.log
+    tail -20 "$PROJECT_ROOT/bot_output.log"
     echo "----------------------------------------"
     exit 1
 fi

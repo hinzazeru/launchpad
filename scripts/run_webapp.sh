@@ -3,16 +3,17 @@
 # LaunchPad 💸 Web App Startup Script
 #
 # Usage:
-#   ./run_webapp.sh              # Development mode (backend + frontend)
-#   ./run_webapp.sh --production # Production mode (serves built React app)
-#   ./run_webapp.sh --build      # Build frontend and run in production mode
-#   ./run_webapp.sh --help       # Show help
+#   ./scripts/run_webapp.sh              # Development mode (backend + frontend)
+#   ./scripts/run_webapp.sh --production # Production mode (serves built React app)
+#   ./scripts/run_webapp.sh --build      # Build frontend and run in production mode
+#   ./scripts/run_webapp.sh --help       # Show help
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
 
 # Colors for output
 RED='\033[0;31m'
@@ -178,7 +179,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "LaunchPad 💸 Web App"
             echo ""
-            echo "Usage: ./run_webapp.sh [OPTIONS]"
+            echo "Usage: ./scripts/run_webapp.sh [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  --production, -p     Run in production mode (serves built React app)"
@@ -188,10 +189,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --help, -h           Show this help message"
             echo ""
             echo "Examples:"
-            echo "  ./run_webapp.sh              # Dev mode: API on :8000, React on :5173"
-            echo "  ./run_webapp.sh --production # Prod mode: everything on :8000"
-            echo "  ./run_webapp.sh --build      # Build React, then run prod mode"
-            echo "  ./run_webapp.sh --port 3000  # Use custom port"
+            echo "  ./scripts/run_webapp.sh              # Dev mode: API on :8000, React on :5173"
+            echo "  ./scripts/run_webapp.sh --production # Prod mode: everything on :8000"
+            echo "  ./scripts/run_webapp.sh --build      # Build React, then run prod mode"
+            echo "  ./scripts/run_webapp.sh --port 3000  # Use custom port"
             exit 0
             ;;
         *)
@@ -205,10 +206,10 @@ done
 # Check for Python virtual environment
 PYTHON_CMD="python3"
 check_venv() {
-    if [ -d "venv" ]; then
+    if [ -d "$PROJECT_ROOT/venv" ]; then
         echo -e "${BLUE}Activating Python virtual environment...${NC}"
-        source venv/bin/activate
-        PYTHON_CMD="$SCRIPT_DIR/venv/bin/python"
+        source "$PROJECT_ROOT/venv/bin/activate"
+        PYTHON_CMD="$PROJECT_ROOT/venv/bin/python"
     else
         echo -e "${YELLOW}Warning: No venv found. Using system Python.${NC}"
     fi
@@ -236,7 +237,7 @@ check_dependencies() {
     # Check if FastAPI is installed
     if ! "$PYTHON_CMD" -c "import fastapi" 2>/dev/null; then
         echo -e "${YELLOW}FastAPI not found. Installing dependencies...${NC}"
-        "$PYTHON_CMD" -m pip install -r requirements.txt
+        "$PYTHON_CMD" -m pip install -r "$PROJECT_ROOT/requirements.txt"
     fi
 
     # Check Node.js for development mode
@@ -246,9 +247,9 @@ check_dependencies() {
             exit 1
         fi
 
-        if [ ! -d "frontend/node_modules" ]; then
+        if [ ! -d "$PROJECT_ROOT/frontend/node_modules" ]; then
             echo -e "${YELLOW}Installing frontend dependencies...${NC}"
-            (cd frontend && npm install)
+            (cd "$PROJECT_ROOT/frontend" && npm install)
         fi
     fi
 
@@ -258,7 +259,7 @@ check_dependencies() {
 # Build frontend
 build_frontend() {
     echo -e "${BLUE}Building frontend...${NC}"
-    (cd frontend && npm run build)
+    (cd "$PROJECT_ROOT/frontend" && npm run build)
     echo -e "${GREEN}Frontend build complete!${NC}"
 }
 
@@ -273,7 +274,7 @@ run_development() {
 
     # Start backend in background
     echo -e "${BLUE}Starting backend server...${NC}"
-    "$PYTHON_CMD" run_api.py --port "$PORT" &
+    "$PYTHON_CMD" "$SCRIPT_DIR/run_api.py" --port "$PORT" &
     BACKEND_PID=$!
     echo "$BACKEND_PID" > "$PID_FILE"
 
@@ -286,7 +287,7 @@ run_development() {
 
     # Start frontend in background
     echo -e "${BLUE}Starting frontend dev server...${NC}"
-    (cd frontend && npm run dev -- --port $FRONTEND_PORT) &
+    (cd "$PROJECT_ROOT/frontend" && npm run dev -- --port $FRONTEND_PORT) &
     FRONTEND_PID=$!
     echo "$FRONTEND_PID" >> "$PID_FILE"
 
@@ -316,7 +317,7 @@ run_development() {
 # Run in production mode
 run_production() {
     # Check if frontend build exists
-    if [ ! -d "frontend/dist" ]; then
+    if [ ! -d "$PROJECT_ROOT/frontend/dist" ]; then
         echo -e "${RED}Error: Frontend build not found at frontend/dist/${NC}"
         echo -e "${YELLOW}Run with --build flag to build first, or run 'npm run build' in frontend/${NC}"
         exit 1
@@ -330,7 +331,7 @@ run_production() {
 
     # Start server
     echo -e "${BLUE}Starting production server...${NC}"
-    "$PYTHON_CMD" run_api.py --production --port "$PORT" &
+    "$PYTHON_CMD" "$SCRIPT_DIR/run_api.py" --production --port "$PORT" &
     BACKEND_PID=$!
     echo "$BACKEND_PID" > "$PID_FILE"
 

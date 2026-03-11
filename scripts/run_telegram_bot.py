@@ -5,8 +5,9 @@ This script starts the Telegram bot that allows you to control
 your LinkedIn Job Matcher from anywhere using Telegram commands.
 """
 
-import os
-import sys
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import logging
 
 # Prevent tokenizers library deadlock when forking during Google Sheets export
