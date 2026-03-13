@@ -4,6 +4,7 @@ This API provides endpoints for job management, resume handling,
 and AI-powered resume analysis and suggestions.
 """
 
+import asyncio
 import logging
 import os
 import sys
@@ -79,6 +80,17 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 # ============================================================================
 # Lifecycle Events
 # ============================================================================
+
+async def _idle_model_unloader():
+    """Periodically unload the NLP model when idle to reduce memory usage."""
+    from backend.services.matcher_service import unload_if_idle
+    while True:
+        await asyncio.sleep(600)  # Check every 10 minutes
+        try:
+            unload_if_idle(idle_seconds=1800)  # Unload after 30 min idle
+        except Exception as e:
+            logging.getLogger(__name__).warning("Idle unloader error: %s", e)
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -186,6 +198,9 @@ async def startup_event():
         logger.info("Scheduler service initialized")
     except Exception as e:
         logger.error(f"Failed to initialize scheduler: {e}")
+
+    # Start background task that unloads the NLP model after 30 min of idle
+    asyncio.create_task(_idle_model_unloader())
 
 
 @app.on_event("shutdown")

@@ -20,7 +20,6 @@ import logging
 import threading
 from collections import OrderedDict
 from typing import List, Tuple, Dict, Optional
-from sentence_transformers import SentenceTransformer, util
 import numpy as np
 
 from src.matching.skill_extractor import (
@@ -44,6 +43,8 @@ class SkillsMatcher:
             preload_skills: Optional list of skills to pre-cache embeddings for.
                            This improves performance by computing embeddings once at startup.
         """
+        from sentence_transformers import SentenceTransformer, util as st_util
+        self._util = st_util
         self.model = SentenceTransformer(model_name)
         self._cache = OrderedDict()  # Bounded LRU cache: skill -> embedding
         self._cache_max_size = 2000   # Max embeddings kept in memory
@@ -137,7 +138,7 @@ class SkillsMatcher:
         job_embeddings = self._get_embeddings(job_skills_norm)
 
         # Calculate similarity matrix
-        similarity_matrix = util.cos_sim(job_embeddings, resume_embeddings)
+        similarity_matrix = self._util.cos_sim(job_embeddings, resume_embeddings)
 
         # For each job skill, find best matching resume skill
         matched_skills = []

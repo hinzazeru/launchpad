@@ -7,8 +7,6 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
 import logging
 
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
 from src.resume.parser import ResumeRole, ResumeStructure, ResumeParser
@@ -54,6 +52,9 @@ class RoleAnalyzer:
         Args:
             model_name: HuggingFace model name for embeddings
         """
+        from sentence_transformers import SentenceTransformer
+        from sklearn.metrics.pairwise import cosine_similarity as _cosine_similarity
+        self._cosine_similarity = _cosine_similarity
         self.model = SentenceTransformer(model_name)
         self._embedding_cache: Dict[str, np.ndarray] = {}
         self.parser = ResumeParser()
@@ -106,7 +107,7 @@ class RoleAnalyzer:
         bullet_embedding = self._get_embedding(bullet)
 
         # Calculate similarity to each JD requirement
-        similarities = cosine_similarity(
+        similarities = self._cosine_similarity(
             bullet_embedding.reshape(1, -1),
             jd_embeddings
         )[0]
