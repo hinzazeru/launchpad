@@ -99,7 +99,7 @@ async def startup_event():
 
     # Run pending database migrations before any ORM queries
     try:
-        from sqlalchemy import text
+        from sqlalchemy import text, inspect as sa_inspect
         from src.database.db import engine
 
         migrations = [
@@ -123,15 +123,21 @@ async def startup_event():
             ("job_postings", "repost_count", "INTEGER DEFAULT 0"),
         ]
 
+        # Whitelist valid table/column names to prevent injection
+        _VALID_TABLES = {m[0] for m in migrations}
+        _VALID_COLUMNS = {m[1] for m in migrations}
+
         with engine.connect() as conn:
+            inspector = sa_inspect(conn)
             for table, col, col_type in migrations:
                 try:
-                    # Check if column exists (PostgreSQL)
-                    result = conn.execute(text(
-                        f"SELECT column_name FROM information_schema.columns "
-                        f"WHERE table_name = '{table}' AND column_name = '{col}'"
-                    ))
-                    if result.fetchone() is None:
+                    # Validate against whitelist
+                    if table not in _VALID_TABLES or col not in _VALID_COLUMNS:
+                        logger.warning(f"Migration skip {table}.{col}: not in whitelist")
+                        continue
+                    # Use SQLAlchemy inspector to check column existence
+                    existing_cols = {c["name"] for c in inspector.get_columns(table)}
+                    if col not in existing_cols:
                         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                         logger.info(f"Migration: added {table}.{col}")
                 except Exception as col_err:
@@ -218,18 +224,38 @@ async def shutdown_event():
 @app.get("/api/health")
 async def health_check():
     """Detailed health check with service status."""
+    from sqlalchemy import text
+    from fastapi.responses import JSONResponse
     from src.targeting.bullet_rewriter import BulletRewriter
+    from src.database.db import SessionLocal
 
     rewriter = BulletRewriter()
 
-    return {
-        "status": "ok",
-        "production": PRODUCTION,
-        "services": {
-            "database": "connected",
-            "gemini": "available" if rewriter.is_available() else "not configured"
+    # Actually probe the database connection
+    db_status = "connected"
+    try:
+        db = SessionLocal()
+        try:
+            db.execute(text("SELECT 1"))
+        finally:
+            db.close()
+    except Exception:
+        db_status = "unreachable"
+
+    status = "ok" if db_status == "connected" else "degraded"
+    status_code = 200 if db_status == "connected" else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": status,
+            "production": PRODUCTION,
+            "services": {
+                "database": db_status,
+                "gemini": "available" if rewriter.is_available() else "not configured"
+            }
         }
-    }
+    )
 
 
 # Production mode: Serve React build
