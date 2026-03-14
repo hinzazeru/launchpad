@@ -12,7 +12,7 @@ plain dicts and the main thread applies results to ORM objects.
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def _extract_for_job(
             )
             if requirements:
                 result['structured_requirements'] = requirements
-                result['requirements_extracted_at'] = datetime.utcnow()
+                result['requirements_extracted_at'] = datetime.now(timezone.utc)
                 result['requirements_extraction_model'] = requirements_extractor.model_name
         except Exception as e:
             logger.warning(f"Requirements extraction failed for {title}: {e}")

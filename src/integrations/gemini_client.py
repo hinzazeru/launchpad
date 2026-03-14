@@ -1087,9 +1087,9 @@ class GeminiRequirementsExtractor:
             normalized = self._normalize_result(result)
 
             # Add metadata
-            from datetime import datetime
+            from datetime import datetime, timezone
             normalized["extraction_model"] = self.model_name
-            normalized["extraction_timestamp"] = datetime.utcnow().isoformat()
+            normalized["extraction_timestamp"] = datetime.now(timezone.utc).isoformat()
 
             return normalized
 

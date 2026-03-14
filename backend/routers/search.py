@@ -8,7 +8,7 @@ import json
 import logging
 import time as time_module
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Dict, Any, AsyncGenerator
@@ -1109,7 +1109,7 @@ async def start_search_job(
         resume_filename=job_req.resume_filename,
         export_to_sheets=job_req.export_to_sheets,
         trigger_source='manual',
-        expires_at=datetime.utcnow() + timedelta(hours=24)
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24)
     )
     db.add(search_job)
     db.commit()
@@ -1262,7 +1262,7 @@ async def _execute_search_job_async(search_id: str):
             for key, value in kwargs.items():
                 if hasattr(search_job, key) and value is not None:
                     setattr(search_job, key, value)
-            search_job.updated_at = datetime.utcnow()
+            search_job.updated_at = datetime.now(timezone.utc)
             db.commit()
 
         # Update status to running

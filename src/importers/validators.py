@@ -1,6 +1,6 @@
 """Validators for job posting data."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, List
 
 
@@ -13,7 +13,7 @@ def validate_24_hour_freshness(posting_date: datetime) -> bool:
     Returns:
         bool: True if within 24 hours, False otherwise
     """
-    current_time = datetime.utcnow()
+    current_time = datetime.now(timezone.utc)
     time_diff = current_time - posting_date
 
     return time_diff < timedelta(hours=24)

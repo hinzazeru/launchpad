@@ -31,8 +31,8 @@ def backfill_salary(request: Request):
     db = SessionLocal()
     try:
         jobs = db.query(JobPosting).filter(
-            JobPosting.salary == None,
-            JobPosting.description != None,
+            JobPosting.salary.is_(None),
+            JobPosting.description.isnot(None),
             JobPosting.description != "",
         ).all()
 
@@ -171,7 +171,7 @@ def rematch_stale(request: Request, background_tasks: BackgroundTasks):
     try:
         stale = db.query(MatchResult.job_id).filter(
             MatchResult.match_engine == "gemini",
-            MatchResult.ai_match_score == None,
+            MatchResult.ai_match_score.is_(None),
         ).all()
         job_ids = [r.job_id for r in stale]
     finally:
@@ -201,7 +201,7 @@ def rematch_by_gap(
     """Re-run Gemini matching for all jobs that have a specific skill gap (runs in background)."""
     db = SessionLocal()
     try:
-        all_matches = db.query(MatchResult).filter(MatchResult.skill_gaps_detailed != None).all()
+        all_matches = db.query(MatchResult).filter(MatchResult.skill_gaps_detailed.isnot(None)).all()
         skill_lower = skill.lower()
         target_ids = [
             m.job_id for m in all_matches

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import aiohttp
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.importers.base_provider import JobProvider
 
@@ -265,9 +265,9 @@ class BrightDataJobProvider(JobProvider):
                     normalized['posting_date'] = dt.replace(tzinfo=None) if dt.tzinfo else dt
             except Exception as e:
                 logger.warning(f"Failed to parse Bright Data posting date '{posting_date_str}': {e}")
-                normalized['posting_date'] = datetime.utcnow()
+                normalized['posting_date'] = datetime.now(timezone.utc)
         else:
-            normalized['posting_date'] = datetime.utcnow()
+            normalized['posting_date'] = datetime.now(timezone.utc)
 
         # required_skills is populated later by NLP/Gemini extraction from job description text.
         # job_function (e.g., "Product Management") and job_industries (e.g., "Financial Services")

@@ -1,6 +1,6 @@
 """SQLAlchemy database models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, ForeignKey, Index, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from src.database.db import Base
@@ -17,8 +17,8 @@ class Resume(Base):
     job_titles = Column(JSON, nullable=True)  # List of previous job titles
     education = Column(Text, nullable=True)
     domains = Column(JSON, nullable=True)  # List of domain expertise (e.g., ["fintech", "b2b_saas"])
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     match_results = relationship("MatchResult", back_populates="resume")
@@ -43,7 +43,7 @@ class JobPosting(Base):
     required_skills = Column(JSON, nullable=True)  # List of required skills
     experience_required = Column(Float, nullable=True)  # Years of experience
     posting_date = Column(DateTime, nullable=False, index=True)
-    import_date = Column(DateTime, default=datetime.utcnow)
+    import_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     source = Column(String(100), nullable=True)  # e.g., "api", "csv", "pdf"
     url = Column(String(500), nullable=True)
     location = Column(String(255), nullable=True)
@@ -86,7 +86,7 @@ class MatchResult(Base):
     matching_skills = Column(JSON, nullable=True)  # List of matched skills
     experience_alignment = Column(Text, nullable=True)  # Experience match description
     missing_domains = Column(JSON, nullable=True)  # List of required domains candidate lacks
-    generated_date = Column(DateTime, default=datetime.utcnow, index=True)
+    generated_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     engine_version = Column(String(20), nullable=True)  # Matching engine version (e.g., "1.0.0")
     notified_at = Column(DateTime, nullable=True, index=True)  # When user was notified via Telegram
     gemini_score = Column(Float, nullable=True)  # Gemini re-ranking score (0-100)
@@ -138,7 +138,7 @@ class ApplicationTracking(Base):
     status = Column(
         String(50), nullable=False, default="Saved", index=True
     )  # Saved, Applied, Interviewing, Rejected, Offer
-    status_date = Column(DateTime, default=datetime.utcnow)
+    status_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     notes = Column(Text, nullable=True)
 
     # Relationships
@@ -162,7 +162,7 @@ class LikedBullet(Base):
     job_id = Column(Integer, ForeignKey("job_postings.id"), nullable=True, index=True)  # Indexed for lookups
 
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     job_posting = relationship("JobPosting")
@@ -194,8 +194,8 @@ class ScheduledSearch(Base):
     weekdays_only = Column(Boolean, default=False)  # Only run Mon-Fri
 
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_run_at = Column(DateTime, nullable=True)
     next_run_at = Column(DateTime, nullable=True)
     last_run_status = Column(String(20), nullable=True)  # 'success' | 'error'
@@ -219,7 +219,7 @@ class SearchPerformance(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     search_id = Column(String(36), unique=True, index=True)  # UUID
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     status = Column(String(20))  # success, error, cancelled
 
     # Trigger tracking
@@ -281,7 +281,7 @@ class APICallMetric(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     call_type = Column(String(50), index=True)  # gemini_rerank, gemini_suggestions, apify_search, sheets_export
     duration_ms = Column(Integer)
     status = Column(String(20))  # success, error, timeout
@@ -311,8 +311,8 @@ class SearchJob(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     search_id = Column(String(36), unique=True, nullable=False, index=True)  # UUID
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Status tracking
     status = Column(String(20), default='pending', index=True)  # pending, running, completed, failed

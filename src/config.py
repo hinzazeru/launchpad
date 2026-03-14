@@ -3,6 +3,7 @@
 import json
 import os
 import logging
+import re
 import yaml
 from typing import Any, Optional, Dict
 from pathlib import Path
@@ -82,17 +83,13 @@ def _coerce_value(value: str, default: Any = None) -> Any:
 
 
 class Config:
-    """Configuration loader and accessor."""
+    """Configuration loader and accessor.
 
-    _instance = None
+    Use get_config() to obtain the singleton instance.
+    """
+
     _config_data = None
     _config_path = None
-
-    def __new__(cls, *args, **kwargs):
-        """Singleton pattern to ensure only one config instance."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
 
     def __init__(self, auto_load: bool = True):
         """Initialize configuration loader.
@@ -332,7 +329,6 @@ class Config:
         version = self.get("matching.engine_version", "1.0.0")
 
         # Validate semantic versioning format
-        import re
         if not re.match(r'^\d+\.\d+\.\d+$', version):
             raise ValueError(
                 f"Invalid engine version format: {version}. "
@@ -430,15 +426,23 @@ class Config:
     def save(self) -> bool:
         """Save current configuration to file.
 
+        Uses file locking to prevent corruption from concurrent writes.
+
         Returns:
             True if save successful, False otherwise
         """
+        import fcntl
+
         if self._config_path is None or self._config_data is None:
             return False
 
         try:
             with open(self._config_path, 'w') as f:
-                yaml.dump(self._config_data, f, default_flow_style=False, sort_keys=False)
+                fcntl.flock(f, fcntl.LOCK_EX)
+                try:
+                    yaml.dump(self._config_data, f, default_flow_style=False, sort_keys=False)
+                finally:
+                    fcntl.flock(f, fcntl.LOCK_UN)
             return True
         except Exception as e:
             logger.error(f"Error saving config: {e}", exc_info=True)

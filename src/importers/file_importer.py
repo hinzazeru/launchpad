@@ -3,7 +3,7 @@
 import json
 import csv
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from PyPDF2 import PdfReader
 from src.importers.validators import validate_job_posting, normalize_job_data
@@ -129,7 +129,7 @@ def parse_text_content(content: str) -> List[Dict]:
         if 'title' in job_data and 'company' in job_data:
             # Set default posting_date to now if not found
             if 'posting_date' not in job_data:
-                job_data['posting_date'] = datetime.utcnow()
+                job_data['posting_date'] = datetime.now(timezone.utc)
 
             job_data['source'] = 'text'
             jobs.append(job_data)
@@ -185,7 +185,7 @@ def parse_json(file_path: str) -> List[Dict]:
                     try:
                         job['posting_date'] = datetime.fromisoformat(job['posting_date'])
                     except:
-                        job['posting_date'] = datetime.utcnow()
+                        job['posting_date'] = datetime.now(timezone.utc)
 
             job['source'] = 'json'
 
@@ -238,9 +238,9 @@ def parse_csv(file_path: str) -> List[Dict]:
                     try:
                         job_data['posting_date'] = datetime.strptime(row['posting_date'], '%Y-%m-%d')
                     except:
-                        job_data['posting_date'] = datetime.utcnow()
+                        job_data['posting_date'] = datetime.now(timezone.utc)
                 else:
-                    job_data['posting_date'] = datetime.utcnow()
+                    job_data['posting_date'] = datetime.now(timezone.utc)
 
                 # Parse skills (comma-separated)
                 if 'required_skills' in row and row['required_skills']:

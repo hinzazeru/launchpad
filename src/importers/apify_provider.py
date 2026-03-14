@@ -4,7 +4,7 @@ import logging
 import time
 import json
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import asyncio
 from apify_client import ApifyClient, ApifyClientAsync
@@ -335,10 +335,10 @@ class ApifyJobProvider(JobProvider):
                     normalized['posting_date'] = dt.replace(tzinfo=None) if dt.tzinfo else dt
             except Exception:
                 # If parsing fails, default to current time
-                normalized['posting_date'] = datetime.utcnow()
+                normalized['posting_date'] = datetime.now(timezone.utc)
         else:
             # Default to current time if no posting date found
-            normalized['posting_date'] = datetime.utcnow()
+            normalized['posting_date'] = datetime.now(timezone.utc)
 
         # required_skills is populated later by NLP/Gemini extraction from job description text.
         # job_function (e.g., "Product Management") and job_industries (e.g., "Financial Services")

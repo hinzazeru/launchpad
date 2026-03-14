@@ -3,7 +3,7 @@ import time
 import uuid
 import logging
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from src.database.models import SearchPerformance, APICallMetric
@@ -80,7 +80,7 @@ class PerformanceLogger:
             perf = SearchPerformance(
                 search_id=self.search_id,
                 status=status,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
                 total_duration_ms=total_duration,
                 
                 # Trigger tracking
@@ -132,7 +132,7 @@ class PerformanceLogger:
             for call in self.api_calls:
                 metric = APICallMetric(
                     search_id=self.search_id,
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                     call_type=call['call_type'],
                     duration_ms=call['duration_ms'],
                     status=call['status'],

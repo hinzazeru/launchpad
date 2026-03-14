@@ -1,6 +1,6 @@
 """CRUD operations for database models."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Set, Tuple
 from sqlalchemy import func, or_, and_, tuple_
 from sqlalchemy.orm import Session, joinedload
@@ -98,7 +98,7 @@ def update_resume(
     if education is not None:
         resume.education = education
 
-    resume.updated_at = datetime.utcnow()
+    resume.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(resume)
     return resume
@@ -604,7 +604,7 @@ def mark_matches_as_notified(
     updated = (
         db.query(MatchResult)
         .filter(MatchResult.id.in_(match_ids))
-        .update({MatchResult.notified_at: datetime.utcnow()}, synchronize_session=False)
+        .update({MatchResult.notified_at: datetime.now(timezone.utc)}, synchronize_session=False)
     )
     db.commit()
     return updated
@@ -719,7 +719,7 @@ def update_application_status(
         return None
 
     tracking.status = status
-    tracking.status_date = datetime.utcnow()
+    tracking.status_date = datetime.now(timezone.utc)
     if notes is not None:
         tracking.notes = notes
 
