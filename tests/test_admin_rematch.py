@@ -388,15 +388,17 @@ class TestRematchStale:
         make_match(db, job.id, resume.id, engine="gemini", ai_match_score=None)
         db.commit()
 
-        with patch("backend.routers.admin.threading.Thread") as mock_thread:
-            mock_thread.return_value.start = MagicMock()
+        with patch("backend.routers.admin._do_rematch") as mock_rematch:
             resp = client.post("/api/admin/rematch-stale", headers=auth_headers())
 
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "started"
         assert data["queued"] >= 1
-        mock_thread.return_value.start.assert_called_once()
+        # _do_rematch is called via FastAPI BackgroundTasks
+        mock_rematch.assert_called_once()
+        assert mock_rematch.call_args[0][0] == "rematch-stale"
+        assert job.id in mock_rematch.call_args[0][1]
 
     def test_does_not_queue_non_gemini_matches(self, client, db):
         resume = make_resume(db)
@@ -431,8 +433,7 @@ class TestRematchByGap:
         )
         db.commit()
 
-        with patch("backend.routers.admin.threading.Thread") as mock_thread:
-            mock_thread.return_value.start = MagicMock()
+        with patch("backend.routers.admin._do_rematch_by_gap") as mock_rematch:
             resp = client.post(
                 "/api/admin/rematch-by-gap?skill=kubernetes",  # case-insensitive
                 headers=auth_headers(),
@@ -443,7 +444,9 @@ class TestRematchByGap:
         assert data["status"] == "started"
         assert data["skill"] == "kubernetes"
         assert data["queued"] >= 1
-        mock_thread.return_value.start.assert_called_once()
+        # _do_rematch_by_gap is called via FastAPI BackgroundTasks
+        mock_rematch.assert_called_once()
+        assert mock_rematch.call_args[0][0] == "kubernetes"
 
     def test_does_not_queue_jobs_without_skill_gaps(self, client, db):
         resume = make_resume(db)

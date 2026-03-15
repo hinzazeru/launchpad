@@ -2,9 +2,9 @@
 
 import json
 import logging
-import threading
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import cast, String, func
 
 from src.config import get_config
 from src.database.db import SessionLocal
@@ -180,8 +180,7 @@ def rematch_stale(request: Request, background_tasks: BackgroundTasks):
     if not job_ids:
         return {"status": "none_found", "queued": 0}
 
-    t = threading.Thread(target=_do_rematch, args=("rematch-stale", job_ids), daemon=True)
-    t.start()
+    background_tasks.add_task(_do_rematch, "rematch-stale", job_ids)
 
     logger.info(f"rematch-stale: queued {len(job_ids)} jobs in background")
     return {"status": "started", "queued": len(job_ids)}
@@ -201,11 +200,13 @@ def rematch_by_gap(
     """Re-run Gemini matching for all jobs that have a specific skill gap (runs in background)."""
     db = SessionLocal()
     try:
-        all_matches = db.query(MatchResult).filter(MatchResult.skill_gaps_detailed.isnot(None)).all()
         skill_lower = skill.lower()
+        # Push search to DB — avoids loading all match results into Python memory
         target_ids = [
-            m.job_id for m in all_matches
-            if skill_lower in json.dumps(m.skill_gaps_detailed or []).lower()
+            r.job_id for r in db.query(MatchResult.job_id).filter(
+                MatchResult.skill_gaps_detailed.isnot(None),
+                func.lower(cast(MatchResult.skill_gaps_detailed, String)).contains(skill_lower),
+            ).all()
         ]
     finally:
         db.close()
@@ -213,9 +214,7 @@ def rematch_by_gap(
     if not target_ids:
         return {"status": "none_found", "skill": skill}
 
-    # Run in background thread so the request returns immediately
-    t = threading.Thread(target=_do_rematch_by_gap, args=(skill, target_ids), daemon=True)
-    t.start()
+    background_tasks.add_task(_do_rematch_by_gap, skill, target_ids)
 
     logger.info(f"rematch-by-gap '{skill}': queued {len(target_ids)} jobs in background")
     return {"status": "started", "skill": skill, "queued": len(target_ids)}
