@@ -1,6 +1,6 @@
 # Database
 SQLAlchemy==2.0.23
-psycopg2-binary>=2.9.9  # PostgreSQL driver
+psycopg2-binary==2.9.11  # PostgreSQL driver
 
 # NLP and Text Processing
 sentence-transformers==2.5.1
@@ -15,8 +15,8 @@ google-auth-httplib2==0.2.0
 google-api-python-client==2.110.0
 
 # Gemini AI
-google-genai>=1.0.0
-json-repair>=0.30.0  # Fix malformed JSON from LLM responses
+google-genai==1.47.0
+json-repair==0.44.1  # Fix malformed JSON from LLM responses
 
 # Configuration
 PyYAML==6.0.1
@@ -31,7 +31,7 @@ PyPDF2==3.0.1
 # HTTP Requests for API Integration
 requests==2.31.0
 apify-client==1.6.3
-aiohttp>=3.9.0  # Async HTTP for Bright Data provider
+aiohttp==3.13.3  # Async HTTP for Bright Data provider
 
 # Testing
 pytest==7.4.3
@@ -43,12 +43,12 @@ black==23.12.1
 flake8==6.1.0
 
 # ML Dependencies
-scikit-learn>=1.3.0
+scikit-learn==1.6.1
 
 # Web App (FastAPI + React)
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-gunicorn>=21.0.0
-slowapi>=0.1.9
-python-multipart>=0.0.9
-importlib-metadata>=6.0.0; python_version < "3.10"
+fastapi==0.128.0
+uvicorn[standard]==0.39.0
+gunicorn==23.0.0
+slowapi==0.1.9
+python-multipart==0.0.20
+importlib-metadata==8.7.1; python_version < "3.10"
