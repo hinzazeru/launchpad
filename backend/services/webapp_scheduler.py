@@ -275,10 +275,9 @@ class WebAppScheduler:
                 db.rollback()
         finally:
             db.close()
-            # Release the model singleton to reclaim ~80MB+ between scheduled runs.
-            # It will be re-loaded on the next search (~5-10s reload time).
-            from backend.services.matcher_service import release_job_matcher
-            release_job_matcher()
+            # Let idle-based unloading handle model lifecycle instead of
+            # releasing after every run.  With runs at 09:30/12:00/14:00/16:00
+            # the model stays warm all day and frees ~80MB after 30 min idle.
 
         return result
 
