@@ -18,6 +18,9 @@ __pycache__/
 # Configuration Files (contains API keys)
 config.yaml
 
+# Internal planning/brainstorm notes
+ideas/
+
 # Database
 *.db
 *.sqlite
