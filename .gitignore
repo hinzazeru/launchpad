@@ -20,6 +20,7 @@ config.yaml
 
 # Internal planning/brainstorm notes
 ideas/
+review/
 
 # Database
 *.db
