@@ -277,19 +277,26 @@ async def get_skills_analytics(
     if cached:
         return cached
 
-    # 1. Skill Gaps - aggregate missing_domains from high matches
+    # 1. Skill Gaps - aggregate from missing_domains (NLP) and skill_gaps_detailed (Gemini)
     high_matches = (
-        session.query(MatchResult.missing_domains)
+        session.query(MatchResult.missing_domains, MatchResult.skill_gaps_detailed)
         .filter(MatchResult.match_score > 60)
-        .filter(MatchResult.missing_domains.isnot(None))
+        .filter(
+            (MatchResult.missing_domains.isnot(None))
+            | (MatchResult.skill_gaps_detailed.isnot(None))
+        )
         .all()
     )
 
     gap_counter = Counter()
-    for (domains,) in high_matches:
-        if domains:
-            for domain in domains:
+    for missing_domains, gaps_detailed in high_matches:
+        if missing_domains:
+            for domain in missing_domains:
                 gap_counter[domain] += 1
+        if gaps_detailed:
+            for gap in gaps_detailed:
+                if isinstance(gap, dict) and gap.get("skill"):
+                    gap_counter[gap["skill"]] += 1
 
     skill_gaps = [
         SkillCount(name=name, count=count)
