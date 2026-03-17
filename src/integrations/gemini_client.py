@@ -340,9 +340,11 @@ class GeminiRateLimiter:
 # also match hypothetical names like "gemini-1.25-pro" and can't distinguish
 # gemini-2.5-flash from a future gemini-2.5-flash-lite that may not be a thinking model.
 _DEFAULT_THINKING_MODEL_PREFIXES = [
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash-8b",
+    "gemini-3-flash",       # Gemini 3 Flash (GA, thinking model)
+    "gemini-3-pro",         # Gemini 3 Pro
+    "gemini-3.1-pro",       # Gemini 3.1 Pro
+    "gemini-2.5-flash",     # Legacy (deprecating June 2026)
+    "gemini-2.5-pro",       # Legacy (deprecating June 2026)
     "gemini-exp-",          # experimental models are typically thinking variants
 ]
 
@@ -669,7 +671,7 @@ class GeminiClient:
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
         self.api_key = self.config.get("gemini.api_key")
-        self.model_name = self.config.get("gemini.matcher.model", "gemini-2.5-flash")
+        self.model_name = self.config.get("gemini.matcher.model", "gemini-3-flash")
         self.client = None
 
         if self.enabled and self.api_key:
@@ -751,8 +753,8 @@ class GeminiDomainExtractor:
         """Initialize the Gemini client."""
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
-        # Use cheaper/faster non-thinking model for extraction by default
-        self.model_name = self.config.get("gemini.extractor.model", "gemini-2.0-flash")
+        # Use cheapest model for structured extraction tasks
+        self.model_name = self.config.get("gemini.extractor.model", "gemini-3.1-flash-lite-preview")
         # Token limits - increased to prevent truncation issues
         self.domain_max_tokens = self.config.get("gemini.extractor.domain_max_tokens", 500)
         self.summary_max_tokens = self.config.get("gemini.extractor.summary_max_tokens", 300)
@@ -999,8 +1001,8 @@ class GeminiRequirementsExtractor:
         """Initialize the Gemini requirements extractor."""
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
-        # Use fast model for extraction
-        self.model_name = self.config.get("gemini.extractor.model", "gemini-2.0-flash")
+        # Use cheapest model for structured extraction tasks
+        self.model_name = self.config.get("gemini.extractor.model", "gemini-3.1-flash-lite-preview")
         self.api_key = self.config.get("gemini.api_key")
         self.client = None
 
@@ -1187,7 +1189,7 @@ class GeminiMatchReranker:
         self.enabled = self.config.get("matching.gemini_rerank.enabled", False)
         self.top_n = self.config.get("matching.gemini_rerank.top_n", 15)
         self.min_score_threshold = self.config.get("matching.gemini_rerank.min_score_threshold", 0.65)
-        self.model_name = self.config.get("gemini.model", "gemini-2.5-flash")
+        self.model_name = self.config.get("gemini.model", "gemini-3-flash")
         self.api_key = self.config.get("gemini.api_key")
         self.client = None
 
@@ -1394,10 +1396,10 @@ class GeminiBulletRewriter:
         """Initialize the Gemini bullet rewriter."""
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
-        # Use advanced thinking model for bullet rewrites (most critical for resume quality)
+        # Use best reasoning model for bullet rewrites (most critical for resume quality)
         self.model_name = self.config.get(
             "targeting.gemini.model",
-            "gemini-3-flash-preview"  # Best reasoning model for high-quality rewrites
+            "gemini-3-flash"  # GA model with pro-grade reasoning
         )
         self.api_key = self.config.get("gemini.api_key")
         self.temperature = self.config.get("targeting.gemini.temperature", 0.35)

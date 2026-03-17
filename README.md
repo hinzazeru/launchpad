@@ -24,7 +24,7 @@ LaunchPad fetches job postings from LinkedIn, matches them against your resume u
 | Backend | Python 3.10, FastAPI, SQLAlchemy |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS |
 | Database | SQLite (local) / PostgreSQL (production) |
-| AI | Google Gemini (2.0 Flash / 2.5 Flash) |
+| AI | Google Gemini (3 Flash / 3.1 Flash Lite) |
 | Job Data | Apify LinkedIn Scraper, Bright Data LinkedIn Jobs API |
 | Notifications | Telegram Bot API |
 | Deployment | Docker, Railway |

@@ -206,7 +206,7 @@ logging:
 gemini:
   enabled: false  # Set to true to enable Gemini features
   api_key: "YOUR_GEMINI_API_KEY_HERE"  # Get from https://aistudio.google.com/app/apikey
-  model: "gemini-2.5-flash"  # Main model for match re-ranking
+  model: "gemini-3-flash"  # Main model for match re-ranking
 
   # Rate limiter — tune this to match your Gemini API tier
   # Tier reference:
@@ -216,9 +216,9 @@ gemini:
   # Can also be set via env vars: GEMINI_RATE_LIMIT_MIN_INTERVAL_MS,
   #   GEMINI_RATE_LIMIT_MAX_RETRIES, GEMINI_RATE_LIMIT_COOLDOWN_S
   rate_limit:
-    # Standard flash models (gemini-2.0-flash) — used for enrichment
+    # Lite models (gemini-3.1-flash-lite) — used for enrichment
     min_interval_ms: 400             # Milliseconds between calls (~150 RPM on Paid Tier 1)
-    # Thinking/reasoning models (gemini-2.5-*, gemini-3-*) — used for matching & bullets
+    # Thinking/reasoning models (gemini-3-flash, gemini-3.1-pro) — used for matching & bullets
     # These have lower RPM limits due to higher token usage per call
     thinking_min_interval_ms: 2000   # Milliseconds between calls (~30 RPM, conservative)
     max_retries: 2                   # Retries on 429 before tripping circuit breaker
@@ -226,15 +226,15 @@ gemini:
 
   # Domain Extraction & Summarization (during job import)
   extractor:
-    model: "gemini-2.0-flash"  # Non-thinking model - faster & cheaper for simple tasks
+    model: "gemini-3.1-flash-lite-preview"  # Cheapest model - fast for structured extraction
     domain_max_tokens: 300     # Max tokens for domain extraction (JSON response)
     summary_max_tokens: 200    # Max tokens for job summaries (2-3 sentences)
 
   # AI Job Matcher Configuration (when matching.engine is "gemini" or "auto")
   matcher:
     enabled: true              # Enable AI matching (requires gemini.enabled: true)
-    model: "gemini-2.5-flash"  # Best stable model for accurate matching
-    batch_model: "gemini-2.0-flash"  # Faster model for batch operations
+    model: "gemini-3-flash"    # Pro-grade reasoning at Flash speed
+    batch_model: "gemini-3.1-flash-lite-preview"  # Cheapest model for batch operations
     concurrency: 5             # Number of parallel API calls
     fallback_to_nlp: true      # Fall back to NLP if Gemini fails
 
@@ -242,8 +242,8 @@ gemini:
 targeting:
   gemini:
     # Model for bullet rewriting
-    # Options: "gemini-3-flash-preview" (best), "gemini-2.5-flash", "gemini-2.0-flash" (fastest)
-    model: "gemini-3-flash-preview"
+    # Options: "gemini-3.1-pro-preview" (best), "gemini-3-flash" (recommended), "gemini-3.1-flash-lite-preview" (cheapest)
+    model: "gemini-3-flash"
     temperature: 0.35  # Lower = more consistent, higher = more creative
     max_tokens: 2048   # Higher for thinking model (uses tokens for reasoning)
 
