@@ -1339,9 +1339,9 @@ class GeminiMatchReranker:
                 return {'score': None, 'reasoning': None, 'strengths': [], 'gaps': []}
 
             response_text = "".join(text_parts)
-            print(f"[GEMINI DEBUG] Raw response (first 200 chars): {response_text[:200]}")
+            logger.debug(f"Raw response (first 200 chars): {response_text[:200]}")
             cleaned = clean_json_text(response_text)
-            print(f"[GEMINI DEBUG] Cleaned (first 200 chars): {cleaned[:200]}")
+            logger.debug(f"Cleaned (first 200 chars): {cleaned[:200]}")
             result = json.loads(cleaned)
 
             # Validate score is in range
@@ -1403,7 +1403,7 @@ class GeminiBulletRewriter:
         )
         self.api_key = self.config.get("gemini.api_key")
         self.temperature = self.config.get("targeting.gemini.temperature", 0.35)
-        self.max_tokens = self.config.get("targeting.gemini.max_tokens", 2048)  # Higher for thinking model
+        self.max_tokens = self.config.get("targeting.gemini.max_tokens", 8192)  # Thinking models need headroom (thinking uses ~2000-6000 tokens)
         self.client = None
 
         if self.enabled and self.api_key:
@@ -1548,7 +1548,9 @@ class GeminiBulletRewriter:
                 config=types.GenerateContentConfig(
                     temperature=self.temperature,
                     max_output_tokens=self.max_tokens,
-                    response_mime_type="application/json",
+                    # response_mime_type intentionally omitted — thinking models
+                    # (gemini-3-flash-preview) produce empty arrays with JSON constraint.
+                    # clean_json_text() handles free-form responses reliably.
                     # Safety settings to prevent false positives on professional content
                     safety_settings=[
                         types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="BLOCK_MEDIUM_AND_ABOVE"),

@@ -110,6 +110,7 @@ Key Responsibilities:
   * ❌ EXCLUDE: Generic soft skills unless specifically critical
 
 **Response format (JSON only, no markdown):**
+Include ALL skill matches, not just the top few. Typically 6-15 skill_matches and 2-6 skill_gaps for a thorough analysis.
 {{
   "overall_score": 0-100,
   "skills_score": 0-100,
@@ -117,10 +118,17 @@ Key Responsibilities:
   "seniority_fit": 0-100,
   "domain_score": 0-100,
   "skill_matches": [
-    {{"job_skill": "Python", "resume_skill": "Python/Django", "confidence": 0.95, "context": "Direct match"}}
+    {{"job_skill": "Python", "resume_skill": "Python/Django", "confidence": 0.95, "context": "Direct match"}},
+    {{"job_skill": "React", "resume_skill": "React/Next.js", "confidence": 0.92, "context": "Direct framework match"}},
+    {{"job_skill": "AWS", "resume_skill": "AWS (EC2, S3, Lambda)", "confidence": 0.90, "context": "Extensive cloud experience"}},
+    {{"job_skill": "CI/CD", "resume_skill": "GitHub Actions", "confidence": 0.80, "context": "CI/CD pipeline experience"}},
+    {{"job_skill": "GraphQL", "resume_skill": "REST API design", "confidence": 0.55, "context": "API experience but not GraphQL specifically"}},
+    {{"job_skill": "Agile", "resume_skill": "Scrum/Kanban", "confidence": 0.90, "context": "Strong agile methodology background"}}
   ],
   "skill_gaps": [
-    {{"skill": "Kubernetes", "importance": "must_have", "transferable_from": "Docker experience"}}
+    {{"skill": "Kubernetes", "importance": "must_have", "transferable_from": "Docker experience"}},
+    {{"skill": "Terraform", "importance": "nice_to_have", "transferable_from": "AWS CloudFormation"}},
+    {{"skill": "gRPC", "importance": "nice_to_have", "transferable_from": null}}
   ],
   "strengths": ["Strong PM background", "Relevant fintech experience"],
   "concerns": ["Missing cloud certifications", "No team lead experience mentioned"],
@@ -161,17 +169,29 @@ Description:
   * ❌ EXCLUDE: Generic soft skills unless specifically critical
 
 **Response format (JSON only, no markdown):**
+Include ALL skill matches, not just the top few. Typically 6-15 skill_matches and 2-6 skill_gaps for a thorough analysis.
 {{
   "overall_score": 0-100,
   "skills_score": 0-100,
   "experience_score": 0-100,
   "seniority_fit": 0-100,
   "domain_score": 0-100,
-  "skill_matches": [{{"job_skill": "SQL", "resume_skill": "SQL", "confidence": 1.0, "context": "Direct match"}}, {{"job_skill": "data analysis", "resume_skill": "Data Modeling", "confidence": 0.8, "context": "Related skill"}}],
-  "skill_gaps": [{{"skill": "missing skill", "importance": "must_have|nice_to_have", "transferable_from": "related skill or null"}}],
-  "strengths": ["strength 1", "strength 2"],
-  "concerns": ["concern 1"],
-  "recommendations": ["recommendation 1"],
+  "skill_matches": [
+    {{"job_skill": "SQL", "resume_skill": "SQL", "confidence": 1.0, "context": "Direct match"}},
+    {{"job_skill": "data analysis", "resume_skill": "Data Modeling", "confidence": 0.80, "context": "Related analytical skill"}},
+    {{"job_skill": "Python", "resume_skill": "Python/Flask", "confidence": 0.92, "context": "Strong Python background"}},
+    {{"job_skill": "Tableau", "resume_skill": "Power BI", "confidence": 0.70, "context": "Similar BI/visualization tool"}},
+    {{"job_skill": "ETL pipelines", "resume_skill": "Data pipeline design", "confidence": 0.85, "context": "Pipeline architecture experience"}},
+    {{"job_skill": "stakeholder communication", "resume_skill": "Cross-functional leadership", "confidence": 0.75, "context": "Relevant collaboration experience"}}
+  ],
+  "skill_gaps": [
+    {{"skill": "Apache Spark", "importance": "must_have", "transferable_from": "Pandas/data pipeline experience"}},
+    {{"skill": "dbt", "importance": "nice_to_have", "transferable_from": "SQL and ETL experience"}},
+    {{"skill": "Snowflake", "importance": "nice_to_have", "transferable_from": null}}
+  ],
+  "strengths": ["Strong analytical background", "Relevant domain experience"],
+  "concerns": ["Missing big data tools", "No cloud data warehouse experience mentioned"],
+  "recommendations": ["Emphasize data pipeline work", "Highlight SQL optimization experience"],
   "confidence": 0.0-1.0,
   "reasoning": "2-3 sentence summary"
 }}
