@@ -58,6 +58,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT:-8000}/api/health')" || exit 1
 
 # Start with Gunicorn — use shell form so $PORT is expanded at runtime
-# Timeout set to 300s: long enough for Gemini AI matching, short enough to recover from hung workers
+# Timeout set to 600s: scheduled searches can take 5+ minutes (import + model load + AI matching)
+# Blocking calls in webapp_scheduler use asyncio.to_thread() to keep heartbeat alive
 # Docker HEALTHCHECK and Railway handle container-level health monitoring
-CMD gunicorn backend.main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind "[::]:${PORT:-8000}" --timeout 300
+CMD gunicorn backend.main:app --workers 1 --worker-class uvicorn.workers.UvicornWorker --bind "[::]:${PORT:-8000}" --timeout 600

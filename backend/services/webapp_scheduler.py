@@ -440,7 +440,7 @@ class WebAppScheduler:
             # STAGE 3: Import jobs to database
             # ====================================================================
             with perf_logger.time('import'):
-                jobs_imported = provider.import_jobs(jobs)
+                jobs_imported = await asyncio.to_thread(provider.import_jobs, jobs)
                 result['jobs_imported'] = jobs_imported
             
             # ====================================================================
@@ -448,7 +448,7 @@ class WebAppScheduler:
             # ====================================================================
             with perf_logger.time('match'):
                 # Smart rematch: detect if resume or engine changed
-                matcher = get_job_matcher()
+                matcher = await asyncio.to_thread(get_job_matcher)
                 resume_changed = schedule.resume_content_hash != resume_hash
                 engine_changed = schedule.last_engine_version != matcher.engine_version
                 force_rematch = resume_changed or engine_changed
@@ -526,14 +526,19 @@ class WebAppScheduler:
                     perf_logger.record_count('jobs_skipped', jobs_skipped)
 
                 # Run matching (matcher already initialized above for version check)
-                matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
+                # Use asyncio.to_thread to avoid blocking the event loop (and
+                # Gunicorn heartbeat) during CPU/network-heavy matching.
+                matches, gemini_stats = await asyncio.to_thread(
+                    matcher.match_jobs, resume, all_jobs, min_score=0.0
+                )
                 
                 # Gemini re-ranking
                 gemini_reranker = get_gemini_reranker()
                 if matches and gemini_reranker and gemini_reranker.is_available():
                     try:
                         with perf_logger.time('gemini_rerank'):
-                            matches = gemini_reranker.rerank_matches(
+                            matches = await asyncio.to_thread(
+                                gemini_reranker.rerank_matches,
                                 matches=matches,
                                 resume_skills=resume.skills or [],
                                 experience_years=resume.experience_years or 0,
