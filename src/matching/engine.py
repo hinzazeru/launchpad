@@ -174,6 +174,29 @@ class JobMatcher:
         # Load domain relationships for partial credit scoring
         self.domain_relationships = self._load_domain_relationships()
 
+        # Load valid domain keys from domain_expertise.json for validation
+        self.valid_domain_keys = self._load_valid_domain_keys()
+
+    def _load_valid_domain_keys(self) -> set:
+        """Load valid domain keys from domain_expertise.json.
+
+        Used to filter out free-form domain strings from structured_requirements
+        that don't match standardized keys (e.g., "SaaS" vs "b2b_saas").
+        """
+        expertise_path = Path(__file__).parent.parent.parent / "data" / "domain_expertise.json"
+        try:
+            if expertise_path.exists():
+                with open(expertise_path) as f:
+                    data = json.load(f)
+                keys = set()
+                for category in data.get("domains", {}).values():
+                    keys.update(category.keys())
+                logger.debug(f"Loaded {len(keys)} valid domain keys")
+                return keys
+        except Exception as e:
+            logger.warning(f"Failed to load domain_expertise.json: {e}")
+        return set()
+
     def _load_domain_relationships(self) -> Dict:
         """Load domain relationships for partial credit scoring.
 
@@ -602,12 +625,17 @@ class JobMatcher:
             max_years=max_years
         )
 
-        # Domain matching — prefer structured_requirements domains when available
+        # Domain matching — prefer structured_requirements domains when available,
+        # but only if they use standardized keys from domain_expertise.json.
+        # Gemini extraction often produces free-form strings (e.g., "SaaS" instead
+        # of "b2b_saas") that can never match the resume's standardized domain list.
         job_domains = job.required_domains or []
         if structured_req:
             sr_domains = structured_req.get('required_domains', [])
-            if sr_domains:
-                job_domains = sr_domains
+            if sr_domains and self.valid_domain_keys:
+                valid_sr = [d for d in sr_domains if d.lower() in self.valid_domain_keys]
+                if valid_sr:
+                    job_domains = valid_sr
 
         domain_score, matching_domains, missing_domains = self.calculate_domain_match(
             resume_domains=resume.domains or [],
