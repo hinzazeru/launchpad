@@ -36,7 +36,7 @@ import {
     ChevronUp,
     ChevronRight,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTimeFull, formatDateTime } from '@/lib/utils';
 
 interface ScheduleListProps {
     onEdit?: (schedule: ScheduledSearch) => void;
@@ -108,13 +108,7 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
             const hours = Math.floor(diffMs / (60 * 60 * 1000));
             return `In ${hours} hour${hours > 1 ? 's' : ''}`;
         }
-        return date.toLocaleDateString(undefined, {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        return formatDateTimeFull(nextRunAt);
     };
 
     const getStatusBadge = (status?: string) => {
@@ -160,15 +154,7 @@ export function ScheduleList({ onEdit, onCreateNew }: ScheduleListProps) {
         return `${minutes}m ${remainingSeconds}s`;
     };
 
-    const formatHistoryTime = (dateStr: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    };
+    const formatHistoryTime = (dateStr: string) => formatDateTime(dateStr);
 
     if (isLoading) {
         return (

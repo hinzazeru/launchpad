@@ -21,7 +21,7 @@ import {
   Sparkles,
   Globe,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatDateLocal } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SavedBullets } from './SavedBullets';
 
@@ -68,7 +68,7 @@ function ResumeCard({
                   </Badge>
                   {resume.saved_at && (
                     <span className="text-xs text-muted-foreground">
-                      {new Date(resume.saved_at).toLocaleDateString()}
+                      {formatDateLocal(resume.saved_at)}
                     </span>
                   )}
                 </div>

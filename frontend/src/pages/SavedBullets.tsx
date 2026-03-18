@@ -9,6 +9,7 @@ import type { LikedBullet } from '@/services/api';
 import { Trash2, Copy, CheckCircle2, Briefcase, Building2, Calendar, Sparkles, Search, Filter, X } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useToastActions } from '@/components/ui/toast';
+import { formatDateLocal } from '@/lib/utils';
 
 function SavedBulletCard({
     bullet,
@@ -60,7 +61,7 @@ function SavedBulletCard({
                         )}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                             <Calendar className="w-3 h-3" />
-                            <span>Saved on {new Date(bullet.created_at).toLocaleDateString()}</span>
+                            <span>Saved on {formatDateLocal(bullet.created_at)}</span>
                         </div>
                     </div>
                     <Button

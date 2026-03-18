@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { formatDateShort } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMatchSuggestions, useSaveLikedBullet } from '@/services/api';
 import type { AnalysisHistoryItem } from '@/services/api';
@@ -147,7 +148,7 @@ export function AnalysisHistoryCard({ item, index, onSelect }: AnalysisHistoryCa
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return formatDateShort(dateStr);
   };
 
   // Calculate totals from roles summary

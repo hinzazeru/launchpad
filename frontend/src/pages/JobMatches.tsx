@@ -34,6 +34,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { formatDateShort } from '@/lib/utils';
 
 // Score breakdown for tooltip
 interface ScoreBreakdown {
@@ -209,10 +210,7 @@ function RadialScore({
 
 function formatDate(dateString?: string) {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-    });
+    return formatDateShort(dateString);
 }
 
 // Skill Tag Component

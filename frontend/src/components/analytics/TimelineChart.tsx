@@ -10,6 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { TimelinePoint } from '@/services/api';
+import { formatDateShort } from '@/lib/utils';
 
 interface TimelineChartProps {
   title: string;
@@ -41,10 +42,7 @@ export function TimelineChart({
   // Format date for display (e.g., "Jan 15")
   const formattedData = data.map((point) => ({
     ...point,
-    displayDate: new Date(point.date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    }),
+    displayDate: formatDateShort(point.date),
   }));
 
   const isEmpty = !data || data.length === 0 ||

@@ -30,30 +30,13 @@ import { LatencyChart } from './LatencyChart';
 import { GeminiUsageChart } from './GeminiUsageChart';
 import { ScheduledSearchSummary } from './ScheduledSearchSummary';
 
-// Format date for display
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+import { formatDateShort, formatDateTime } from '@/lib/utils';
 
 // Format duration for display
 function formatDuration(ms: number | null): string {
   if (ms === null || ms === undefined) return '--';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
-}
-
-// Format date and time (e.g., "Jan 26, 9:38 PM")
-function formatDateTime(isoString: string): string {
-  if (!isoString) return '--';
-  const date = new Date(isoString);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
 }
 
 export function PerformanceTab() {
@@ -87,7 +70,7 @@ export function PerformanceTab() {
 
   // Format timeline data
   const timelineData = timeline?.points.map((p) => ({
-    date: formatDate(p.date),
+    date: formatDateShort(p.date),
     duration: p.avg_ms / 1000, // Convert to seconds
     count: p.count,
   })) || [];

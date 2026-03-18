@@ -13,17 +13,12 @@ import { Bot } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useGeminiUsage } from '@/services/api';
+import { formatDateShort } from '@/lib/utils';
 
 const USAGE_COLORS = {
   matching: '#8b5cf6',    // violet-500
   rerank: '#3b82f6',      // blue-500
   suggestions: '#10b981', // emerald-500
-};
-
-// Format date for display
-const formatDate = (dateStr: string) => {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
 // Custom tooltip for the chart
@@ -93,7 +88,7 @@ export function GeminiUsageChart({ days = 30 }: GeminiUsageChartProps) {
   // Format data for the chart
   const chartData = data?.data.map((d) => ({
     ...d,
-    formattedDate: formatDate(d.date),
+    formattedDate: formatDateShort(d.date),
   })) || [];
 
   return (
