@@ -166,6 +166,16 @@ class ScheduleRunHistory(BaseModel):
     jobs_matched: int = 0
     high_matches: int = 0
     error_message: Optional[str] = None
+    # Detailed breakdown fields
+    jobs_imported: Optional[int] = None
+    fetch_ms: Optional[int] = None
+    import_ms: Optional[int] = None
+    match_ms: Optional[int] = None
+    gemini_attempted: Optional[int] = None
+    gemini_succeeded: Optional[int] = None
+    gemini_failed: Optional[int] = None
+    jobs_skipped: Optional[int] = None
+    rematch_type: Optional[str] = None
 
     class Config:
         from_attributes = True

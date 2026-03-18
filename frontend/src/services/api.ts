@@ -698,6 +698,15 @@ export interface ScheduleRunHistory {
   jobs_matched: number;
   high_matches: number;
   error_message: string | null;
+  jobs_imported: number | null;
+  fetch_ms: number | null;
+  import_ms: number | null;
+  match_ms: number | null;
+  gemini_attempted: number | null;
+  gemini_succeeded: number | null;
+  gemini_failed: number | null;
+  jobs_skipped: number | null;
+  rematch_type: string | null;
 }
 
 export interface ScheduleHistoryResponse {

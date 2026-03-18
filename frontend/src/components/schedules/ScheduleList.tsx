@@ -3,7 +3,7 @@
  * Shows schedule list with enable/disable toggles and run-now buttons.
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     useSchedules,
@@ -34,6 +34,7 @@ import {
     History,
     ChevronDown,
     ChevronUp,
+    ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -391,6 +392,7 @@ function ScheduleHistoryPanel({
     formatHistoryTime: (dateStr: string) => string;
 }) {
     const { data, isLoading } = useScheduleHistory(scheduleId, 5);
+    const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
     if (isLoading) {
         return (
@@ -411,11 +413,16 @@ function ScheduleHistoryPanel({
         );
     }
 
+    const hasDetails = (run: typeof runs[0]) =>
+        run.jobs_imported != null || run.fetch_ms != null || run.import_ms != null ||
+        run.match_ms != null || run.gemini_attempted != null || run.rematch_type != null;
+
     return (
         <div className="mt-3 pt-3 border-t">
             <table className="w-full text-xs">
                 <thead>
                     <tr className="text-muted-foreground border-b">
+                        <th className="w-5"></th>
                         <th className="text-left py-1 font-medium">Time</th>
                         <th className="text-right py-1 font-medium">Duration</th>
                         <th className="text-right py-1 font-medium">Jobs</th>
@@ -424,34 +431,62 @@ function ScheduleHistoryPanel({
                     </tr>
                 </thead>
                 <tbody>
-                    {runs.map((run) => (
-                        <tr key={run.search_id} className="border-b last:border-0">
-                            <td className="py-1.5">{formatHistoryTime(run.created_at)}</td>
-                            <td className="text-right py-1.5">{formatDuration(run.total_duration_ms)}</td>
-                            <td className="text-right py-1.5">{run.jobs_fetched}</td>
-                            <td className="text-right py-1.5">
-                                {run.jobs_matched}
-                                {run.high_matches > 0 && (
-                                    <span className="text-green-600 ml-1">({run.high_matches} high)</span>
+                    {runs.map((run) => {
+                        const isExpanded = expandedRunId === run.search_id;
+                        const expandable = hasDetails(run);
+                        return (
+                            <React.Fragment key={run.search_id}>
+                                <tr
+                                    className={cn(
+                                        "border-b last:border-0",
+                                        expandable && "cursor-pointer hover:bg-muted/50"
+                                    )}
+                                    onClick={() => expandable && setExpandedRunId(
+                                        isExpanded ? null : run.search_id
+                                    )}
+                                >
+                                    <td className="py-1.5 w-5">
+                                        {expandable && (
+                                            isExpanded
+                                                ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                                                : <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                        )}
+                                    </td>
+                                    <td className="py-1.5">{formatHistoryTime(run.created_at)}</td>
+                                    <td className="text-right py-1.5">{formatDuration(run.total_duration_ms)}</td>
+                                    <td className="text-right py-1.5">{run.jobs_fetched}</td>
+                                    <td className="text-right py-1.5">
+                                        {run.jobs_matched}
+                                        {run.high_matches > 0 && (
+                                            <span className="text-green-600 ml-1">({run.high_matches} high)</span>
+                                        )}
+                                    </td>
+                                    <td className="text-right py-1.5">
+                                        {run.status === 'success' ? (
+                                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] px-1.5 py-0">
+                                                OK
+                                            </Badge>
+                                        ) : (
+                                            <Badge
+                                                variant="outline"
+                                                className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"
+                                                title={run.error_message || undefined}
+                                            >
+                                                Error
+                                            </Badge>
+                                        )}
+                                    </td>
+                                </tr>
+                                {isExpanded && (
+                                    <tr>
+                                        <td colSpan={6} className="py-0">
+                                            <RunDetailsPanel run={run} formatDuration={formatDuration} />
+                                        </td>
+                                    </tr>
                                 )}
-                            </td>
-                            <td className="text-right py-1.5">
-                                {run.status === 'success' ? (
-                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] px-1.5 py-0">
-                                        OK
-                                    </Badge>
-                                ) : (
-                                    <Badge
-                                        variant="outline"
-                                        className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0"
-                                        title={run.error_message || undefined}
-                                    >
-                                        Error
-                                    </Badge>
-                                )}
-                            </td>
-                        </tr>
-                    ))}
+                            </React.Fragment>
+                        );
+                    })}
                 </tbody>
             </table>
             {data && data.total > 5 && (
@@ -459,6 +494,85 @@ function ScheduleHistoryPanel({
                     Showing 5 of {data.total} runs
                 </p>
             )}
+        </div>
+    );
+}
+
+function RunDetailsPanel({
+    run,
+    formatDuration,
+}: {
+    run: import('@/services/api').ScheduleRunHistory;
+    formatDuration: (ms: number | null) => string;
+}) {
+    const rows: { label: string; value: string }[] = [];
+
+    // Job Import
+    const importParts: string[] = [];
+    if (run.jobs_fetched > 0) importParts.push(`${run.jobs_fetched} fetched`);
+    if (run.jobs_imported != null) importParts.push(`${run.jobs_imported} new`);
+    if (run.fetch_ms != null || run.import_ms != null) {
+        const timing: string[] = [];
+        if (run.fetch_ms != null) timing.push(`fetch: ${formatDuration(run.fetch_ms)}`);
+        if (run.import_ms != null) timing.push(`import: ${formatDuration(run.import_ms)}`);
+        importParts.push(`(${timing.join(', ')})`);
+    }
+    if (importParts.length > 0) {
+        rows.push({ label: 'Job Import', value: importParts.join(', ') });
+    }
+
+    // Matching
+    const matchParts: string[] = [];
+    if (run.jobs_matched > 0) matchParts.push(`${run.jobs_matched} matched`);
+    if (run.high_matches > 0) matchParts.push(`${run.high_matches} high quality`);
+    if (run.gemini_attempted != null && run.gemini_attempted > 0) {
+        matchParts.push(`Gemini ${run.gemini_succeeded ?? 0}/${run.gemini_attempted}`);
+        if (run.gemini_failed && run.gemini_failed > 0) {
+            matchParts.push(`${run.gemini_failed} failed`);
+        }
+    }
+    if (run.match_ms != null) matchParts.push(`(${formatDuration(run.match_ms)})`);
+    if (matchParts.length > 0) {
+        rows.push({ label: 'Matching', value: matchParts.join(', ') });
+    }
+
+    // Rematch
+    if (run.rematch_type) {
+        const rematchParts = [run.rematch_type];
+        if (run.jobs_skipped != null && run.jobs_skipped > 0) {
+            rematchParts.push(`${run.jobs_skipped} skipped`);
+        }
+        rows.push({ label: 'Rematch', value: rematchParts.join(', ') });
+    }
+
+    // Timing breakdown
+    if (run.fetch_ms != null || run.import_ms != null || run.match_ms != null) {
+        const phases: string[] = [];
+        if (run.fetch_ms != null) phases.push(`fetch ${formatDuration(run.fetch_ms)}`);
+        if (run.import_ms != null) phases.push(`import ${formatDuration(run.import_ms)}`);
+        if (run.match_ms != null) phases.push(`match ${formatDuration(run.match_ms)}`);
+        rows.push({ label: 'Timing', value: phases.join(' → ') });
+    }
+
+    // Error
+    if (run.error_message) {
+        rows.push({ label: 'Error', value: run.error_message });
+    }
+
+    if (rows.length === 0) return null;
+
+    return (
+        <div className="bg-muted/30 rounded-md px-3 py-2 my-1 ml-5">
+            <div className="space-y-1">
+                {rows.map((row) => (
+                    <div key={row.label} className="flex gap-2 text-[11px]">
+                        <span className="font-medium text-muted-foreground w-20 shrink-0">{row.label}</span>
+                        <span className={row.label === 'Error' ? 'text-red-600' : 'text-foreground'}>
+                            {row.value}
+                        </span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

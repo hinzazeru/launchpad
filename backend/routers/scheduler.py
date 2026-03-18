@@ -334,6 +334,15 @@ async def get_schedule_history(
                 jobs_matched=run.jobs_matched or 0,
                 high_matches=run.high_matches or 0,
                 error_message=run.error_message,
+                jobs_imported=run.jobs_imported,
+                fetch_ms=run.fetch_ms,
+                import_ms=run.import_ms,
+                match_ms=run.match_ms,
+                gemini_attempted=run.gemini_attempted,
+                gemini_succeeded=run.gemini_succeeded,
+                gemini_failed=run.gemini_failed,
+                jobs_skipped=run.jobs_skipped,
+                rematch_type=run.rematch_type,
             )
             for run in runs
         ],
