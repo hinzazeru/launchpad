@@ -1,12 +1,40 @@
+import { useRef, useEffect } from 'react';
 import { useSearchStore } from '@/stores/searchStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
+import { useToastActions } from '@/components/ui/toast';
 
 export function SearchStatusIndicator() {
-  const { isSearching, progress } = useSearchStore();
+  const { isSearching, progress, result } = useSearchStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const toast = useToastActions();
+  const wasSearchingRef = useRef(false);
+
+  // Show completion toast on non-GetJobs pages when search finishes
+  useEffect(() => {
+    if (isSearching) {
+      wasSearchingRef.current = true;
+    }
+
+    if (wasSearchingRef.current && !isSearching && result && location.pathname !== '/') {
+      toast.success(
+        'Search Complete',
+        `Found ${result.high_matches} high-quality matches`,
+        {
+          onClick: () => navigate('/'),
+          actionLabel: 'View Results',
+          duration: 8000,
+        }
+      );
+      wasSearchingRef.current = false;
+    }
+
+    if (wasSearchingRef.current && !isSearching && !result) {
+      wasSearchingRef.current = false;
+    }
+  }, [isSearching, result, location.pathname, navigate, toast]);
 
   // Don't show on GetJobs page (redundant) or when not searching
   if (location.pathname === '/' || !isSearching) {

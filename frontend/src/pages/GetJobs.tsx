@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, useResumes, useSearchDefaults, useGeminiConfigStatus, useSuggestedKeywords } from '@/services/api';
 import type { JobSearchParams, SearchProgress, SearchResult, TopMatch, SearchStage, SearchJobProgress } from '@/services/api';
@@ -333,6 +334,7 @@ function JobMatchRow({ match, index, isRaw = false }: { match: TopMatch; index: 
 }
 
 export function GetJobs() {
+  const navigate = useNavigate();
   const toast = useToastActions();
   const { data: resumesData, isLoading: resumesLoading } = useResumes();
   const { data: defaults } = useSearchDefaults();
@@ -408,7 +410,11 @@ export function GetJobs() {
         controller.signal
       ).then((searchResult) => {
         setResult(searchResult);
-        toast.success('Search Complete', `Found ${searchResult.high_matches} high-quality matches`);
+        toast.success('Search Complete', `Found ${searchResult.high_matches} high-quality matches`, {
+          onClick: () => navigate('/matches'),
+          actionLabel: 'View Matches',
+          duration: 6000,
+        });
       }).catch((err) => {
         if (err.message !== 'Search cancelled') {
           setError(err.message);
@@ -475,7 +481,12 @@ export function GetJobs() {
       setResult(searchResult);
       toast.success(
         'Search Complete',
-        `Found ${searchResult.high_matches} high-quality matches`
+        `Found ${searchResult.high_matches} high-quality matches`,
+        {
+          onClick: () => navigate('/matches'),
+          actionLabel: 'View Matches',
+          duration: 6000,
+        }
       );
     } catch (err) {
       // Don't show error for aborted/cancelled requests
