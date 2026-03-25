@@ -243,12 +243,24 @@ class BrightDataJobProvider(JobProvider):
         Returns:
             Normalized job dictionary
         """
+        # Try multiple possible URL field names from Bright Data response
+        job_url = (
+            job_data.get('url')
+            or job_data.get('job_url')
+            or job_data.get('link')
+            or job_data.get('job_link')
+            or job_data.get('URL')
+            or ''
+        )
+        if not job_url:
+            logger.warning(f"No URL found for job '{job_data.get('job_title', 'unknown')}'. Available keys: {list(job_data.keys())}")
+
         normalized = {
             'title': job_data.get('job_title', ''),
             'company': job_data.get('company_name', ''),
             'location': job_data.get('job_location', ''),
             'description': job_data.get('job_summary', ''),
-            'url': job_data.get('url', ''),
+            'url': job_url,
         }
 
         # Parse posting date
