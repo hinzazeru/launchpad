@@ -45,7 +45,7 @@ class BrightDataJobProvider(JobProvider):
 
         # Get polling configuration
         self.poll_interval = self.config.get("brightdata.poll_interval_seconds", 5)
-        self.poll_timeout = self.config.get("brightdata.poll_timeout_seconds", 600)
+        self.poll_timeout = self.config.get("brightdata.poll_timeout_seconds", 1200)
 
     @property
     def provider_name(self) -> str:
@@ -201,22 +201,27 @@ class BrightDataJobProvider(JobProvider):
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
         max_attempts = self.poll_timeout // self.poll_interval
-        
+        start_time = asyncio.get_event_loop().time()
+
         async with aiohttp.ClientSession() as session:
             for attempt in range(max_attempts):
                 async with session.get(url, params=params, headers=headers) as resp:
                     if resp.status == 200:
                         # Data is ready
+                        elapsed = asyncio.get_event_loop().time() - start_time
                         jobs = await resp.json()
-                        logger.info(f"Bright Data returned {len(jobs)} jobs")
+                        logger.info(f"Bright Data returned {len(jobs)} items after {elapsed:.0f}s")
                         return jobs
-                    
+
                     elif resp.status == 202:
                         # Still processing, wait and retry
+                        elapsed = asyncio.get_event_loop().time() - start_time
+                        if attempt % 60 == 59:  # Log every ~5 min (60 * 5s interval)
+                            logger.info(f"Bright Data still processing {snapshot_id} after {elapsed:.0f}s...")
                         if progress_callback:
                             progress = 0.2 + (0.7 * attempt / max_attempts)
                             await progress_callback(
-                                f"Processing... (attempt {attempt + 1}/{max_attempts})", 
+                                f"Processing... (attempt {attempt + 1}/{max_attempts})",
                                 progress
                             )
                         await asyncio.sleep(self.poll_interval)
