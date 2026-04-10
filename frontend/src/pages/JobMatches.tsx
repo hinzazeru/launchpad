@@ -24,6 +24,7 @@ import {
     Bot,
     Heart,
     EyeOff,
+    Repeat,
     SlidersHorizontal,
     Microscope,
 } from 'lucide-react';
@@ -723,6 +724,7 @@ export function JobMatches() {
     const [sortOrder, setSortOrder] = useState<string>('score_desc');
     const [showIgnored, setShowIgnored] = useState(false);
     const [heartedOnly, setHeartedOnly] = useState(false);
+    const [hideReposts, setHideReposts] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     const updateStatusMutation = useUpdateJobStatus();
@@ -745,6 +747,7 @@ export function JobMatches() {
         sort_order: sortDirection,
         show_ignored: showIgnored || undefined,
         hearted_only: heartedOnly || undefined,
+        hide_reposts: hideReposts || undefined,
     });
 
     const handleStatusChange = (jobId: number, status: string | null) => {
@@ -768,6 +771,7 @@ export function JobMatches() {
         maxScore !== 100,
         heartedOnly,
         showIgnored,
+        hideReposts,
         recency !== 'all',
     ].filter(Boolean).length;
 
@@ -1010,6 +1014,16 @@ export function JobMatches() {
                         />
                         <EyeOff className="w-3 h-3" />
                         Show ignored
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={hideReposts}
+                            onChange={(e) => setHideReposts(e.target.checked)}
+                            className="rounded border-border"
+                        />
+                        <Repeat className="w-3 h-3" />
+                        Hide reposts
                     </label>
                 </div>
             </div>

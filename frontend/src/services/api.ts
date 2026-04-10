@@ -749,6 +749,7 @@ class ApiClient {
     sort_order?: 'asc' | 'desc';
     show_ignored?: boolean;
     hearted_only?: boolean;
+    hide_reposts?: boolean;
     limit?: number;
   }): Promise<JobListResponse> {
     const searchParams = new URLSearchParams();
@@ -761,6 +762,7 @@ class ApiClient {
     if (params?.sort_order) searchParams.set('sort_order', params.sort_order);
     if (params?.show_ignored) searchParams.set('show_ignored', 'true');
     if (params?.hearted_only) searchParams.set('hearted_only', 'true');
+    if (params?.hide_reposts) searchParams.set('hide_reposts', 'true');
     if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
 
     const query = searchParams.toString();
@@ -1245,6 +1247,7 @@ export function useJobs(params?: {
   sort_order?: 'asc' | 'desc';
   show_ignored?: boolean;
   hearted_only?: boolean;
+  hide_reposts?: boolean;
   limit?: number;
 }) {
   return useQuery({

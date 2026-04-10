@@ -88,6 +88,7 @@ async def list_jobs(
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort direction"),
     show_ignored: bool = Query(False, description="Include ignored matches"),
     hearted_only: bool = Query(False, description="Show only hearted matches"),
+    hide_reposts: bool = Query(False, description="Hide reposted jobs"),
     limit: int = Query(100, ge=1, le=500, description="Max results"),
     session: Session = Depends(get_db)
 ):
@@ -110,6 +111,10 @@ async def list_jobs(
         query = query.filter(MatchResult.user_status == 'hearted')
     elif not show_ignored:
         query = query.filter(or_(MatchResult.user_status != 'ignored', MatchResult.user_status.is_(None)))
+
+    # Filter out reposts
+    if hide_reposts:
+        query = query.filter(or_(JobPosting.is_repost == False, JobPosting.is_repost.is_(None)))
 
     # Apply sorting
     if sort_by == "date":
