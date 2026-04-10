@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 # Add project root to path
-sys.path.insert(0, '/Users/hinza/Library/CloudStorage/OneDrive-Personal/[20] Project/ClaudeProjects/LinkedInJobSearch')
+sys.path.insert(0, '/Users/hinza/Documents/[20]_Project/ClaudeProjects/LinkedInJobSearch')
 
 from src.database.db import SessionLocal
 from src.database.models import MatchResult, Resume

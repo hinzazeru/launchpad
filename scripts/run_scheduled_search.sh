@@ -3,7 +3,7 @@
 # Called by launchd - wakes Mac from sleep if needed, runs job, sleeps if idle
 # Skips execution on weekends (Saturday and Sunday)
 
-PROJECT_DIR="/Users/hinza/Library/CloudStorage/OneDrive-Personal/[20] Project/ClaudeProjects/LinkedInJobSearch"
+PROJECT_DIR="/Users/hinza/Documents/[20]_Project/ClaudeProjects/LinkedInJobSearch"
 VENV_PYTHON="${PROJECT_DIR}/venv/bin/python"
 LOG_FILE="${PROJECT_DIR}/launchd_search.log"
 

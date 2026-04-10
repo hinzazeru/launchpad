@@ -74,9 +74,10 @@ frontend/node_modules/
 *.pid
 .webapp.pid
 
-# Experiment result data files
+# Experiment/utility scripts and their output
 scripts/*.json
 scripts/*.csv
+scripts/compare_gemini_models.py
 
 # Personal planning/notes directories
 ideas/
