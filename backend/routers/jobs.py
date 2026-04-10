@@ -497,3 +497,5 @@ async def rerank_jobs(
         jobs_succeeded=success_count,
         jobs_failed=error_count
     )
+
+

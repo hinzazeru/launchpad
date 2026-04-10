@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import re
 import aiohttp
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
@@ -328,12 +327,10 @@ class BrightDataJobProvider(JobProvider):
             # Fallback: extract salary from description text
             desc = normalized.get('description', '')
             if desc:
-                salary_match = re.search(
-                    r'\$[\d,]+(?:\.\d+)?\s*(?:[-–—]+|to)\s*\$[\d,]+(?:\.\d+)?(?:\s*(?:CAD|USD|per\s+(?:year|annum|hour)))?',
-                    desc, re.IGNORECASE
-                )
-                if salary_match:
-                    normalized['salary'] = salary_match.group(0)
+                from src.matching.skill_extractor import extract_salary_from_description
+                extracted_salary = extract_salary_from_description(desc)
+                if extracted_salary:
+                    normalized['salary'] = extracted_salary
 
         # Extract domain requirements from description (using existing helper)
         from src.matching.skill_extractor import extract_domain_requirements
