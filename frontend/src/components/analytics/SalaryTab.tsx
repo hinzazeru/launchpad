@@ -201,7 +201,7 @@ export function SalaryTab() {
                     <XAxis type="number" tickFormatter={v => `$${v}K`} />
                     <YAxis type="category" dataKey="country" width={60} tick={{ fontSize: 12 }} />
                     <Tooltip
-                      formatter={(value: number, name: string) => [`$${value}K`, name]}
+                      formatter={(value, name) => [`$${value}K`, name as string]}
                       labelFormatter={(label) => {
                         const item = countryChartData.find(d => d.country === label);
                         return `${label} (${item?.count} jobs)`;
@@ -251,7 +251,7 @@ export function SalaryTab() {
                       tick={{ fontSize: 11 }}
                     />
                     <Tooltip
-                      formatter={(value: number, name: string) => [`$${value}K`, name]}
+                      formatter={(value, name) => [`$${value}K`, name as string]}
                       labelFormatter={(_label, payload) => {
                         const item = payload?.[0]?.payload;
                         return item ? `${item.fullName} (${item.count} jobs)` : '';
