@@ -1174,6 +1174,21 @@ class DomainSalary(BaseModel):
     count: int
 
 
+class DistributionBucket(BaseModel):
+    label: str
+    count: int
+
+
+class CountryDistribution(BaseModel):
+    country: str
+    currency: str
+    p25: float
+    median: float
+    p75: float
+    p90: float
+    buckets: List[DistributionBucket]
+
+
 class SalaryAnalytics(BaseModel):
     total_with_salary: int
     parseable: int
@@ -1181,6 +1196,7 @@ class SalaryAnalytics(BaseModel):
     overall: SalaryStats
     by_country: List[CountryStats]
     by_domain: List[DomainSalary]
+    distributions: List[CountryDistribution]
 
 
 def _compute_stats(pairs: list) -> dict:
@@ -1199,6 +1215,47 @@ def _compute_stats(pairs: list) -> dict:
         "max_value": round(max(maxs)),
         "count": n,
     }
+
+
+def _compute_distribution(pairs: list, bucket_count: int = 15) -> dict:
+    """Compute histogram buckets and percentiles from (min, max) salary pairs."""
+    if not pairs:
+        return {"p25": 0, "median": 0, "p75": 0, "p90": 0, "buckets": []}
+
+    # Use midpoint of each salary range as the representative value
+    midpoints = sorted((p[0] + p[1]) / 2 for p in pairs)
+    n = len(midpoints)
+
+    # Percentiles
+    def percentile(data, pct):
+        idx = (pct / 100) * (len(data) - 1)
+        low = int(idx)
+        high = min(low + 1, len(data) - 1)
+        frac = idx - low
+        return data[low] * (1 - frac) + data[high] * frac
+
+    p25 = round(percentile(midpoints, 25))
+    median = round(percentile(midpoints, 50))
+    p75 = round(percentile(midpoints, 75))
+    p90 = round(percentile(midpoints, 90))
+
+    # Histogram buckets
+    min_val = midpoints[0]
+    max_val = midpoints[-1]
+    if min_val == max_val:
+        return {"p25": p25, "median": median, "p75": p75, "p90": p90,
+                "buckets": [{"label": f"${round(min_val/1000)}K", "count": n}]}
+
+    bucket_width = (max_val - min_val) / bucket_count
+    buckets = []
+    for i in range(bucket_count):
+        low = min_val + i * bucket_width
+        high = low + bucket_width
+        count = sum(1 for v in midpoints if (low <= v < high) or (i == bucket_count - 1 and v == high))
+        label = f"${round(low/1000)}K"
+        buckets.append({"label": label, "count": count})
+
+    return {"p25": p25, "median": median, "p75": p75, "p90": p90, "buckets": buckets}
 
 
 def _load_domain_names() -> Dict[str, str]:
@@ -1277,6 +1334,7 @@ async def salary_analytics(
                 overall=empty_stats,
                 by_country=[],
                 by_domain=[],
+                distributions=[],
             )
             _set_cached(cache_key, result)
             return result
@@ -1321,6 +1379,18 @@ async def salary_analytics(
 
         by_domain = by_domain[:15]  # Top 15 domains
 
+        # Distributions for Canada and US
+        distributions = []
+        for country, currency in [("Canada", "CAD"), ("US", "USD")]:
+            pairs = country_groups.get(country, [])
+            if len(pairs) >= 3:
+                dist = _compute_distribution(pairs)
+                distributions.append(CountryDistribution(
+                    country=country,
+                    currency=currency,
+                    **dist,
+                ))
+
         result = SalaryAnalytics(
             total_with_salary=total_with_salary,
             parseable=len(parsed),
@@ -1328,6 +1398,7 @@ async def salary_analytics(
             overall=SalaryStats(**overall),
             by_country=by_country,
             by_domain=by_domain,
+            distributions=distributions,
         )
 
         _set_cached(cache_key, result)

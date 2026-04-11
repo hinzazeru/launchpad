@@ -603,6 +603,21 @@ export interface DomainSalary {
   count: number;
 }
 
+export interface DistributionBucket {
+  label: string;
+  count: number;
+}
+
+export interface CountryDistribution {
+  country: string;
+  currency: string;
+  p25: number;
+  median: number;
+  p75: number;
+  p90: number;
+  buckets: DistributionBucket[];
+}
+
 export interface SalaryAnalytics {
   total_with_salary: number;
   parseable: number;
@@ -610,6 +625,7 @@ export interface SalaryAnalytics {
   overall: SalaryStats;
   by_country: CountryStats[];
   by_domain: DomainSalary[];
+  distributions: CountryDistribution[];
 }
 
 // Domain types

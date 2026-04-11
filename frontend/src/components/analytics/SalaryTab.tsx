@@ -18,7 +18,11 @@ import {
   ResponsiveContainer,
   Legend,
   Cell,
+  CartesianGrid,
+  ReferenceLine,
+  Label,
 } from 'recharts';
+import type { CountryDistribution } from '@/services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 function formatSalary(n: number): string {
@@ -31,10 +35,157 @@ function formatRange(min: number, max: number): string {
 }
 
 const COUNTRY_COLORS: Record<string, string> = {
-  Canada: '#ef4444',
+  Canada: '#8b5cf6',
   US: '#3b82f6',
-  Other: '#8b5cf6',
+  Other: '#10b981',
 };
+
+function CountryTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0]?.payload;
+  return (
+    <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm">
+      <p className="font-medium text-foreground mb-1">{String(label)} ({item?.count} jobs)</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} className="text-muted-foreground">
+          <span style={{ color: entry.color }}>{String(entry.name)}:</span>{' '}
+          <span className="font-medium text-foreground">${String(entry.value)}K</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function DomainTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0]?.payload;
+  if (!item) return null;
+  return (
+    <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm">
+      <p className="font-medium text-foreground mb-1">{item.fullName} ({item.count} jobs)</p>
+      <p className="text-muted-foreground">
+        <span style={{ color: '#8b5cf6' }}>Median Low:</span>{' '}
+        <span className="font-medium text-foreground">${item.min}K</span>
+      </p>
+      <p className="text-muted-foreground">
+        <span style={{ color: '#10b981' }}>Median High:</span>{' '}
+        <span className="font-medium text-foreground">${item.max}K</span>
+      </p>
+    </div>
+  );
+}
+
+const PERCENTILE_COLORS: Record<string, string> = {
+  '25th': '#94a3b8',
+  'Median': '#10b981',
+  '75th': '#3b82f6',
+  '90th': '#8b5cf6',
+};
+
+function DistributionHistogram({ dist }: { dist: CountryDistribution }) {
+  const currencyPrefix = dist.country === 'Canada' ? 'CA$' : '$';
+
+  // Find which bucket index each percentile falls into
+  const percentileLabels = [
+    { key: '25th', value: dist.p25, label: '25th%' },
+    { key: 'Median', value: dist.median, label: 'Median' },
+    { key: '75th', value: dist.p75, label: '75th%' },
+    { key: '90th', value: dist.p90, label: '90th%' },
+  ];
+
+  const chartData = dist.buckets.map((b, i) => ({ ...b, index: i }));
+
+  return (
+    <Card className="border-border/50">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <MapPin className="w-4 h-4" />
+          {dist.country} Salary Distribution ({dist.currency})
+        </CardTitle>
+        <div className="flex items-center gap-6 pt-2">
+          {percentileLabels.map((p) => (
+            <div key={p.key} className="text-center">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-0.5 rounded" style={{ backgroundColor: PERCENTILE_COLORS[p.key] }} />
+                <span className="text-lg font-bold">{formatSalary(p.value)}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{p.label}</p>
+            </div>
+          ))}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ left: 5, right: 5, top: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                interval={1}
+              />
+              <YAxis hide />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const item = payload[0]?.payload;
+                  return (
+                    <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm">
+                      <p className="font-medium text-foreground">{item.label}</p>
+                      <p className="text-muted-foreground">{item.count} jobs</p>
+                    </div>
+                  );
+                }}
+                cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
+              />
+              <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                {chartData.map((_, i) => (
+                  <Cell
+                    key={i}
+                    fill={dist.country === 'Canada' ? '#8b5cf6' : '#3b82f6'}
+                    fillOpacity={0.7}
+                  />
+                ))}
+              </Bar>
+              {percentileLabels.map((p) => {
+                // Find the closest bucket label for this percentile
+                let closestIdx = 0;
+                let closestDist = Infinity;
+                dist.buckets.forEach((b, i) => {
+                  const val = parseFloat(b.label.replace(/[$K,]/g, '')) * 1000;
+                  const d = Math.abs(val - p.value);
+                  if (d < closestDist) { closestDist = d; closestIdx = i; }
+                });
+                return (
+                  <ReferenceLine
+                    key={p.key}
+                    x={dist.buckets[closestIdx]?.label}
+                    stroke={PERCENTILE_COLORS[p.key]}
+                    strokeDasharray="4 3"
+                    strokeWidth={2}
+                  >
+                    <Label
+                      value={p.label}
+                      position="top"
+                      fill={PERCENTILE_COLORS[p.key]}
+                      fontSize={10}
+                      fontWeight={600}
+                    />
+                  </ReferenceLine>
+                );
+              })}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1 text-center">
+          Total Annual Compensation ({currencyPrefix})
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function SalaryTab() {
   const [seniority, setSeniority] = useState('senior');
@@ -211,7 +362,7 @@ export function SalaryTab() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Card>
+          <Card className="border-border/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <MapPin className="w-4 h-4" />
@@ -222,20 +373,15 @@ export function SalaryTab() {
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={countryChartData} layout="vertical" margin={{ left: 10, right: 20 }}>
-                    <XAxis type="number" tickFormatter={v => `$${v}K`} />
-                    <YAxis type="category" dataKey="country" width={60} tick={{ fontSize: 12 }} />
-                    <Tooltip
-                      formatter={(value, name) => [`$${value}K`, name as string]}
-                      labelFormatter={(label) => {
-                        const item = countryChartData.find(d => d.country === label);
-                        return `${label} (${item?.count} jobs)`;
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="Range Low" stackId="a" fill="#94a3b8" radius={[4, 0, 0, 4]} />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" horizontal={false} />
+                    <XAxis type="number" tickFormatter={v => `$${v}K`} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="country" width={60} tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                    <Tooltip content={<CountryTooltip />} cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} />
+                    <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
+                    <Bar dataKey="Range Low" stackId="a" fill="#8b5cf6" fillOpacity={0.4} radius={[4, 0, 0, 4]} />
                     <Bar dataKey="Range High" stackId="a" radius={[0, 4, 4, 0]}>
                       {countryChartData.map((entry) => (
-                        <Cell key={entry.country} fill={COUNTRY_COLORS[entry.country] || '#8b5cf6'} />
+                        <Cell key={entry.country} fill={COUNTRY_COLORS[entry.country] || '#10b981'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -249,6 +395,20 @@ export function SalaryTab() {
         </motion.div>
       )}
 
+      {/* Salary Distributions */}
+      {data.distributions?.length > 0 && (
+        <motion.div
+          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+        >
+          {data.distributions.map((dist) => (
+            <DistributionHistogram key={dist.country} dist={dist} />
+          ))}
+        </motion.div>
+      )}
+
       {/* Domain Breakdown */}
       {allDomainData.length > 0 && (
         <motion.div
@@ -256,7 +416,7 @@ export function SalaryTab() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Card>
+          <Card className="border-border/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
@@ -267,23 +427,24 @@ export function SalaryTab() {
               <div style={{ height: Math.max(200, domainChartData.length * 40 + 40) }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={domainChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                    <XAxis type="number" tickFormatter={v => `$${v}K`} />
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" horizontal={false} />
+                    <XAxis type="number" tickFormatter={v => `$${v}K`} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                     <YAxis
                       type="category"
                       dataKey="name"
                       width={150}
                       tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
                     />
-                    <Tooltip
-                      formatter={(value, name) => [`$${value}K`, name as string]}
-                      labelFormatter={(_label, payload) => {
-                        const item = payload?.[0]?.payload;
-                        return item ? `${item.fullName} (${item.count} jobs)` : '';
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="min" name="Median Low" fill="#94a3b8" radius={[4, 0, 0, 4]} />
-                    <Bar dataKey="range" name="Median High" fill="#10b981" stackId="salary" radius={[0, 4, 4, 0]} />
+                    <Tooltip content={<DomainTooltip />} cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} />
+                    <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
+                    <Bar dataKey="min" name="Median Low" fill="#8b5cf6" fillOpacity={0.4} radius={[4, 0, 0, 4]} />
+                    <Bar dataKey="range" name="Median High" fill="#10b981" stackId="salary" radius={[0, 4, 4, 0]}>
+                      {domainChartData.map((entry, index) => (
+                        <Cell key={entry.key} fill="#10b981" fillOpacity={1 - index * 0.06} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
