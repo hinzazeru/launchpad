@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSalaryAnalytics } from '@/services/api';
 import { motion } from 'framer-motion';
 import {
@@ -7,6 +7,7 @@ import {
   Building2,
   AlertCircle,
   TrendingUp,
+  ChevronDown,
 } from 'lucide-react';
 import {
   BarChart,
@@ -86,14 +87,37 @@ export function SalaryTab() {
     }));
 
   // Domain chart data
-  const domainChartData = data.by_domain.map(d => ({
+  const DEFAULT_VISIBLE = 7;
+  const [extraDomains, setExtraDomains] = useState<Set<string>>(new Set());
+  const [showDomainPicker, setShowDomainPicker] = useState(false);
+
+  const allDomainData = useMemo(() => data.by_domain.map(d => ({
+    key: d.domain,
     name: d.display_name.length > 25 ? d.display_name.slice(0, 22) + '...' : d.display_name,
     fullName: d.display_name,
     min: Math.round(d.median_min / 1000),
     max: Math.round(d.median_max / 1000),
     range: Math.round((d.median_max - d.median_min) / 1000),
     count: d.count,
-  }));
+  })), [data.by_domain]);
+
+  const remainingDomains = allDomainData.slice(DEFAULT_VISIBLE);
+
+  const domainChartData = useMemo(() => {
+    const top = allDomainData.slice(0, DEFAULT_VISIBLE);
+    const extra = allDomainData.filter(d => extraDomains.has(d.key));
+    // Merge, avoiding duplicates from top 7
+    const topKeys = new Set(top.map(d => d.key));
+    return [...top, ...extra.filter(d => !topKeys.has(d.key))];
+  }, [allDomainData, extraDomains]);
+
+  const toggleDomain = (key: string) => {
+    setExtraDomains(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const seniorityOptions = [
     { value: 'senior', label: 'Senior' },
@@ -226,7 +250,7 @@ export function SalaryTab() {
       )}
 
       {/* Domain Breakdown */}
-      {domainChartData.length > 0 && (
+      {allDomainData.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -240,7 +264,7 @@ export function SalaryTab() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[400px]">
+              <div style={{ height: Math.max(200, domainChartData.length * 40 + 40) }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={domainChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
                     <XAxis type="number" tickFormatter={v => `$${v}K`} />
@@ -263,6 +287,41 @@ export function SalaryTab() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Domain picker for remaining industries */}
+              {remainingDomains.length > 0 && (
+                <div className="mt-4 border-t pt-3">
+                  <button
+                    onClick={() => setShowDomainPicker(!showDomainPicker)}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDomainPicker ? 'rotate-180' : ''}`} />
+                    {showDomainPicker ? 'Hide' : 'Show'} {remainingDomains.length} more industries
+                    {extraDomains.size > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px]">
+                        {extraDomains.size} selected
+                      </span>
+                    )}
+                  </button>
+                  {showDomainPicker && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {remainingDomains.map(d => (
+                        <button
+                          key={d.key}
+                          onClick={() => toggleDomain(d.key)}
+                          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                            extraDomains.has(d.key)
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background hover:bg-muted border-border text-muted-foreground'
+                          }`}
+                        >
+                          {d.fullName} ({d.count})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
