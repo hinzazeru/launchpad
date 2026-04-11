@@ -580,6 +580,38 @@ export interface ScheduledSearchesSummaryResponse {
   overall_success_rate: number;
 }
 
+// Salary analytics types
+
+export interface SalaryStats {
+  mean_min: number;
+  mean_max: number;
+  median_min: number;
+  median_max: number;
+  max_value: number;
+  count: number;
+}
+
+export interface CountryStats extends SalaryStats {
+  country: string;
+}
+
+export interface DomainSalary {
+  domain: string;
+  display_name: string;
+  median_min: number;
+  median_max: number;
+  count: number;
+}
+
+export interface SalaryAnalytics {
+  total_with_salary: number;
+  parseable: number;
+  unparseable_count: number;
+  overall: SalaryStats;
+  by_country: CountryStats[];
+  by_domain: DomainSalary[];
+}
+
 // Domain types
 
 export interface DomainInfo {
@@ -1007,6 +1039,19 @@ class ApiClient {
 
   async getScheduledSearchSummary(days: number = 30): Promise<ScheduledSearchesSummaryResponse> {
     return this.fetch<ScheduledSearchesSummaryResponse>(`/analytics/performance/scheduled-summary?days=${days}`);
+  }
+
+  async getSalaryAnalytics(params?: {
+    title_filter?: string;
+    seniority?: string;
+    days?: number;
+  }): Promise<SalaryAnalytics> {
+    const searchParams = new URLSearchParams();
+    if (params?.title_filter) searchParams.set('title_filter', params.title_filter);
+    if (params?.seniority) searchParams.set('seniority', params.seniority);
+    if (params?.days) searchParams.set('days', String(params.days));
+    const query = searchParams.toString();
+    return this.fetch<SalaryAnalytics>(`/analytics/salary${query ? `?${query}` : ''}`);
   }
 
   // Domain endpoints
@@ -1613,6 +1658,20 @@ export function useScheduledSearchSummary(days: number = 30) {
   return useQuery({
     queryKey: ['scheduled-search-summary', days],
     queryFn: () => api.getScheduledSearchSummary(days),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Salary analytics hooks
+
+export function useSalaryAnalytics(titleFilter?: string, seniority?: string, days?: number) {
+  return useQuery({
+    queryKey: ['salary-analytics', titleFilter, seniority, days],
+    queryFn: () => api.getSalaryAnalytics({
+      title_filter: titleFilter,
+      seniority: seniority,
+      days: days,
+    }),
     staleTime: 5 * 60 * 1000,
   });
 }

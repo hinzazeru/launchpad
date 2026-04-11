@@ -8,7 +8,7 @@ import {
   useAnalyticsTimeline,
   useScoreDistribution,
 } from '@/services/api';
-import { BarChartCard, TimelineChart } from '@/components/analytics';
+import { BarChartCard, TimelineChart, SalaryTab } from '@/components/analytics';
 import { PerformanceTab } from '@/components/analytics/PerformanceTab';
 import {
   Briefcase,
@@ -18,7 +18,8 @@ import {
   AlertCircle,
   BarChart2,
   Activity,
-  LayoutDashboard
+  LayoutDashboard,
+  DollarSign
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -64,11 +65,15 @@ export function Analytics() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Tabs defaultValue="analytics" value={activeTab} onValueChange={setActiveTab} className="w-[300px]">
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs defaultValue="analytics" value={activeTab} onValueChange={setActiveTab} className="w-[400px]">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="analytics" className="flex items-center gap-2">
                 <LayoutDashboard className="w-4 h-4" />
                 <span>Overview</span>
+              </TabsTrigger>
+              <TabsTrigger value="salary" className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                <span>Salary</span>
               </TabsTrigger>
               <TabsTrigger value="performance" className="flex items-center gap-2">
                 <Activity className="w-4 h-4" />
@@ -339,6 +344,10 @@ export function Analytics() {
               </motion.div>
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="salary" className="mt-0">
+          <SalaryTab />
         </TabsContent>
 
         <TabsContent value="performance" className="mt-0">

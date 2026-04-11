@@ -22,6 +22,7 @@ import time
 
 from src.database.db import get_db
 from src.database.models import JobPosting, MatchResult, SearchPerformance, APICallMetric, ScheduledSearch
+from src.utils.salary import parse_salary_string, classify_country
 from backend.limiter import limiter
 
 router = APIRouter()
@@ -1142,3 +1143,196 @@ async def get_scheduled_search_summary(
     except Exception as e:
         logger.error(f"Error fetching scheduled search summary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load scheduled search summary")
+
+
+# --- Salary Analytics ---
+
+class SalaryStats(BaseModel):
+    mean_min: float
+    mean_max: float
+    median_min: float
+    median_max: float
+    max_value: float
+    count: int
+
+
+class CountryStats(BaseModel):
+    country: str
+    mean_min: float
+    mean_max: float
+    median_min: float
+    median_max: float
+    max_value: float
+    count: int
+
+
+class DomainSalary(BaseModel):
+    domain: str
+    display_name: str
+    median_min: float
+    median_max: float
+    count: int
+
+
+class SalaryAnalytics(BaseModel):
+    total_with_salary: int
+    parseable: int
+    unparseable_count: int
+    overall: SalaryStats
+    by_country: List[CountryStats]
+    by_domain: List[DomainSalary]
+
+
+def _compute_stats(pairs: list) -> dict:
+    """Compute mean/median/max from list of (min, max) tuples."""
+    if not pairs:
+        return {"mean_min": 0, "mean_max": 0, "median_min": 0, "median_max": 0, "max_value": 0, "count": 0}
+    mins = sorted(p[0] for p in pairs)
+    maxs = sorted(p[1] for p in pairs)
+    n = len(pairs)
+    mid = n // 2
+    return {
+        "mean_min": round(sum(mins) / n),
+        "mean_max": round(sum(maxs) / n),
+        "median_min": round(mins[mid] if n % 2 else (mins[mid - 1] + mins[mid]) / 2),
+        "median_max": round(maxs[mid] if n % 2 else (maxs[mid - 1] + maxs[mid]) / 2),
+        "max_value": round(max(maxs)),
+        "count": n,
+    }
+
+
+def _load_domain_names() -> Dict[str, str]:
+    """Load domain key -> display name mapping from domain_expertise.json."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "domain_expertise.json")
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        names = {}
+        for _cat, domains in data.get("domains", {}).items():
+            for key, info in domains.items():
+                names[key] = info.get("description", key)
+        return names
+    except Exception:
+        return {}
+
+
+@router.get("/salary", response_model=SalaryAnalytics)
+@limiter.limit("200/minute")
+async def salary_analytics(
+    request: Request,
+    title_filter: str = "product manager",
+    seniority: str = "senior",
+    days: int = 90,
+    session: Session = Depends(get_db),
+):
+    """Salary analytics with breakdowns by country and domain."""
+    cache_key = f"salary:{title_filter}:{seniority}:{days}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        jobs = session.query(JobPosting).filter(
+            JobPosting.salary.isnot(None),
+            JobPosting.title.ilike(f"%{title_filter}%"),
+            JobPosting.posting_date >= cutoff,
+        ).all()
+
+        total_with_salary = len(jobs)
+
+        # Filter by seniority in Python for flexibility
+        seniority_keywords = []
+        if seniority == "senior":
+            seniority_keywords = ["senior", "sr.", "sr "]
+        elif seniority == "principal":
+            seniority_keywords = ["principal", "staff"]
+        elif seniority == "lead":
+            seniority_keywords = ["lead"]
+        elif seniority == "all":
+            seniority_keywords = []
+
+        if seniority_keywords:
+            jobs = [j for j in jobs if any(kw in j.title.lower() for kw in seniority_keywords)]
+
+        # Parse salaries
+        parsed = []
+        unparseable = 0
+        for job in jobs:
+            result = parse_salary_string(job.salary)
+            if result:
+                parsed.append((result, job))
+            else:
+                unparseable += 1
+
+        if not parsed:
+            empty_stats = SalaryStats(mean_min=0, mean_max=0, median_min=0, median_max=0, max_value=0, count=0)
+            result = SalaryAnalytics(
+                total_with_salary=total_with_salary,
+                parseable=0,
+                unparseable_count=unparseable,
+                overall=empty_stats,
+                by_country=[],
+                by_domain=[],
+            )
+            _set_cached(cache_key, result)
+            return result
+
+        # Overall stats
+        all_pairs = [p[0] for p in parsed]
+        overall = _compute_stats(all_pairs)
+
+        # By country
+        country_groups: Dict[str, list] = {}
+        for (salary_pair, job) in parsed:
+            country = classify_country(job.location)
+            country_groups.setdefault(country, []).append(salary_pair)
+
+        by_country = []
+        for country in ["Canada", "US", "Other"]:
+            pairs = country_groups.get(country, [])
+            if pairs:
+                stats = _compute_stats(pairs)
+                by_country.append(CountryStats(country=country, **stats))
+
+        # By domain
+        domain_names = _load_domain_names()
+        domain_groups: Dict[str, list] = {}
+        for (salary_pair, job) in parsed:
+            domains = job.required_domains or []
+            if isinstance(domains, list):
+                for d in domains:
+                    domain_groups.setdefault(d, []).append(salary_pair)
+
+        by_domain = []
+        for domain, pairs in sorted(domain_groups.items(), key=lambda x: -len(x[1])):
+            if len(pairs) >= 2:  # Skip domains with too few data points
+                stats = _compute_stats(pairs)
+                by_domain.append(DomainSalary(
+                    domain=domain,
+                    display_name=domain_names.get(domain, domain.replace("_", " ").title()),
+                    median_min=stats["median_min"],
+                    median_max=stats["median_max"],
+                    count=stats["count"],
+                ))
+
+        by_domain = by_domain[:15]  # Top 15 domains
+
+        result = SalaryAnalytics(
+            total_with_salary=total_with_salary,
+            parseable=len(parsed),
+            unparseable_count=unparseable,
+            overall=SalaryStats(**overall),
+            by_country=by_country,
+            by_domain=by_domain,
+        )
+
+        _set_cached(cache_key, result)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching salary analytics: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load salary analytics")
