@@ -64,12 +64,8 @@ function DomainTooltip({ active, payload }: any) {
     <div className="bg-popover border border-border rounded-lg shadow-lg p-3 text-sm">
       <p className="font-medium text-foreground mb-1">{item.fullName} ({item.count} jobs)</p>
       <p className="text-muted-foreground">
-        <span style={{ color: '#8b5cf6' }}>Median Low:</span>{' '}
-        <span className="font-medium text-foreground">${item.min}K</span>
-      </p>
-      <p className="text-muted-foreground">
-        <span style={{ color: '#10b981' }}>Median High:</span>{' '}
-        <span className="font-medium text-foreground">${item.max}K</span>
+        Median Range:{' '}
+        <span className="font-medium text-foreground">${item.min}K – ${item.max}K</span>
       </p>
     </div>
   );
@@ -438,11 +434,10 @@ export function SalaryTab() {
                       axisLine={false}
                     />
                     <Tooltip content={<DomainTooltip />} cursor={{ fill: 'hsl(var(--muted) / 0.3)' }} />
-                    <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: '12px' }} />
-                    <Bar dataKey="min" name="Median Low" fill="#8b5cf6" fillOpacity={0.4} radius={[4, 0, 0, 4]} />
-                    <Bar dataKey="range" name="Median High" fill="#10b981" stackId="salary" radius={[0, 4, 4, 0]}>
+                    <Bar dataKey="min" name="base" stackId="salary" fill="transparent" legendType="none" isAnimationActive={false} />
+                    <Bar dataKey="range" name="Salary Range" stackId="salary" radius={[0, 4, 4, 0]}>
                       {domainChartData.map((entry, index) => (
-                        <Cell key={entry.key} fill="#10b981" fillOpacity={1 - index * 0.06} />
+                        <Cell key={entry.key} fill="#8b5cf6" fillOpacity={0.9 - index * 0.05} />
                       ))}
                     </Bar>
                   </BarChart>
