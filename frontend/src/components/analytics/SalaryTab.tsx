@@ -421,7 +421,7 @@ export function SalaryTab() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={domainChartData} layout="vertical" margin={{ left: 20, right: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted/30" horizontal={false} />
-                    <XAxis type="number" tickFormatter={v => `$${v}K`} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
+                    <XAxis type="number" domain={[75, 'auto']} tickFormatter={v => `$${v}K`} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                     <YAxis
                       type="category"
                       dataKey="name"
