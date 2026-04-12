@@ -186,6 +186,36 @@ function DistributionHistogram({ dist }: { dist: CountryDistribution }) {
 export function SalaryTab() {
   const [seniority, setSeniority] = useState('senior');
   const { data, isLoading, error } = useSalaryAnalytics('product manager', seniority, 90);
+  const [extraDomains, setExtraDomains] = useState<Set<string>>(new Set());
+  const [showDomainPicker, setShowDomainPicker] = useState(false);
+
+  const allDomainData = useMemo(() => (data?.by_domain ?? []).map(d => ({
+    key: d.domain,
+    name: d.display_name.length > 25 ? d.display_name.slice(0, 22) + '...' : d.display_name,
+    fullName: d.display_name,
+    min: Math.round(d.median_min / 1000),
+    max: Math.round(d.median_max / 1000),
+    range: Math.round((d.median_max - d.median_min) / 1000),
+    count: d.count,
+  })), [data?.by_domain]);
+
+  const DEFAULT_VISIBLE = 7;
+  const remainingDomains = allDomainData.slice(DEFAULT_VISIBLE);
+
+  const domainChartData = useMemo(() => {
+    const top = allDomainData.slice(0, DEFAULT_VISIBLE);
+    const extra = allDomainData.filter(d => extraDomains.has(d.key));
+    const topKeys = new Set(top.map(d => d.key));
+    return [...top, ...extra.filter(d => !topKeys.has(d.key))];
+  }, [allDomainData, extraDomains]);
+
+  const toggleDomain = (key: string) => {
+    setExtraDomains(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   if (isLoading) {
     return (
@@ -232,39 +262,6 @@ export function SalaryTab() {
       mean_max: Math.round(c.mean_max / 1000),
       count: c.count,
     }));
-
-  // Domain chart data
-  const DEFAULT_VISIBLE = 7;
-  const [extraDomains, setExtraDomains] = useState<Set<string>>(new Set());
-  const [showDomainPicker, setShowDomainPicker] = useState(false);
-
-  const allDomainData = useMemo(() => data.by_domain.map(d => ({
-    key: d.domain,
-    name: d.display_name.length > 25 ? d.display_name.slice(0, 22) + '...' : d.display_name,
-    fullName: d.display_name,
-    min: Math.round(d.median_min / 1000),
-    max: Math.round(d.median_max / 1000),
-    range: Math.round((d.median_max - d.median_min) / 1000),
-    count: d.count,
-  })), [data.by_domain]);
-
-  const remainingDomains = allDomainData.slice(DEFAULT_VISIBLE);
-
-  const domainChartData = useMemo(() => {
-    const top = allDomainData.slice(0, DEFAULT_VISIBLE);
-    const extra = allDomainData.filter(d => extraDomains.has(d.key));
-    // Merge, avoiding duplicates from top 7
-    const topKeys = new Set(top.map(d => d.key));
-    return [...top, ...extra.filter(d => !topKeys.has(d.key))];
-  }, [allDomainData, extraDomains]);
-
-  const toggleDomain = (key: string) => {
-    setExtraDomains(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
 
   const seniorityOptions = [
     { value: 'senior', label: 'Senior' },
