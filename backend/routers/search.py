@@ -637,9 +637,24 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
                     jobs_imported=jobs_imported
                 ))
 
+                # Resolve effective resume ID for cache lookup + save (parsed resumes
+                # have id=0; fall back to the first DB resume row, matching the
+                # save-path logic below).
+                effective_resume_id = resume.id
+                if effective_resume_id == 0:
+                    _db_resume = db_session.query(Resume).first()
+                    if _db_resume:
+                        effective_resume_id = _db_resume.id
+
                 # Run matching (auto mode uses Gemini AI if available)
                 matcher = get_job_matcher()
-                matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
+                matches, gemini_stats = matcher.match_jobs(
+                    resume,
+                    all_jobs,
+                    min_score=0.0,
+                    db_session=db_session,
+                    effective_resume_id=effective_resume_id,
+                )
 
                 yield send_progress(SearchProgress(
                     stage=SearchStage.MATCHING,
@@ -677,14 +692,8 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
                             error_message=str(rerank_error)
                         )
 
-                # Save match results to database
-                # For file-based resumes (web app), use the first resume in DB as reference
-                resume_id_for_save = resume.id
-                if resume_id_for_save == 0:
-                    # Get first resume from database for linking
-                    db_resume = db_session.query(Resume).first()
-                    if db_resume:
-                        resume_id_for_save = db_resume.id
+                # Save match results to database (reuse effective_resume_id resolved above)
+                resume_id_for_save = effective_resume_id
 
                 if matches and resume_id_for_save > 0:
                     try:
@@ -1505,9 +1514,23 @@ async def _execute_search_job_async(search_id: str):
                 update_progress('matching', 55, f"Analyzing {len(all_jobs)} jobs...",
                                jobs_found=jobs_fetched, jobs_imported=jobs_imported)
 
+                # Resolve effective resume ID for cache lookup + save (parsed resumes
+                # have id=0; fall back to the first DB resume row).
+                effective_resume_id = resume.id
+                if effective_resume_id == 0:
+                    _db_resume = db_session.query(Resume).first()
+                    if _db_resume:
+                        effective_resume_id = _db_resume.id
+
                 # Run matching
                 matcher = get_job_matcher()
-                matches, gemini_stats = matcher.match_jobs(resume, all_jobs, min_score=0.0)
+                matches, gemini_stats = matcher.match_jobs(
+                    resume,
+                    all_jobs,
+                    min_score=0.0,
+                    db_session=db_session,
+                    effective_resume_id=effective_resume_id,
+                )
 
                 update_progress('matching', 65, f"Found {len(matches)} matches, running AI analysis...",
                                jobs_found=jobs_fetched, jobs_imported=jobs_imported, matches_found=len(matches))
@@ -1528,12 +1551,8 @@ async def _execute_search_job_async(search_id: str):
                     except Exception as rerank_error:
                         logger.warning(f"Gemini re-ranking failed: {rerank_error}")
 
-                # Save matches
-                resume_id_for_save = resume.id
-                if resume_id_for_save == 0:
-                    db_resume = db_session.query(Resume).first()
-                    if db_resume:
-                        resume_id_for_save = db_resume.id
+                # Save matches (reuse effective_resume_id resolved above)
+                resume_id_for_save = effective_resume_id
 
                 if matches and resume_id_for_save > 0:
                     try:

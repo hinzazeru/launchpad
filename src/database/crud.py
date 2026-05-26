@@ -1,7 +1,7 @@
 """CRUD operations for database models."""
 
 from datetime import datetime, timezone
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from sqlalchemy import func, or_, and_, tuple_
 from sqlalchemy.orm import Session, joinedload
 from src.database.models import Resume, JobPosting, MatchResult, ApplicationTracking
@@ -469,6 +469,45 @@ def get_match_result(db: Session, match_id: int) -> Optional[MatchResult]:
         MatchResult or None if not found
     """
     return db.query(MatchResult).filter(MatchResult.id == match_id).first()
+
+
+def get_cached_gemini_matches(
+    db: Session, resume_id: int, job_ids: List[int]
+) -> Dict[int, MatchResult]:
+    """Return the most recent Gemini MatchResult per job_id for a resume.
+
+    Used by the matcher to skip Gemini API calls when an AI score already
+    exists for the same (resume_id, job_id) pair. Only rows where
+    match_engine='gemini' and ai_match_score is populated qualify.
+
+    Args:
+        db: Database session
+        resume_id: Resume ID
+        job_ids: List of JobPosting IDs to check
+
+    Returns:
+        Dict mapping job_id -> most recent matching MatchResult row.
+    """
+    if not job_ids:
+        return {}
+
+    rows = (
+        db.query(MatchResult)
+        .filter(
+            MatchResult.resume_id == resume_id,
+            MatchResult.job_id.in_(job_ids),
+            MatchResult.match_engine == "gemini",
+            MatchResult.ai_match_score.isnot(None),
+        )
+        .order_by(MatchResult.generated_date.desc())
+        .all()
+    )
+
+    cache: Dict[int, MatchResult] = {}
+    for row in rows:
+        if row.job_id not in cache:
+            cache[row.job_id] = row
+    return cache
 
 
 def get_matches_by_resume(

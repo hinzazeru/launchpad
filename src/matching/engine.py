@@ -363,6 +363,65 @@ class JobMatcher:
 
         return None
 
+    def _hydrate_match_from_cache(
+        self,
+        cached: MatchResult,
+        resume: Resume,
+        job: JobPosting,
+    ) -> Dict:
+        """Rebuild a match-result dict from a previously-saved Gemini MatchResult,
+        bypassing the Gemini API call. Mirrors the shape returned by
+        _match_with_gemini so downstream consumers (rerank, save, UI) are
+        agnostic to whether the result is fresh or cached.
+        """
+        skill_gaps_detailed = cached.skill_gaps_detailed or []
+        skill_gaps = [
+            g.get("skill")
+            for g in skill_gaps_detailed
+            if isinstance(g, dict) and g.get("skill")
+        ]
+
+        result = {
+            "overall_score": (cached.ai_match_score or 0) / 100,
+            "skills_score": (cached.skills_score or 0) / 100,
+            "experience_score": (cached.experience_score or 0) / 100,
+            "domain_score": (cached.domain_score or 0) / 100,
+            "seniority_fit": (cached.seniority_fit or 0) / 100,
+            "matching_skills": cached.matching_skills or [],
+            "skill_gaps": skill_gaps,
+            "matching_domains": [],
+            "missing_domains": cached.missing_domains or [],
+            "match_details": {},
+            "extracted_skills": [],
+            "resume_years": resume.experience_years or 0,
+            "job_years_required": job.experience_required,
+            "engine_version": cached.engine_version or self.engine_version,
+            "match_engine": "gemini",
+            "ai_match_score": cached.ai_match_score,
+            "ai_skills_score": cached.skills_score,
+            "ai_experience_score": cached.experience_score,
+            "ai_seniority_fit": cached.seniority_fit,
+            "ai_domain_score": cached.domain_score,
+            "ai_strengths": cached.ai_strengths or [],
+            "ai_concerns": cached.ai_concerns or [],
+            "ai_recommendations": cached.ai_recommendations or [],
+            "skill_matches": cached.skill_matches or [],
+            "skill_gaps_detailed": skill_gaps_detailed,
+            "match_confidence": cached.match_confidence,
+            "gemini_reasoning": cached.gemini_reasoning,
+            # Marker so save_match_results can skip duplicate DB rows.
+            "cache_hit": True,
+        }
+        # Carry over previously-computed rerank fields so the reranker can
+        # detect them and skip its own API call.
+        if cached.gemini_score is not None:
+            result["gemini_score"] = cached.gemini_score
+        if cached.gemini_strengths:
+            result["gemini_strengths"] = cached.gemini_strengths
+        if cached.gemini_gaps:
+            result["gemini_gaps"] = cached.gemini_gaps
+        return result
+
     def calculate_experience_match(
         self,
         resume_years: float,
@@ -679,7 +738,9 @@ class JobMatcher:
         jobs: List[JobPosting],
         min_score: Optional[float] = None,
         top_n: Optional[int] = None,
-        track_gemini_stats: bool = True
+        track_gemini_stats: bool = True,
+        db_session=None,
+        effective_resume_id: Optional[int] = None,
     ) -> Tuple[List[Dict], Optional[GeminiStats]]:
         """Match multiple jobs against a resume and rank them.
 
@@ -702,14 +763,53 @@ class JobMatcher:
         gemini_stats = GeminiStats() if track_gemini_stats else None
         concurrency = self.config.get("gemini.matcher.concurrency", 1)
 
+        # Pre-fetch cached Gemini matches and short-circuit those jobs to avoid
+        # repaying API cost when the same (resume, job) was already scored.
+        cached_results: List[Dict] = []
+        jobs_to_match: List[JobPosting] = list(jobs)
+        if db_session is not None:
+            rid = (
+                effective_resume_id
+                if effective_resume_id is not None
+                else getattr(resume, "id", 0)
+            )
+            if rid:
+                candidate_ids = [j.id for j in jobs if getattr(j, "id", None)]
+                if candidate_ids:
+                    try:
+                        cache_map = crud.get_cached_gemini_matches(
+                            db_session, rid, candidate_ids
+                        )
+                    except Exception as e:
+                        logger.warning(f"Cache lookup failed, falling back to full matching: {e}")
+                        cache_map = {}
+
+                    if cache_map:
+                        jobs_to_match = []
+                        for job in jobs:
+                            cached = cache_map.get(getattr(job, "id", None))
+                            if cached is not None and self._should_use_gemini(job):
+                                hydrated = self._hydrate_match_from_cache(cached, resume, job)
+                                if hydrated["overall_score"] >= min_score:
+                                    hydrated.update(self._job_detail_fields(job))
+                                    cached_results.append(hydrated)
+                            else:
+                                jobs_to_match.append(job)
+                        logger.info(
+                            f"Gemini cache: reused {len(cached_results)} prior matches, "
+                            f"running fresh on {len(jobs_to_match)} jobs"
+                        )
+
         # Use concurrent matching when Gemini is active and concurrency > 1.
         # The GeminiRateLimiter (threading.Lock) serialises API calls across threads,
         # so concurrent threads simply pipeline their calls through the rate limiter
         # instead of waiting for each to fully complete before starting the next.
         if concurrency > 1 and self.gemini_matcher and self.gemini_matcher.is_available():
-            matches = self._match_jobs_concurrent(resume, jobs, min_score, concurrency, gemini_stats)
+            fresh_matches = self._match_jobs_concurrent(resume, jobs_to_match, min_score, concurrency, gemini_stats)
         else:
-            matches = self._match_jobs_sequential(resume, jobs, min_score, gemini_stats)
+            fresh_matches = self._match_jobs_sequential(resume, jobs_to_match, min_score, gemini_stats)
+
+        matches = cached_results + fresh_matches
 
         # Sort by overall score (descending)
         matches.sort(key=lambda x: x['overall_score'], reverse=True)
@@ -854,6 +954,9 @@ class JobMatcher:
         saved_results = []
 
         for match in match_results:
+            # Cache hits already have a saved MatchResult row; skip to avoid duplicates.
+            if match.get("cache_hit"):
+                continue
             # Convert score from 0-1 to 0-100 format for database storage
             score_as_percentage = match['overall_score'] * 100
 

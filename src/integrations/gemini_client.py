@@ -1234,9 +1234,19 @@ class GeminiMatchReranker:
             if m.get('overall_score', 0) >= self.min_score_threshold
         ][:self.top_n]
 
-        logger.info(f"Re-ranking {len(eligible)} matches with Gemini")
+        # Skip matches that already carry a rerank score (cache hits from the
+        # matcher's cache reuse path, or pre-populated results from earlier runs).
+        to_score = [m for m in eligible if m.get('gemini_score') is None]
+        cached_count = len(eligible) - len(to_score)
+        if cached_count:
+            logger.info(
+                f"Re-rank cache: reusing {cached_count} prior rerank scores, "
+                f"running fresh on {len(to_score)} matches"
+            )
+        else:
+            logger.info(f"Re-ranking {len(to_score)} matches with Gemini")
 
-        for match in eligible:
+        for match in to_score:
             result = self._evaluate_match(
                 match=match,
                 resume_skills=resume_skills,
