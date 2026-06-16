@@ -50,17 +50,25 @@ def resume_and_job(db_session):
 
 
 @pytest.fixture
-def nlp_matcher():
-    with patch('src.matching.engine.get_config') as mock_cfg:
+def matcher():
+    """A Gemini-only JobMatcher with a mocked, available GeminiMatcher.
+
+    Only save_match_results() is exercised here, but construction now requires
+    Gemini to be available, so we stub it out.
+    """
+    with patch('src.matching.engine.get_config') as mock_cfg, \
+         patch('src.matching.gemini_matcher.GeminiMatcher') as MockGM:
         cfg = MagicMock()
-        cfg.get.side_effect = lambda key, default=None: {
-            "matching.engine": "nlp",
-        }.get(key, default)
-        cfg.get_matching_weights.return_value = {'skills': 0.45, 'experience': 0.35, 'domains': 0.20}
+        cfg.get.side_effect = lambda key, default=None: default
         cfg.get_min_match_score.return_value = 0.0
         cfg.get_engine_version.return_value = "1.0"
         mock_cfg.return_value = cfg
-        matcher = JobMatcher(mode="nlp", preload_cache=False)
+
+        gm = MagicMock()
+        gm.is_available.return_value = True
+        MockGM.return_value = gm
+
+        matcher = JobMatcher()
     return matcher
 
 
@@ -116,36 +124,36 @@ def make_gemini_match(job_id, **overrides):
 # ---------------------------------------------------------------------------
 
 class TestMatchingSkillsSanitization:
-    def test_nones_in_middle_stripped(self, nlp_matcher, db_session, resume_and_job):
+    def test_nones_in_middle_stripped(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, matching_skills=["Python", None, "SQL", None])
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert None not in saved[0].matching_skills
         assert saved[0].matching_skills == ["Python", "SQL"]
 
-    def test_all_none_saves_as_empty_list(self, nlp_matcher, db_session, resume_and_job):
+    def test_all_none_saves_as_empty_list(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, matching_skills=[None, None])
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].matching_skills == []
 
-    def test_none_input_saves_as_empty_list(self, nlp_matcher, db_session, resume_and_job):
+    def test_none_input_saves_as_empty_list(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, matching_skills=None)
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].matching_skills == []
 
-    def test_valid_list_passes_through_unchanged(self, nlp_matcher, db_session, resume_and_job):
+    def test_valid_list_passes_through_unchanged(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, matching_skills=["Python", "SQL", "AWS"])
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].matching_skills == ["Python", "SQL", "AWS"]
 
@@ -155,20 +163,20 @@ class TestMatchingSkillsSanitization:
 # ---------------------------------------------------------------------------
 
 class TestMissingDomainsSanitization:
-    def test_nones_stripped_from_missing_domains(self, nlp_matcher, db_session, resume_and_job):
+    def test_nones_stripped_from_missing_domains(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, missing_domains=["fintech", None, "banking"])
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert None not in saved[0].missing_domains
         assert saved[0].missing_domains == ["fintech", "banking"]
 
-    def test_all_none_missing_domains_saves_as_empty(self, nlp_matcher, db_session, resume_and_job):
+    def test_all_none_missing_domains_saves_as_empty(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, missing_domains=[None])
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].missing_domains == []
 
@@ -178,39 +186,39 @@ class TestMissingDomainsSanitization:
 # ---------------------------------------------------------------------------
 
 class TestGeminiFieldSanitization:
-    def test_ai_strengths_nones_stripped(self, nlp_matcher, db_session, resume_and_job):
+    def test_ai_strengths_nones_stripped(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_gemini_match(
             job.id,
             ai_strengths=["Strong Python", None, "5 years exp"],
         )
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert None not in saved[0].ai_strengths
         assert len(saved[0].ai_strengths) == 2
 
-    def test_ai_concerns_nones_stripped(self, nlp_matcher, db_session, resume_and_job):
+    def test_ai_concerns_nones_stripped(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_gemini_match(job.id, ai_concerns=[None, "Missing Kubernetes"])
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].ai_concerns == ["Missing Kubernetes"]
 
-    def test_ai_recommendations_nones_stripped(self, nlp_matcher, db_session, resume_and_job):
+    def test_ai_recommendations_nones_stripped(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_gemini_match(
             job.id,
             ai_recommendations=["Apply now", None, "Mention open-source"],
         )
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert None not in saved[0].ai_recommendations
         assert len(saved[0].ai_recommendations) == 2
 
-    def test_all_ai_lists_none_input_saves_as_none(self, nlp_matcher, db_session, resume_and_job):
+    def test_all_ai_lists_none_input_saves_as_none(self, matcher, db_session, resume_and_job):
         """When Gemini returns None for all list fields, DB gets None (not an error)."""
         resume, job = resume_and_job
         match = make_gemini_match(
@@ -220,14 +228,14 @@ class TestGeminiFieldSanitization:
             ai_recommendations=None,
         )
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         # None input → cleaned to [] by _clean_list
         assert saved[0].ai_strengths == []
         assert saved[0].ai_concerns == []
         assert saved[0].ai_recommendations == []
 
-    def test_gemini_match_with_clean_data_saves_correctly(self, nlp_matcher, db_session, resume_and_job):
+    def test_gemini_match_with_clean_data_saves_correctly(self, matcher, db_session, resume_and_job):
         """Valid Gemini data with no Nones passes through without modification."""
         resume, job = resume_and_job
         match = make_gemini_match(
@@ -237,7 +245,7 @@ class TestGeminiFieldSanitization:
             ai_recommendations=["Highlight backend"],
         )
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].ai_strengths == ["Python", "SQL"]
         assert saved[0].ai_concerns == ["Missing K8s"]
@@ -249,12 +257,12 @@ class TestGeminiFieldSanitization:
 # ---------------------------------------------------------------------------
 
 class TestNlpMatchSave:
-    def test_nlp_match_saves_without_ai_fields(self, nlp_matcher, db_session, resume_and_job):
+    def test_nlp_match_saves_without_ai_fields(self, matcher, db_session, resume_and_job):
         """NLP matches don't set ai_* fields; save_match_results must not error."""
         resume, job = resume_and_job
         match = make_nlp_match(job.id)
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert len(saved) == 1
         assert saved[0].match_engine == 'nlp'
@@ -262,21 +270,21 @@ class TestNlpMatchSave:
         assert saved[0].ai_strengths is None
         assert saved[0].ai_concerns is None
 
-    def test_saves_correct_score(self, nlp_matcher, db_session, resume_and_job):
+    def test_saves_correct_score(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         match = make_nlp_match(job.id, overall_score=0.72)
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, [match])
+        saved = matcher.save_match_results(db_session, resume.id, [match])
 
         assert saved[0].match_score == pytest.approx(72.0)
 
-    def test_saves_multiple_results(self, nlp_matcher, db_session, resume_and_job):
+    def test_saves_multiple_results(self, matcher, db_session, resume_and_job):
         resume, job = resume_and_job
         matches = [
             make_nlp_match(job.id, overall_score=0.8, matching_skills=["Python"]),
             make_nlp_match(job.id, overall_score=0.6, matching_skills=["SQL"]),
         ]
 
-        saved = nlp_matcher.save_match_results(db_session, resume.id, matches)
+        saved = matcher.save_match_results(db_session, resume.id, matches)
 
         assert len(saved) == 2

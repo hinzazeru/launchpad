@@ -14,7 +14,7 @@ LaunchPad is deployed on Railway with PostgreSQL.
 The Dockerfile uses a 3-stage build:
 
 1. **Frontend** (Node 20): `npm ci` + `npm run build` produces `frontend/dist/`
-2. **Python deps** (Python 3.10): CPU-only PyTorch first, then `requirements.txt`
+2. **Python deps** (Python 3.10): `requirements.txt` (Gemini-only matching — no PyTorch/ML deps)
 3. **Production** (Python 3.10 slim): Copies built frontend + Python packages, runs Gunicorn
 
 Key settings:
@@ -36,7 +36,7 @@ All secrets are configured as Railway env vars. The app's `src/config.py` checks
 | `BRIGHTDATA_API_KEY` | Bright Data API key |
 | `GEMINI_API_KEY` | Google Gemini AI API key |
 | `GEMINI_ENABLED` | `true` |
-| `MATCHING_ENGINE` | `auto` |
+| `MATCHING_ENGINE` | `gemini` (matching is Gemini-only; this var is no longer required) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_ALLOWED_USER_ID` | Authorized Telegram user ID |
 | `TELEGRAM_ENABLED` | `true` |
@@ -89,7 +89,7 @@ railway variable list --kv --service launchpad
 |-------|----------|
 | Healthcheck fails | Check runtime logs — likely a missing module or OOM. Increase `healthcheckTimeout` in `railway.json` |
 | `ModuleNotFoundError` | Add missing package to `requirements.txt` and redeploy |
-| OOM / container killed | Reduce workers (currently 1), check if PyTorch is CPU-only |
+| OOM / container killed | Reduce workers (currently 1); matching is Gemini-only so no large ML model is loaded |
 | Frontend not served | Ensure `PRODUCTION=true` is set and `frontend/dist/` exists in image |
 | Google Sheets fails | OAuth tokens require local browser flow; disable with `SHEETS_ENABLED=false` |
 | Build fails at frontend | Ensure `frontend/package-lock.json` is committed and not in `.dockerignore` |

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from src.database.db import SessionLocal
 from src.database.models import ScheduledSearch, SearchPerformance
+from src.matching.engine import GeminiUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -638,10 +639,29 @@ class WebAppScheduler:
                 f"{result['jobs_matched']} matches, {result['high_matches']} high quality"
             )
             
+        except GeminiUnavailableError as e:
+            # Matching is Gemini-only with no NLP fallback. Record the error
+            # metric (so the retry counter can see it) and re-raise so
+            # execute_scheduled_search schedules a retry per the schedule's policy.
+            logger.error(f"Gemini unavailable during scheduled search '{schedule.name}': {e}")
+            result['error'] = str(e)
+            try:
+                perf_logger.save(
+                    db,
+                    status='error',
+                    trigger_source='scheduled',
+                    schedule_id=schedule.id,
+                    error_stage='matching',
+                    error_message=str(e)
+                )
+            except Exception:
+                pass
+            raise
+
         except Exception as e:
             logger.error(f"Search pipeline failed: {e}", exc_info=True)
             result['error'] = str(e)
-            
+
             # Record failed performance metrics
             try:
                 perf_logger.save(
@@ -654,7 +674,7 @@ class WebAppScheduler:
                 )
             except Exception:
                 pass
-        
+
         return result
     
     async def _send_notification(

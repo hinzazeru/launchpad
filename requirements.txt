@@ -2,9 +2,6 @@
 SQLAlchemy==2.0.23
 psycopg2-binary==2.9.11  # PostgreSQL driver
 
-# NLP and Text Processing
-sentence-transformers==2.5.1
-
 # Job Scheduling
 APScheduler==3.10.4
 
@@ -41,9 +38,6 @@ pytest-cov==4.1.0
 # Code Quality
 black==23.12.1
 flake8==6.1.0
-
-# ML Dependencies
-scikit-learn==1.6.1
 
 # Web App (FastAPI + React)
 fastapi==0.128.0

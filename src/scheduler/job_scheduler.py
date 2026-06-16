@@ -88,12 +88,11 @@ class JobScheduler:
 
         # Initialize components
         self.provider = get_job_provider()
-        self.matcher = get_job_matcher()  # Singleton — shares model with backend
+        # Matching is Gemini-only; defer matcher creation to run time so a
+        # transient Gemini outage doesn't crash scheduler startup.
+        self.matcher = None
         self.sheets_connector = SheetsConnector()
         self.gemini_reranker = GeminiMatchReranker()  # LLM-based match re-ranking
-
-        # Pre-cache resume skills for faster matching
-        self._preload_resume_skills()
 
         # Get scheduling configuration (for display purposes)
         self.interval_hours = self.config.get("scheduling.interval_hours", 24)
@@ -125,21 +124,6 @@ class JobScheduler:
 
         if not self.enabled:
             logger.info("Job scheduling is disabled in configuration")
-
-    def _preload_resume_skills(self):
-        """Pre-cache resume skill embeddings for faster matching."""
-        try:
-            session = SessionLocal()
-            try:
-                resume = session.query(Resume).order_by(Resume.created_at.desc()).first()
-                if resume and resume.skills:
-                    cached_count = self.matcher.preload_resume_skills(resume.skills)
-                    if cached_count > 0:
-                        logger.info(f"Pre-cached {cached_count} resume skill embeddings")
-            finally:
-                session.close()
-        except Exception as e:
-            logger.warning(f"Could not preload resume skills: {e}")
 
     def get_scheduled_times(self) -> List[str]:
         """Get list of scheduled search times for today.
@@ -349,7 +333,11 @@ class JobScheduler:
 
                 logger.info(f"Found {len(all_jobs)} total jobs in database matching criteria")
 
-                # Match jobs with min_score=0.0 to get ALL jobs (not just high matches)
+                # Match jobs with min_score=0.0 to get ALL jobs (not just high matches).
+                # Lazily create the Gemini matcher; if Gemini is unavailable this
+                # raises and the outer handler skips matching for this run.
+                if self.matcher is None:
+                    self.matcher = get_job_matcher()
                 matches = self.matcher.match_jobs(resume, all_jobs, min_score=0.0)
 
                 # Gemini re-ranking (if enabled)

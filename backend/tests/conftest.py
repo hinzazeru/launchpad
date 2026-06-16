@@ -4,14 +4,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # MOCKING MUST HAPPEN BEFORE IMPORTING APP
-# Mock sentence-transformers dependent modules to avoid environment issues and slow loading
+# Matching is Gemini-only now, so these mocks no longer guard against heavy ML
+# imports — they isolate backend API tests from live Gemini calls. The real
+# modules are restored for the engine unit tests via tests/conftest.py
+# (pytest_sessionstart), which evicts the engine mock before collection.
 mock_role_analyzer = MagicMock()
-mock_role_analyzer.RoleAnalyzer.return_value.analyze_role.return_value = {
-    "alignment_score": 0.85,
-    "matching_keywords": ["Python", "API"],
-    "missing_keywords": ["Java"],
-    "bullets_analysis": []
-}
+mock_role_analyzer.RoleAnalyzer.return_value.is_available.return_value = True
+mock_role_analyzer.RoleAnalyzer.return_value.analyze_all_roles.return_value = []
+mock_role_analyzer.RoleAnalyzer.return_value.get_overall_alignment.return_value = 0.0
 sys.modules["src.targeting.role_analyzer"] = mock_role_analyzer
 sys.modules["src.targeting.role_analyzer.RoleAnalyzer"] = mock_role_analyzer.RoleAnalyzer
 
@@ -20,8 +20,18 @@ mock_bullet_rewriter.BulletRewriter.return_value.is_available.return_value = Tru
 mock_bullet_rewriter.BulletRewriter.return_value.rewrite_bullet.return_value = ["Option 1", "Option 2"]
 sys.modules["src.targeting.bullet_rewriter"] = mock_bullet_rewriter
 
-# Also mock engine if it uses sentence_transformers
+# Mock the matching engine to isolate backend API tests from live Gemini matching.
+# Expose a REAL exception subclass for GeminiUnavailableError so routers that do
+# `except GeminiUnavailableError` work under the mock (a bare MagicMock can't be
+# used in an except clause), and tests can raise the same class.
 mock_engine = MagicMock()
+
+
+class GeminiUnavailableError(RuntimeError):
+    pass
+
+
+mock_engine.GeminiUnavailableError = GeminiUnavailableError
 sys.modules["src.matching.engine"] = mock_engine
 
 # Now imports can proceed safely

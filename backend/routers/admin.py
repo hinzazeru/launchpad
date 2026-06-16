@@ -62,6 +62,7 @@ def backfill_salary(request: Request):
 def rematch_job(request: Request, job_id: int):
     """Re-run Gemini matching for a specific job and update the stored result."""
     from backend.services.matcher_service import get_job_matcher
+    from src.matching.engine import GeminiUnavailableError
 
     db = SessionLocal()
     try:
@@ -77,11 +78,16 @@ def rematch_job(request: Request, job_id: int):
         if not resume:
             raise HTTPException(status_code=404, detail="Resume not found")
 
-        matcher = get_job_matcher()
-        result = matcher.match_job(resume, job)
-
-        if result.get("match_engine") != "gemini":
-            return {"status": "skipped", "reason": "Gemini not available; NLP result unchanged"}
+        try:
+            matcher = get_job_matcher()
+            result = matcher.match_job(resume, job)
+        except GeminiUnavailableError as e:
+            # Matching is Gemini-only — leave the existing result unchanged and
+            # signal that the caller should retry later.
+            raise HTTPException(
+                status_code=503,
+                detail=f"Gemini matching unavailable — retry later: {e}",
+            )
 
         # Update the stored match result with fresh Gemini data
         match_record.match_score = result.get("overall_score", 0) * 100
@@ -118,7 +124,15 @@ def rematch_job(request: Request, job_id: int):
 def _do_rematch(label: str, job_ids: list):
     """Background worker: rematch a list of job IDs. Runs in a thread."""
     from backend.services.matcher_service import get_job_matcher
-    matcher = get_job_matcher()
+    from src.matching.engine import GeminiUnavailableError
+
+    try:
+        matcher = get_job_matcher()
+    except GeminiUnavailableError as e:
+        # Matching is Gemini-only; abort the batch and let it be retried later.
+        logger.error(f"{label}: aborted — Gemini matching unavailable: {e}")
+        return
+
     updated, skipped, failed = 0, 0, 0
 
     for job_id in job_ids:
@@ -132,9 +146,6 @@ def _do_rematch(label: str, job_ids: list):
                 continue
 
             result = matcher.match_job(resume, job)
-            if result.get("match_engine") != "gemini":
-                skipped += 1
-                continue
 
             match_record.match_score = result.get("overall_score", 0) * 100
             match_record.matching_skills = result.get("matching_skills", [])

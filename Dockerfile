@@ -11,16 +11,13 @@ FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies for psycopg2 and spacy
+# Install system dependencies for psycopg2
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install CPU-only PyTorch first (avoids pulling ~2GB of CUDA libraries)
-RUN pip install --no-cache-dir --user torch --index-url https://download.pytorch.org/whl/cpu
-
-# Copy requirements and install remaining deps (torch already satisfied)
+# Install Python dependencies (Gemini-only matching — no PyTorch/ML deps)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 

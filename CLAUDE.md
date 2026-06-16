@@ -6,7 +6,7 @@ This file provides context for AI assistants (Claude, GPT, Copilot, etc.) workin
 
 LaunchPad 💸 is a Python application that automates job discovery by:
 1. Fetching job postings from LinkedIn via Apify API
-2. **Dual-Mode Matching**: Jobs matched against resume using NLP (fast, free) or Gemini AI (accurate, rich insights)
+2. **Gemini AI Matching**: Jobs matched against resume using Gemini AI (rich insights). No NLP fallback — if Gemini is unavailable, searches fail and retry later
 3. **Advanced AI Features**: AI-powered match analysis with strengths/concerns/recommendations, resume bullet rewrites, and persistent AI suggestions
 4. Sending notifications via Telegram and exporting to Google Sheets
 
@@ -17,11 +17,10 @@ src/
 ├── bot/telegram_bot.py      # Telegram bot commands and handlers
 ├── scheduler/job_scheduler.py # Job scheduling logic (uses Telegram JobQueue)
 ├── matching/
-│   ├── engine.py            # Main matching orchestrator (dual-mode: NLP/Gemini)
+│   ├── engine.py            # Main matching orchestrator (Gemini-only; raises GeminiUnavailableError)
 │   ├── gemini_matcher.py    # AI-powered matching with Gemini LLM
 │   ├── requirements.py      # StructuredRequirements & GeminiMatchResult dataclasses
-│   ├── skills_matcher.py    # NLP-based skill matching (sentence-transformers)
-│   └── skill_extractor.py   # Extracts skills from job descriptions
+│   └── skill_extractor.py   # Extracts skills from job descriptions (used by importers)
 ├── database/
 │   ├── models.py            # SQLAlchemy models (Resume, JobPosting, MatchResult, LikedBullet, PerfLogs)
 │   ├── crud.py              # Database operations
@@ -43,7 +42,7 @@ backend/
 │   └── gemini_client.py     # Gemini AI client (google-genai)
 └── config.py                # YAML + env var config loader (ENV_OVERRIDES)
 
-Dockerfile                   # Multi-stage build (Node frontend + Python backend, CPU-only PyTorch)
+Dockerfile                   # Multi-stage build (Node frontend + Python backend; no ML/PyTorch deps)
 railway.json                 # Railway deployment config (Dockerfile builder, healthcheck)
 .dockerignore                # Excludes dev files but keeps frontend source for in-Docker build
 
@@ -64,12 +63,9 @@ frontend/src/
 
 3. **Markdown Escaping**: Dynamic content in Telegram messages must be escaped using `escape_markdown()` in `telegram_bot.py` to prevent parse errors.
 
-4. **Dual-Mode Matching Engine**: Supports three modes via `matching.engine` config:
-   - `"nlp"` - Fast, free NLP matching using sentence-transformers
-   - `"gemini"` - Full AI matching with rich insights (strengths, concerns, recommendations)
-   - `"auto"` (default) - Uses Gemini if available/configured, falls back to NLP
+4. **Gemini-Only Matching Engine**: All job matching uses Gemini AI. There is no NLP fallback. If Gemini is unavailable or a match fails, the engine raises `GeminiUnavailableError` (`src/matching/engine.py`) and the caller fails the search so it can be retried later — never persisting a degraded result. `JobMatcher` raises at construction if Gemini isn't configured.
 
-5. **NLP Match Score Formula**: `Overall = (Skills × 0.45) + (Experience × 0.35) + (Domains × 0.20)`. Handles missing data with neutral scores (0.5).
+5. **Retry-Later Semantics**: Web searches (`backend/routers/search.py`) mark the `SearchJob` as `failed` on a Gemini failure; scheduled runs (`backend/services/webapp_scheduler.py`) record the error and reschedule per the schedule's `max_retries`/`retry_delay_minutes`.
 
 6. **AI Match Insights**: When using Gemini matcher, each match includes:
    - Component scores (skills, experience, seniority, domain)
@@ -96,7 +92,7 @@ frontend/src/
 15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. Both Apify and BrightData providers share this helper.
     - **3 separate calls per job (intentional)**: Domain extraction, summarization, and requirements extraction are kept as 3 individual Gemini calls rather than 1 combined call. Combining them into a single prompt was tested and significantly reduced extraction accuracy — focused single-task prompts produce better results. Do not attempt to merge these into one call to save API quota.
 
-16. **Railway Deployment**: The app is deployed on Railway at `https://YOUR_APP.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + CPU-only PyTorch + Python deps). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
+16. **Railway Deployment**: The app is deployed on Railway at `https://YOUR_APP.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + Python deps; no ML/PyTorch). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
 
 ## Common Tasks
 
@@ -123,17 +119,12 @@ frontend/src/
 
 ### Modifying Match Algorithm
 
-**NLP Matching (traditional)**:
-- Skills matching: `src/matching/skills_matcher.py`
-- Experience matching: `src/matching/engine.py` → `_calculate_experience_score()`
-- Skill extraction dictionary: `src/matching/skill_extractor.py` → `SKILL_DICTIONARY`
-- **Skill relationships**: `data/skill_relationships.json` (edit without code changes)
-
-**AI Matching (Gemini)**:
+Matching is Gemini-only:
 - Matching prompts: `src/matching/gemini_matcher.py` → `MATCHING_PROMPT`
 - Data structures: `src/matching/requirements.py` → `GeminiMatchResult`, `StructuredRequirements`
-- Engine mode selection: `src/matching/engine.py` → `_should_use_gemini()`
+- Orchestration / failure handling: `src/matching/engine.py` → `match_job()`, `match_jobs()`, `GeminiUnavailableError`
 - Requirements extraction: `src/integrations/gemini_client.py` → `GeminiRequirementsExtractor`
+- Resume bullet scoring (for `/analysis`): `src/integrations/gemini_client.py` → `GeminiBulletRewriter.score_bullets()`, consumed by `src/targeting/role_analyzer.py`
 
 ### Skill Relationships
 
@@ -212,7 +203,6 @@ When modifying features, these files often need synchronized updates:
 | New Telegram command | `telegram_bot.py`, `TELEGRAM_BOT.md`, `ARCHITECTURE.md`, `SCHEDULER.md` |
 | New config option | `config.yaml.example`, `config.py` (+ `ENV_OVERRIDES`), relevant docs |
 | Deployment config | `Dockerfile`, `railway.json`, `.dockerignore`, `docs/RAILWAY_DEPLOYMENT.md` |
-| NLP matching algorithm | `engine.py`, `skills_matcher.py`, `ARCHITECTURE.md` |
 | AI matching algorithm | `gemini_matcher.py`, `requirements.py`, `engine.py`, `ARCHITECTURE.md` |
 | AI match insights UI | `api.ts` (types), `JobMatches.tsx`, `Dashboard.tsx` |
 | Database schema | `models.py`, `crud.py`, may need migration |
@@ -230,7 +220,7 @@ When modifying features, these files often need synchronized updates:
   - Guides: `docs/RAILWAY_DEPLOYMENT.md`, `ideas/railway_deployment.md`
 
 ### Dockerfile Notes
-- 3-stage build: Node frontend → Python deps (CPU-only PyTorch) → slim production image
+- 3-stage build: Node frontend → Python deps (no ML/PyTorch) → slim production image
 - `.dockerignore` keeps frontend source for in-Docker build (unlike pre-built approach)
 - Single Gunicorn worker to stay within Railway memory limits
 - `PRODUCTION=true` env var enables serving React build from `/frontend/dist/`
@@ -246,8 +236,7 @@ When modifying features, these files often need synchronized updates:
 
 Key packages and why they're used:
 - `python-telegram-bot`: Telegram bot framework with JobQueue scheduling
-- `sentence-transformers`: NLP embeddings for semantic skill matching
-- `google-genai`: Google Gemini AI SDK
+- `google-genai`: Google Gemini AI SDK (all matching + bullet scoring)
 - `SQLAlchemy`: Database ORM
 - `apify-client`: LinkedIn job data via Apify actors
 - `google-api-python-client`: Google Sheets integration

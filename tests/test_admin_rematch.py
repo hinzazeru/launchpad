@@ -42,13 +42,6 @@ GEMINI_RESULT = {
     "match_confidence": 0.9,
 }
 
-NLP_RESULT = {
-    "match_engine": "nlp",
-    "overall_score": 0.65,
-    "matching_skills": ["Python"],
-}
-
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -188,7 +181,9 @@ class TestRematchJobEndpoint:
         assert len(match.skill_matches) == 1
         assert len(match.skill_gaps_detailed) == 1
 
-    def test_skips_when_nlp_result_leaves_db_unchanged(self, client, db):
+    def test_returns_503_when_gemini_unavailable_db_unchanged(self, client, db):
+        from src.matching.engine import GeminiUnavailableError
+
         resume = make_resume(db)
         job = make_job(db)
         original_score = 55.0
@@ -196,13 +191,13 @@ class TestRematchJobEndpoint:
         db.commit()
 
         mock_matcher = MagicMock()
-        mock_matcher.match_job.return_value = NLP_RESULT
+        mock_matcher.match_job.side_effect = GeminiUnavailableError("Gemini down")
 
         with patch("backend.services.matcher_service.get_job_matcher", return_value=mock_matcher):
             resp = client.post(f"/api/admin/rematch-job/{job.id}", headers=auth_headers())
 
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "skipped"
+        # Gemini-only: matching failure is a retryable 503, existing result untouched.
+        assert resp.status_code == 503
 
         db.refresh(match)
         assert match.match_score == original_score  # unchanged
@@ -293,7 +288,9 @@ class TestDoRematchWorker:
         assert match.ai_recommendations == ["Highlight Python"]
         assert match.match_confidence == 0.9
 
-    def test_skips_nlp_result_leaves_score_unchanged(self, Session, db):
+    def test_gemini_failure_leaves_score_unchanged(self, Session, db):
+        from src.matching.engine import GeminiUnavailableError
+
         resume = make_resume(db)
         job = make_job(db)
         original_score = 45.0
@@ -301,11 +298,11 @@ class TestDoRematchWorker:
         db.commit()
 
         mock_matcher = MagicMock()
-        mock_matcher.match_job.return_value = NLP_RESULT
+        mock_matcher.match_job.side_effect = GeminiUnavailableError("Gemini down")
 
         with patch("backend.routers.admin.SessionLocal", Session), \
              patch("backend.services.matcher_service.get_job_matcher", return_value=mock_matcher):
-            _do_rematch("test", [job.id])
+            _do_rematch("test", [job.id])  # should not raise; per-job failure counted
 
         db.refresh(match)
         assert match.match_score == original_score

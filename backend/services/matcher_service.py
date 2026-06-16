@@ -1,7 +1,8 @@
 """Singleton JobMatcher service.
 
-Avoids recreating the ~80MB SentenceTransformer model on every search request.
-The matcher is lazily initialized on first use and reused thereafter.
+The matcher is lazily initialized on first use and reused thereafter. Matching
+is Gemini-only; construction raises GeminiUnavailableError if Gemini is not
+configured, so the singleton only caches a successfully-initialized matcher.
 """
 
 import gc
@@ -17,11 +18,14 @@ _matcher: Optional[JobMatcher] = None
 _last_used: Optional[float] = None
 
 
-def get_job_matcher(mode: str = "auto") -> JobMatcher:
+def get_job_matcher(mode: str = "gemini") -> JobMatcher:
     """Get the singleton JobMatcher instance.
 
     Creates a new instance on first call, reuses it thereafter.
-    The SentenceTransformer model (~80MB) is loaded once and kept in memory.
+
+    Raises:
+        GeminiUnavailableError: If Gemini matching is not available. The failed
+            instance is not cached, so a later call can retry once Gemini recovers.
     """
     global _matcher, _last_used
     _last_used = time.time()
@@ -49,11 +53,11 @@ def unload_if_idle(idle_seconds: float = 1800.0) -> bool:
 
 
 def release_job_matcher() -> None:
-    """Release the singleton to free ~80MB+ of model memory between scheduled runs.
+    """Release the singleton between scheduled runs.
 
-    The matcher will be re-initialized on the next call to get_job_matcher(),
-    adding ~5-10s reload time. Call this after a scheduled search completes to
-    return memory to baseline between runs.
+    The matcher will be re-initialized on the next call to get_job_matcher().
+    Kept for compatibility with the scheduler's release-after-run flow; the
+    Gemini matcher is lightweight, so this is now mostly a no-op cleanup.
     """
     global _matcher
     if _matcher is not None:

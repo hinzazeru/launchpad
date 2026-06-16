@@ -244,6 +244,11 @@ async def analyze_resume(request: Request, body: AnalyzeRequest):
 
     # Run analysis
     analyzer = get_analyzer()
+    if not analyzer.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="AI analysis unavailable — Gemini is not configured. Retry later.",
+        )
 
     from src.services.performance_logger import PerformanceLogger
     perf_logger = PerformanceLogger()
@@ -350,6 +355,11 @@ async def generate_suggestions(request: Request, body: SuggestionsRequest):
 
     # Run analysis first to get bullet scores
     analyzer = get_analyzer()
+    if not analyzer.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="AI suggestions unavailable — Gemini is not configured. Retry later.",
+        )
     analyses = analyzer.analyze_all_roles(
         resume_text,
         body.job_description,

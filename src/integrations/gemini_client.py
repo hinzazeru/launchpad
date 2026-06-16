@@ -559,6 +559,27 @@ Description:
 {{"score": 0.XX, "reasoning": "2-3 sentence explanation of match quality", "strengths": ["strength1", "strength2"], "gaps": ["gap1", "gap2"]}}
 """
 
+BULLET_SCORE_PROMPT = """You are an expert technical recruiter scoring how well a candidate's resume bullets align with a specific job.
+
+**JOB TITLE:** {job_title}
+
+**KEY JOB REQUIREMENTS:**
+{requirements}
+
+**RESUME BULLETS (numbered):**
+{bullets}
+
+For EACH numbered bullet, judge how directly it demonstrates the skills, scope, and impact this job requires. Score alignment strength to the requirements — NOT writing quality.
+
+**Response format (JSON only, no markdown):**
+{{"scores": [{{"index": 1, "score": 0.XX, "matched": ["requirement phrase this bullet supports"], "missing": ["key requirement this bullet does not address"]}}]}}
+
+Rules:
+- Return exactly one entry per bullet, in order, with a matching "index" (1-based).
+- "score" is 0.0-1.0 (1.0 = directly proves a key requirement; 0.0 = irrelevant).
+- Limit "matched" and "missing" to at most 3 short phrases each.
+"""
+
 BULLET_REWRITE_PROMPT = """You are an expert resume writer specializing in ATS optimization and impactful bullet points.
 
 **JOB CONTEXT:**
@@ -1620,6 +1641,109 @@ class GeminiBulletRewriter:
         except Exception as e:
             logger.error(f"Gemini bullet rewrite error: {e}")
             return {"analysis": f"API error: {e}", "suggestions": []}
+
+    def score_bullets(
+        self,
+        bullets: List[str],
+        job_description: str,
+        job_title: str = ""
+    ) -> List[Dict]:
+        """Score how well each resume bullet aligns with a job description.
+
+        One Gemini call scores all bullets for a role. Returns a list parallel
+        to `bullets`, each entry: {"score": 0.0-1.0, "matched": [...], "missing": [...]}.
+
+        Args:
+            bullets: Resume bullet strings to score (in order)
+            job_description: Full job description text
+            job_title: Optional job title for context
+
+        Returns:
+            List of score dicts, one per input bullet, in the same order.
+
+        Raises:
+            RuntimeError: If Gemini is unavailable or the response can't be parsed.
+        """
+        if not bullets:
+            return []
+        if not self.is_available():
+            raise RuntimeError("Gemini bullet scorer unavailable")
+
+        max_desc_chars = 8000
+        jd = job_description or ""
+        if len(jd) > max_desc_chars:
+            jd = jd[:max_desc_chars] + "..."
+
+        requirements = self.extract_requirements(jd)
+        requirements_text = "\n".join(f"- {r}" for r in requirements) if requirements else (jd or "Not specified")
+
+        numbered = "\n".join(f"{i + 1}. {b}" for i, b in enumerate(bullets))
+        prompt = BULLET_SCORE_PROMPT.format(
+            job_title=job_title or "Unknown",
+            requirements=requirements_text,
+            bullets=numbered,
+        )
+
+        try:
+            response = self._rate_limiter.call_with_retry(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=self.temperature,
+                    max_output_tokens=self.max_tokens,
+                    safety_settings=[
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",       threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+                    ],
+                ),
+            )
+
+            if not response.candidates or not response.candidates[0].content.parts:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else 'unknown'
+                raise RuntimeError(f"Gemini returned no content for bullet scoring (reason: {finish_reason})")
+
+            try:
+                response_text = response.text or ""
+            except ValueError:
+                response_text = "".join(
+                    part.text for part in response.candidates[0].content.parts
+                    if hasattr(part, 'text') and part.text
+                )
+
+            parsed = json.loads(clean_json_text(response_text))
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Failed to parse Gemini bullet score response: {e}") from e
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Gemini bullet scoring error: {e}") from e
+
+        # Map by 1-based index back to input order; default to neutral if absent.
+        by_index: Dict[int, Dict] = {}
+        for entry in parsed.get("scores", []):
+            try:
+                idx = int(entry.get("index"))
+            except (TypeError, ValueError):
+                continue
+            by_index[idx] = entry
+
+        results: List[Dict] = []
+        for i in range(len(bullets)):
+            entry = by_index.get(i + 1, {})
+            try:
+                score = float(entry.get("score", 0.5))
+            except (TypeError, ValueError):
+                score = 0.5
+            score = max(0.0, min(1.0, score))
+            results.append({
+                "score": score,
+                "matched": [str(m) for m in (entry.get("matched") or [])][:3],
+                "missing": [str(m) for m in (entry.get("missing") or [])][:3],
+            })
+        return results
 
     def rewrite_bullets_batch(
         self,
