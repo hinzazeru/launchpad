@@ -217,7 +217,7 @@ gemini:
 
   # Domain Extraction & Summarization (during job import)
   extractor:
-    model: "gemini-3.1-flash-lite-preview"  # Cheapest model - fast for structured extraction
+    model: "gemini-3.1-flash-lite"  # Cheapest model - fast for structured extraction (GA, not preview)
     domain_max_tokens: 300     # Max tokens for domain extraction (JSON response)
     summary_max_tokens: 200    # Max tokens for job summaries (2-3 sentences)
 

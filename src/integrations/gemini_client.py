@@ -775,7 +775,7 @@ class GeminiDomainExtractor:
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
         # Use cheapest model for structured extraction tasks
-        self.model_name = self.config.get("gemini.extractor.model", "gemini-3.1-flash-lite-preview")
+        self.model_name = self.config.get("gemini.extractor.model", "gemini-3.1-flash-lite")
         # Token limits - increased to prevent truncation issues
         self.domain_max_tokens = self.config.get("gemini.extractor.domain_max_tokens", 500)
         self.summary_max_tokens = self.config.get("gemini.extractor.summary_max_tokens", 300)
@@ -1023,7 +1023,7 @@ class GeminiRequirementsExtractor:
         self.config = get_config()
         self.enabled = self.config.get("gemini.enabled", False)
         # Use cheapest model for structured extraction tasks
-        self.model_name = self.config.get("gemini.extractor.model", "gemini-3.1-flash-lite-preview")
+        self.model_name = self.config.get("gemini.extractor.model", "gemini-3.1-flash-lite")
         self.api_key = self.config.get("gemini.api_key")
         self.client = None
 
