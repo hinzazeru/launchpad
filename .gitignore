@@ -96,6 +96,9 @@ data/resumes/Default_*.json
 
 # Personal resume file (contains PII) — use resume.example.txt as template
 resume.txt
+resume_*.rtf
+resume_*.docx
+resume_*.pdf
 
 # Generated output files
 output/
