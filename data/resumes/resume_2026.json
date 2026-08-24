@@ -1,0 +1,401 @@
+{
+    "$schema": "./resume_schema.json",
+    "version": "1.0",
+    "metadata": {
+        "name": "Resume 2026",
+        "description": "Senior product leader - B2B data & analytics, AI product management",
+        "last_updated": "2026-08-24",
+        "tags": [
+            "product",
+            "data",
+            "ai",
+            "b2b-saas",
+            "financial-services"
+        ]
+    },
+    "contact": {
+        "name": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "linkedin": "",
+        "website": ""
+    },
+    "summary": "Senior product leader with 15+ years building and scaling B2B data and analytics products. Owns a $10M+ ARR portfolio of enterprise data products, leads AI evaluation and data-quality standards for a client-facing AI product, and has taken platforms from 8 to 400+ enterprise clients. Combines deep data-infrastructure fluency with 0-to-1 launch experience across new verticals and markets.",
+    "skills": {
+        "product": [
+            "Product Strategy & Vision",
+            "AI Product Management",
+            "LLM Evaluation",
+            "B2B SaaS",
+            "Data Product Management",
+            "Go-to-Market",
+            "Roadmapping",
+            "Cross-functional Leadership"
+        ],
+        "technical": [
+            "SQL",
+            "Python",
+            "Snowflake",
+            "Databricks",
+            "dbt",
+            "Azure Data Factory",
+            "Azure",
+            "OpenMetadata",
+            "Power BI",
+            "Data Modeling",
+            "Data Pipelines",
+            "APIs"
+        ],
+        "tools": [
+            "Git",
+            "GitHub",
+            "GitLab",
+            "Jira",
+            "Confluence"
+        ],
+        "ai_tooling": [
+            "Claude/Claude Code",
+            "Cursor",
+            "Microsoft 365 Copilot",
+            "LLM Evaluation & Benchmarking",
+            "Golden Dataset Validation",
+            "AI-Assisted Prototyping",
+            "AI-Assisted Data Analysis"
+        ],
+        "domains": [
+            "financial_services",
+            "investment_management",
+            "asset_management",
+            "b2b_saas",
+            "b2b",
+            "esg",
+            "regulatory_compliance",
+            "snowflake",
+            "databricks",
+            "oracle",
+            "atlassian",
+            "azure",
+            "ai_ml",
+            "data_engineering"
+        ]
+    },
+    "experience": [
+        {
+            "company": "ISS-Stoxx",
+            "title": "Vice President - Product, Governance Data",
+            "location": "",
+            "start_date": "2023-05",
+            "end_date": "present",
+            "duration": "May 2023 - Present",
+            "description": "",
+            "bullets": [
+                {
+                    "text": "Grew a $10M+ global ARR portfolio across 50+ enterprise clients by defining vision and roadmap for flagship B2B data products, Governance QualityScore and Director Data",
+                    "keywords": [
+                        "product vision",
+                        "roadmap",
+                        "B2B data products",
+                        "ARR",
+                        "enterprise clients"
+                    ],
+                    "metrics": {
+                        "arr": "$10M+",
+                        "clients": "50+"
+                    },
+                    "category": "impact"
+                },
+                {
+                    "text": "Set the accuracy bar gating release of a client-facing AI product by leading LLM evaluation for governance data extraction from public filings, benchmarking model output against human analysts",
+                    "keywords": [
+                        "LLM evaluation",
+                        "AI product",
+                        "data extraction",
+                        "benchmarking",
+                        "release quality"
+                    ],
+                    "category": "technical"
+                },
+                {
+                    "text": "Own the 450+ factor golden dataset serving as ground truth for AI output validation, defining the data-quality standards that determine whether model performance is client-ready",
+                    "keywords": [
+                        "golden dataset",
+                        "data quality",
+                        "AI validation",
+                        "ground truth"
+                    ],
+                    "metrics": {
+                        "factors": "450+"
+                    },
+                    "category": "technical"
+                },
+                {
+                    "text": "Direct 5 business analysts across 6 workstreams through matrix leadership without direct reporting lines, setting priorities and quality standards",
+                    "keywords": [
+                        "matrix leadership",
+                        "team leadership",
+                        "prioritization"
+                    ],
+                    "metrics": {
+                        "team_size": "5",
+                        "workstreams": "6"
+                    },
+                    "category": "leadership"
+                },
+                {
+                    "text": "Increased analytical throughput 4x, from 1 analysis per month to 4, by building internal tooling using Claude Code",
+                    "keywords": [
+                        "internal tooling",
+                        "AI-assisted development",
+                        "Claude Code",
+                        "throughput"
+                    ],
+                    "metrics": {
+                        "throughput_gain": "4x"
+                    },
+                    "category": "technical"
+                },
+                {
+                    "text": "Expanded emerging market coverage 17% and acquired 3 new enterprise clients",
+                    "keywords": [
+                        "market expansion",
+                        "enterprise clients",
+                        "coverage"
+                    ],
+                    "metrics": {
+                        "coverage_growth": "17%",
+                        "new_clients": "3"
+                    },
+                    "category": "impact"
+                },
+                {
+                    "text": "Secured product-market fit for a new academic vertical by translating customer research into a go-to-market strategy from concept through launch",
+                    "keywords": [
+                        "product-market fit",
+                        "new vertical",
+                        "customer research",
+                        "go-to-market",
+                        "0-to-1"
+                    ],
+                    "category": "impact"
+                },
+                {
+                    "text": "Cut prioritization cycles 25% by restructuring global roadmap planning and aligning cross-functional teams on high-impact customer value",
+                    "keywords": [
+                        "roadmap planning",
+                        "prioritization",
+                        "cross-functional alignment",
+                        "process improvement"
+                    ],
+                    "metrics": {
+                        "cycle_reduction": "25%"
+                    },
+                    "category": "process"
+                },
+                {
+                    "text": "Drove a 3.8% viewer response rate to the call to action through a LinkedIn campaign, the highest-performing initiative of 2024",
+                    "keywords": [
+                        "marketing campaign",
+                        "demand generation",
+                        "response rate"
+                    ],
+                    "metrics": {
+                        "response_rate": "3.8%"
+                    },
+                    "category": "impact"
+                }
+            ],
+            "technologies": [
+                "Claude Code",
+                "Jira",
+                "Confluence",
+                "SQL",
+                "Python"
+            ]
+        },
+        {
+            "company": "Ontario Teachers' Pension Plan",
+            "title": "Senior Manager, Product and Insights",
+            "location": "",
+            "start_date": "2018-12",
+            "end_date": "2021-04",
+            "duration": "Dec 2018 - Apr 2021",
+            "description": "",
+            "bullets": [
+                {
+                    "text": "Led a 5-person development team through matrix leadership, delivering automation and self-serve tooling that removed technical build work from analysts, traders, and portfolio managers so they could focus on investment decisions",
+                    "keywords": [
+                        "matrix leadership",
+                        "self-serve tooling",
+                        "automation",
+                        "team leadership"
+                    ],
+                    "metrics": {
+                        "team_size": "5"
+                    },
+                    "category": "leadership"
+                },
+                {
+                    "text": "Optimized investment decision-making for desks managing $13B+ by leading development of 4 pre-trade analytical tools",
+                    "keywords": [
+                        "investment decision-making",
+                        "analytical tools",
+                        "pre-trade"
+                    ],
+                    "metrics": {
+                        "portfolio_size": "$13B+",
+                        "tools_developed": "4"
+                    },
+                    "category": "impact"
+                },
+                {
+                    "text": "Improved data processing speed 38% for a $10B equity portfolio by rebuilding core data pipelines on Azure and Python, enabling real-time trading decisions",
+                    "keywords": [
+                        "data pipelines",
+                        "Azure",
+                        "Python",
+                        "processing speed",
+                        "real-time"
+                    ],
+                    "metrics": {
+                        "portfolio_size": "$10B",
+                        "speed_improvement": "38%"
+                    },
+                    "category": "technical"
+                },
+                {
+                    "text": "Eliminated 100+ manual hours per quarter on a $3B credit portfolio by productizing pre-trade automation through workflow redesign and API integrations, reducing operational risk",
+                    "keywords": [
+                        "automation",
+                        "workflow redesign",
+                        "API integrations",
+                        "operational risk"
+                    ],
+                    "metrics": {
+                        "portfolio_size": "$3B",
+                        "hours_saved": "100+/quarter"
+                    },
+                    "category": "process"
+                },
+                {
+                    "text": "Reduced execution errors 22% by partnering with design and engineering to prototype a trading execution analysis tool",
+                    "keywords": [
+                        "prototyping",
+                        "cross-functional partnership",
+                        "trading execution"
+                    ],
+                    "metrics": {
+                        "error_reduction": "22%"
+                    },
+                    "category": "impact"
+                },
+                {
+                    "text": "Eliminated a full week of work per reporting cycle across 7 trading desks by engineering an automated end-to-end reporting pipeline, improving data accuracy and timeliness for executive strategic reviews",
+                    "keywords": [
+                        "automated pipeline",
+                        "reporting",
+                        "data accuracy"
+                    ],
+                    "metrics": {
+                        "desks": "7",
+                        "time_saved": "1 week/cycle"
+                    },
+                    "category": "process"
+                }
+            ],
+            "technologies": [
+                "Azure",
+                "Python",
+                "APIs",
+                "Power BI"
+            ]
+        },
+        {
+            "company": "Citco Canada Inc.",
+            "title": "Business Intelligence Product Specialist",
+            "location": "",
+            "start_date": "2008-09",
+            "end_date": "2018-02",
+            "duration": "Sep 2008 - Feb 2018",
+            "description": "",
+            "bullets": [
+                {
+                    "text": "Scaled a B2B enterprise analytics platform from 8 to 400+ hedge fund clients managing $500B+ AUM, driving 28% YoY user growth through customer-driven product iteration",
+                    "keywords": [
+                        "B2B enterprise",
+                        "analytics platform",
+                        "scaling",
+                        "user growth",
+                        "hedge funds"
+                    ],
+                    "metrics": {
+                        "clients_growth": "8 to 400+",
+                        "aum": "$500B+",
+                        "yoy_growth": "28%"
+                    },
+                    "category": "impact"
+                },
+                {
+                    "text": "Generated $540K/year in new ARR by mining Oracle BI usage reports to identify high-value client queries, then productizing them into standardized reporting offerings sold across the client base",
+                    "keywords": [
+                        "ARR",
+                        "Oracle BI",
+                        "product analytics",
+                        "monetization"
+                    ],
+                    "metrics": {
+                        "revenue": "$540K/year"
+                    },
+                    "category": "impact"
+                },
+                {
+                    "text": "Achieved 98% on-time delivery across mission-critical data pipelines by conducting 45+ customer research interviews annually to optimize complex lifecycle workflows and eliminate operational bottlenecks",
+                    "keywords": [
+                        "customer research",
+                        "data pipelines",
+                        "workflow optimization",
+                        "on-time delivery"
+                    ],
+                    "metrics": {
+                        "interviews": "45+/year",
+                        "delivery_rate": "98%"
+                    },
+                    "category": "process"
+                },
+                {
+                    "text": "Cut customer issue resolution time 30% by defining requirements for customer service tooling upgrades",
+                    "keywords": [
+                        "requirements definition",
+                        "customer service tooling",
+                        "resolution time"
+                    ],
+                    "metrics": {
+                        "time_reduction": "30%"
+                    },
+                    "category": "process"
+                }
+            ],
+            "technologies": [
+                "Oracle BI",
+                "SQL",
+                "Business Intelligence",
+                "Data Warehousing"
+            ]
+        }
+    ],
+    "education": [
+        {
+            "institution": "Ryerson University",
+            "degree": "Bachelor of Arts",
+            "field": "Administration and Information Management"
+        }
+    ],
+    "certifications": [],
+    "projects": [
+        {
+            "name": "Mind the Governance Gap: The State of Board Oversight and AI Policy in U.S. Companies",
+            "description": "Publication - ISS STOXX, March 2026",
+            "technologies": []
+        }
+    ]
+}

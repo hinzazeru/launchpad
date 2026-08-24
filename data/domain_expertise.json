@@ -393,6 +393,40 @@
           "501(c)(3)"
         ],
         "description": "Nonprofit and social impact"
+      },
+      "esg": {
+        "keywords": [
+          "esg",
+          "environmental social governance",
+          "sustainability",
+          "sustainable investing",
+          "corporate governance",
+          "climate data",
+          "carbon",
+          "responsible investing",
+          "stewardship",
+          "proxy voting",
+          "impact investing"
+        ],
+        "description": "ESG, sustainability and corporate governance data"
+      },
+      "regulatory_compliance": {
+        "keywords": [
+          "regulatory",
+          "regulatory compliance",
+          "compliance",
+          "risk and compliance",
+          "grc",
+          "governance risk compliance",
+          "audit",
+          "regulatory reporting",
+          "aml",
+          "kyc",
+          "sec filings",
+          "disclosure",
+          "policy compliance"
+        ],
+        "description": "Regulatory, compliance and risk governance"
       }
     },
     "platforms": {
@@ -565,6 +599,22 @@
           "cloud storage"
         ],
         "description": "Google Cloud Platform"
+      },
+      "azure": {
+        "keywords": [
+          "azure",
+          "microsoft azure",
+          "azure data factory",
+          "azure synapse",
+          "adf",
+          "azure devops",
+          "azure sql",
+          "azure functions",
+          "blob storage",
+          "azure databricks",
+          "azure ml"
+        ],
+        "description": "Microsoft Azure cloud platform"
       }
     },
     "technologies": {
