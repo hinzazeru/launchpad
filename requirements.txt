@@ -27,7 +27,6 @@ PyPDF2==3.0.1
 
 # HTTP Requests for API Integration
 requests==2.31.0
-apify-client==1.6.3
 aiohttp==3.13.3  # Async HTTP for Bright Data provider
 
 # Testing

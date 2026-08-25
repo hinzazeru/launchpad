@@ -249,7 +249,7 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
 
     Pipeline stages:
     1. INITIALIZING (0-10%): Validate inputs, load resume
-    2. FETCHING (10-40%): Call Apify LinkedIn scraper
+    2. FETCHING (10-40%): Call the LinkedIn job provider
     3. IMPORTING (40-50%): Save jobs to database
     4. MATCHING (50-80%): Run NLP matching + Gemini rerank
     5. EXPORTING (80-95%): Export to Google Sheets
@@ -427,7 +427,7 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
         init_timer.__exit__(None, None, None)
 
         # ====================================================================
-        # STAGE 2: Fetch jobs from Apify (10-40%)
+        # STAGE 2: Fetch jobs from the provider (10-40%)
         # ====================================================================
         fetch_timer = perf_logger.time('fetch')
         fetch_timer.__enter__()
@@ -458,8 +458,8 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
         # Progress queue for collecting updates from async callback
         progress_queue: List[SearchProgress] = []
         
-        async def apify_progress_callback(message: str, sub_progress: float):
-            """Collect progress updates from Apify calls."""
+        async def fetch_progress_callback(message: str, sub_progress: float):
+            """Collect progress updates from job provider calls."""
             # Map sub_progress (0.0-1.0) to overall progress (15-38)
             overall_progress = 15 + int(sub_progress * 23)
             progress_queue.append(SearchProgress(
@@ -478,7 +478,7 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
                 experience_level=job_req.experience_level,
                 work_arrangement=work_arrangement,
                 split_calls=True,  # Enable parallel execution
-                progress_callback=apify_progress_callback
+                progress_callback=fetch_progress_callback
             )
             
             # Yield any progress updates that were collected during async execution
@@ -510,7 +510,7 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
                     continue
             duplicate_count = len(jobs) - len(seen_raw)
             if duplicate_count > 0:
-                logger.info(f"Removed {duplicate_count} duplicate jobs from Apify results")
+                logger.info(f"Removed {duplicate_count} duplicate jobs from provider results")
             jobs = list(seen_raw.values())
             del seen_raw  # Free dedup dict
 
@@ -1371,7 +1371,7 @@ async def _execute_search_job_async(search_id: str):
         _check_cancelled(db, search_job)
 
         # ================================================================
-        # STAGE 2: Fetch jobs from Apify (10-40%)
+        # STAGE 2: Fetch jobs from the provider (10-40%)
         # ================================================================
         update_progress('fetching', 15, f"Fetching jobs for '{search_job.keyword}'...")
 

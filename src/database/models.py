@@ -235,6 +235,8 @@ class SearchPerformance(Base):
     export_ms = Column(Integer, nullable=True)
 
     # Sub-component timings (ms) - nullable
+    # Legacy column from the removed Apify provider; retained for schema
+    # compatibility with existing rows and no longer written to.
     apify_api_ms = Column(Integer, nullable=True)
     db_import_ms = Column(Integer, nullable=True)
     skills_extraction_ms = Column(Integer, nullable=True)
@@ -282,7 +284,7 @@ class APICallMetric(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    call_type = Column(String(50), index=True)  # gemini_rerank, gemini_suggestions, apify_search, sheets_export
+    call_type = Column(String(50), index=True)  # gemini_rerank, gemini_suggestions, sheets_export
     duration_ms = Column(Integer)
     status = Column(String(20))  # success, error, timeout
 

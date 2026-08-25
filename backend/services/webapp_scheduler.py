@@ -385,7 +385,7 @@ class WebAppScheduler:
                 result['_resume_hash'] = resume_hash
             
             # ====================================================================
-            # STAGE 2: Fetch jobs from Apify
+            # STAGE 2: Fetch jobs from the provider
             # ====================================================================
             with perf_logger.time('fetch'):
                 keyword = schedule.keyword.strip()
@@ -426,7 +426,7 @@ class WebAppScheduler:
                             continue
                     duplicate_count = len(jobs) - len(seen_raw)
                     if duplicate_count > 0:
-                        logger.info(f"Removed {duplicate_count} duplicate jobs from Apify results")
+                        logger.info(f"Removed {duplicate_count} duplicate jobs from provider results")
                     jobs = list(seen_raw.values())
 
                 result['jobs_fetched'] = len(jobs) if jobs else 0

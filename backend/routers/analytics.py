@@ -815,7 +815,7 @@ async def get_api_latency(
 ) -> Dict[str, ApiLatencyDetail]:
     """Get API latency percentiles for each API type.
 
-    Returns p50, p90, p99 for each API type (gemini, apify, sheets).
+    Returns p50, p90, p99 for each API type (gemini, sheets).
     """
     cache_key = f"perf_api_latency_{days}"
     cached = _get_cached(cache_key)

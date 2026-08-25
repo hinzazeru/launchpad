@@ -46,7 +46,7 @@ class JobPosting:
     description: str             # Full job description
     url: str                     # LinkedIn job URL
     posted_date: datetime        # When job was posted
-    source: str                  # Data source (e.g., "apify")
+    source: str                  # Data source (e.g., "brightdata")
     created_at: datetime
 ```
 

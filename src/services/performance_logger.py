@@ -95,7 +95,6 @@ class PerformanceLogger:
                 export_ms=self.timings.get('export'),
                 
                 # Sub-components
-                apify_api_ms=self.timings.get('apify_api'),
                 db_import_ms=self.timings.get('db_import'),
                 skills_extraction_ms=self.timings.get('skills_extraction'),
                 nlp_embedding_ms=self.timings.get('nlp_embedding'),

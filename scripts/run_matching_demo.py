@@ -29,7 +29,7 @@ def main():
     print_header("LINKEDIN JOB MATCHER - DEMO")
     print("This demo will:")
     print("  1. Parse your resume from resume.txt")
-    print("  2. Fetch Product Manager jobs from LinkedIn (via Apify)")
+    print("  2. Fetch Product Manager jobs from LinkedIn (via Bright Data)")
     print("  3. Match jobs against your resume using NLP")
     print("  4. Display top matches ranked by relevance")
     print()
@@ -73,8 +73,8 @@ def main():
         db.close()
         sys.exit(1)
 
-    # Fetch jobs from Apify
-    print_header("Step 4: Fetch Jobs from LinkedIn via Apify")
+    # Fetch jobs from Bright Data
+    print_header("Step 4: Fetch Jobs from LinkedIn via Bright Data")
     print("Searching for: Product Manager jobs")
     print("Location: United States")
     print("Max results: 20")
@@ -92,7 +92,7 @@ def main():
             job_type="Full-time"
         )
 
-        print(f"\n* Retrieved {len(raw_jobs)} jobs from Apify")
+        print(f"\n* Retrieved {len(raw_jobs)} jobs from Bright Data")
 
         # Normalize and save jobs to database
         print("\nProcessing and saving jobs to database...")

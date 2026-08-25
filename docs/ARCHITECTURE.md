@@ -61,7 +61,7 @@
                              │
                              ▼
           ┌──────────────────────────────────────────────────────────────┐
-          │                      APIFY API                               │
+          │                      BRIGHT DATA API                               │
           │              LinkedIn Jobs Scraper                           │
           └───────────────────────────┬──────────────────────────────────┘
                                       │
@@ -126,7 +126,7 @@
 | **Bullet Router** | `backend/routers/bullets.py` | Manages saved/liked bullet rewrites |
 | **Telegram Bot** | `src/bot/telegram_bot.py` | Command handling, user interaction |
 | **Job Scheduler** | `src/scheduler/job_scheduler.py` | Automated background scheduling |
-| **API Importer** | `src/importers/apify_provider.py` | Fetch jobs from Apify |
+| **API Importer** | `src/importers/brightdata_provider.py` | Fetch jobs from Bright Data |
 | **BrightData Importer** | `src/importers/brightdata_provider.py` | Fetch jobs from Bright Data |
 | **Job Enrichment** | `src/importers/enrichment.py` | Parallel Gemini extraction (domains, summaries, requirements) |
 | **Job Matcher** | `src/matching/engine.py` | Orchestrate matching (dual-mode) |
@@ -156,7 +156,7 @@
    └── Establish Server-Sent Events connection
 
 3. FETCHING
-   ├── Call Apify LinkedIn Jobs Scraper API
+   ├── Call Bright Data LinkedIn Jobs API
    ├── Stream progress: "Fetching jobs..."
    └── Global SearchStatusIndicator shows progress on all pages
 
@@ -197,7 +197,7 @@ NOTE: Search continues running even if user navigates away from GetJobs page.
 
 2. EXECUTION
    ├── Fetch active profile configuration
-   ├── Call Apify API
+   ├── Call Bright Data API
    ├── Import and Match (same core logic as Web App)
    ├── Export to Sheets
    └── Notify via Telegram (Push Top 5 matches)

@@ -5,7 +5,7 @@ This file provides context for AI assistants (Claude, GPT, Copilot, etc.) workin
 ## Project Overview
 
 LaunchPad 💸 is a Python application that automates job discovery by:
-1. Fetching job postings from LinkedIn via Apify API
+1. Fetching job postings from LinkedIn via the Bright Data API
 2. **Gemini AI Matching**: Jobs matched against resume using Gemini AI (rich insights). No NLP fallback — if Gemini is unavailable, searches fail and retry later
 3. **Advanced AI Features**: AI-powered match analysis with strengths/concerns/recommendations, resume bullet rewrites, and persistent AI suggestions
 4. Sending notifications via Telegram and exporting to Google Sheets
@@ -34,7 +34,6 @@ backend/
 │   ├── analytics.py         # Performance summaries
 └── ...
 ├── importers/
-│   ├── apify_provider.py    # Fetches jobs from Apify LinkedIn scraper
 │   ├── brightdata_provider.py # Fetches jobs from Bright Data
 │   └── enrichment.py        # Parallel Gemini extraction (domains, summaries, requirements)
 ├── integrations/
@@ -89,7 +88,7 @@ frontend/src/
 
 14. **Environment Variable Config Overrides**: `src/config.py` checks env vars before YAML values via the `ENV_OVERRIDES` mapping. This enables Railway/cloud deployments where secrets are injected as env vars. Config.yaml is optional — if missing, the app runs on env vars and defaults only. Boolean coercion handles `"true"/"false"` strings automatically.
 
-15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. Both Apify and BrightData providers share this helper.
+15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. The Bright Data provider uses this helper.
     - **3 separate calls per job (intentional)**: Domain extraction, summarization, and requirements extraction are kept as 3 individual Gemini calls rather than 1 combined call. Combining them into a single prompt was tested and significantly reduced extraction accuracy — focused single-task prompts produce better results. Do not attempt to merge these into one call to save API quota.
 
 16. **Railway Deployment**: The app is deployed on Railway at `https://YOUR_APP.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + Python deps; no ML/PyTorch). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
@@ -206,7 +205,7 @@ When modifying features, these files often need synchronized updates:
 | AI matching algorithm | `gemini_matcher.py`, `requirements.py`, `engine.py`, `ARCHITECTURE.md` |
 | AI match insights UI | `api.ts` (types), `JobMatches.tsx`, `Dashboard.tsx` |
 | Database schema | `models.py`, `crud.py`, may need migration |
-| Job enrichment pipeline | `enrichment.py`, `apify_provider.py`, `brightdata_provider.py` |
+| Job enrichment pipeline | `enrichment.py`, `brightdata_provider.py` |
 
 ## Deployment
 
@@ -228,7 +227,7 @@ When modifying features, these files often need synchronized updates:
 ## Known Limitations
 
 1. Resume parsing only supports plain text (.txt) and markdown (.md)
-2. Apify API has rate limits and costs per call
+2. Bright Data API has rate limits and costs per call
 3. Telegram bot can only run one instance at a time (polling conflict)
 4. Google Sheets/Gmail OAuth tokens require local browser flow — not available on Railway without volume mounts
 
@@ -238,7 +237,7 @@ Key packages and why they're used:
 - `python-telegram-bot`: Telegram bot framework with JobQueue scheduling
 - `google-genai`: Google Gemini AI SDK (all matching + bullet scoring)
 - `SQLAlchemy`: Database ORM
-- `apify-client`: LinkedIn job data via Apify actors
+- `requests`: LinkedIn job data via the Bright Data API
 - `google-api-python-client`: Google Sheets integration
 
 **Frontend:**

@@ -6,19 +6,13 @@ database:
   url: "sqlite:///linkedin_job_matcher.db"  # SQLite database path
   # For PostgreSQL: "postgresql://user:password@localhost/dbname"
 
-# Apify API Configuration
-apify:
-  api_key: "YOUR_APIFY_API_KEY_HERE"  # Get from https://console.apify.com/account/integrations
-  actor_id: "vulnv/linkedin-jobs-scraper"  # Default actor to use
-
 # Job Data Provider Configuration
 job_provider:
   # Provider to use for fetching LinkedIn jobs
   # Options:
-  #   "apify" - Use Apify LinkedIn scraper (original)
   #   "brightdata" - Use Bright Data LinkedIn Jobs API
-  #   "auto" - Try Bright Data first, fall back to Apify if not configured
-  provider: "apify"
+  #   "auto" - Legacy alias, resolves to Bright Data
+  provider: "brightdata"
 
 # Bright Data API Configuration
 brightdata:

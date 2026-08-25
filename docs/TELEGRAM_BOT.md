@@ -284,7 +284,7 @@ Deploy your bot to run 24/7 for free! Choose one of these platforms:
    - Add these (Railway supports config files, but env vars are more secure):
      - `TELEGRAM_BOT_TOKEN`: Your bot token
      - `TELEGRAM_USER_ID`: Your user ID
-     - `APIFY_API_KEY`: Your Apify key
+     - `BRIGHTDATA_API_KEY`: Your Bright Data key
 
    - Update code to read from environment variables if needed
 
@@ -319,7 +319,7 @@ Deploy your bot to run 24/7 for free! Choose one of these platforms:
            sync: false
          - key: TELEGRAM_USER_ID
            sync: false
-         - key: APIFY_API_KEY
+         - key: BRIGHTDATA_API_KEY
            sync: false
    ```
 
@@ -332,7 +332,7 @@ Deploy your bot to run 24/7 for free! Choose one of these platforms:
 
 4. **Set Environment Variables**
    - In Render dashboard, go to Environment
-   - Add your bot token, user ID, and Apify key
+   - Add your bot token, user ID, and Bright Data key
 
 **Cost:** Free tier includes 750 hours/month (enough for 24/7)
 
@@ -381,7 +381,7 @@ Deploy your bot to run 24/7 for free! Choose one of these platforms:
    ```bash
    flyctl secrets set TELEGRAM_BOT_TOKEN="your_token"
    flyctl secrets set TELEGRAM_USER_ID="your_id"
-   flyctl secrets set APIFY_API_KEY="your_key"
+   flyctl secrets set BRIGHTDATA_API_KEY="your_key"
    ```
 
 5. **Deploy**
@@ -424,7 +424,6 @@ linkedin-job-matcher/
 python-telegram-bot==22.5
 SQLAlchemy==2.0.23
 PyYAML==6.0.1
-apify-client==1.5.0
 google-api-python-client==2.108.0
 google-auth==2.25.2
 google-auth-oauthlib==1.2.0
@@ -466,13 +465,13 @@ import os
 # Telegram config
 config["telegram.bot_token"] = os.getenv("TELEGRAM_BOT_TOKEN", config.get("telegram.bot_token"))
 config["telegram.allowed_user_id"] = os.getenv("TELEGRAM_USER_ID", config.get("telegram.allowed_user_id"))
-config["apify.api_key"] = os.getenv("APIFY_API_KEY", config.get("apify.api_key"))
+config["brightdata.api_key"] = os.getenv("BRIGHTDATA_API_KEY", config.get("brightdata.api_key"))
 ```
 
 Then set these in your cloud platform:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_USER_ID`
-- `APIFY_API_KEY`
+- `BRIGHTDATA_API_KEY`
 
 ## Troubleshooting
 
@@ -507,7 +506,7 @@ Then set these in your cloud platform:
 1. This is normal for large searches (can take 2-5 minutes)
 2. Reduce `max_results` in config
 3. Limit `search_keywords` to 1-2 keywords
-4. Check Apify API limits
+4. Check Bright Data API limits
 
 ---
 
@@ -555,7 +554,7 @@ Then set these in your cloud platform:
 
 1. ✅ Check logs regularly (daily at first)
 2. ✅ Set up alerts if bot goes down (Render/Railway offer this)
-3. ✅ Monitor API usage (Apify dashboard)
+3. ✅ Monitor API usage (Bright Data dashboard)
 
 ### Cost Management
 

@@ -64,7 +64,7 @@ class JobProvider(ABC):
             - description: Job description/summary
             - url: Job posting URL
             - posting_date: When job was posted (datetime)
-            - source: Provider identifier ('apify', 'brightdata', etc.)
+            - source: Provider identifier ('brightdata', etc.)
             - required_skills: List of required skills
             - experience_required: Years of experience (float)
             - salary: Salary information (optional)
@@ -78,6 +78,6 @@ class JobProvider(ABC):
         """Return provider identifier.
         
         Returns:
-            Provider name string (e.g., 'apify', 'brightdata')
+            Provider name string (e.g., 'brightdata')
         """
         pass

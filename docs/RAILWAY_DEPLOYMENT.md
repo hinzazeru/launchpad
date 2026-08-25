@@ -32,7 +32,7 @@ All secrets are configured as Railway env vars. The app's `src/config.py` checks
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection (auto-referenced from Postgres service) |
-| `APIFY_API_KEY` | Apify LinkedIn scraper API key |
+| `BRIGHTDATA_API_KEY` | Bright Data LinkedIn Jobs API key |
 | `BRIGHTDATA_API_KEY` | Bright Data API key |
 | `GEMINI_API_KEY` | Google Gemini AI API key |
 | `GEMINI_ENABLED` | `true` |

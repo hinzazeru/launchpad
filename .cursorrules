@@ -139,4 +139,4 @@ logger.error("Error occurred", exc_info=True)  # Include traceback
 1. **Telegram Markdown parsing**: Unescaped `_`, `*`, `[`, `]` in dynamic content will crash the bot
 2. **Event loop conflicts**: Don't use standalone APScheduler with python-telegram-bot's run_polling()
 3. **SQLite in cloud**: Won't persist - use PostgreSQL for production deployments
-4. **Apify costs**: Each API call costs money - profiles use single keywords to minimize calls
+4. **Provider costs**: Each API call costs money - profiles use single keywords to minimize calls

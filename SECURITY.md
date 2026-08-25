@@ -6,7 +6,7 @@ The following files are excluded via `.gitignore`. Do not commit them, ever:
 
 | File | Contains |
 |------|----------|
-| `config.yaml` | API keys (Apify, Gemini, Telegram, Bright Data) |
+| `config.yaml` | API keys (Gemini, Telegram, Bright Data) |
 | `.env` | Environment variable overrides |
 | `credentials.json` | Google OAuth 2.0 client secret |
 | `token.json` | Gmail OAuth access + refresh token |
@@ -28,7 +28,7 @@ Before making this repository public or sharing it:
 - [ ] `config.yaml` is not tracked (`git status` should not show it)
 - [ ] `credentials.json`, `token.json`, `sheets_token.json` are not tracked
 - [ ] `resume.txt` is not tracked
-- [ ] No API keys appear in any tracked file (`git grep -i "apify_api\|sk-\|AIzaSy\|GOCSPX"`)
+- [ ] No API keys appear in any tracked file (`git grep -i "sk-\|AIzaSy\|GOCSPX"`)
 - [ ] `.env` is not tracked
 - [ ] Local database files are not tracked
 
@@ -39,7 +39,6 @@ Before making this repository public or sharing it:
 If any credential file is accidentally committed or exposed:
 
 1. **Revoke immediately** — do not wait:
-   - **Apify API key**: [apify.com/account/integrations](https://console.apify.com/account/integrations)
    - **Bright Data key**: [brightdata.com/cp/api_access](https://brightdata.com/cp/api_access)
    - **Gemini API key**: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
    - **Telegram bot token**: Send `/revoke` to [@BotFather](https://t.me/BotFather)

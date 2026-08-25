@@ -4,7 +4,7 @@ Job scheduling and orchestration for automated LinkedIn job searches.
 
 ## Overview
 
-This module manages automated job searches, including scheduling, profile management, and coordination between the Apify API, matching engine, and notification systems.
+This module manages automated job searches, including scheduling, profile management, and coordination between the job provider API, matching engine, and notification systems.
 
 ## Files
 
@@ -183,7 +183,7 @@ Based on `interval_hours`, `start_time`, and `end_time`:
 When a search runs (manual or scheduled), the pipeline executes in 6 stages:
 
 1. **Stage 1 - Resume Fetch** (Critical): Load most recent resume from database
-2. **Stage 2 - Apify Job Fetch** (Critical): Call LinkedIn Jobs Scraper API (1 call)
+2. **Stage 2 - Job Fetch** (Critical): Call the Bright Data LinkedIn Jobs API (1 call)
 3. **Stage 3 - Database Import**: Validate, deduplicate, store new jobs
 4. **Stage 4 - Job Matching**: Filter and match jobs against resume
    - Filter by keyword (job title contains search term)

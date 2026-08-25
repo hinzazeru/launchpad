@@ -31,7 +31,7 @@ The job scheduler automates the job search process:
 Before using the scheduler, ensure you have:
 
 1. **Active Resume**: At least one resume created in the database
-2. **Apify API Key**: Configured in `config.yaml`
+2. **Bright Data API Key**: Configured in `config.yaml`
 3. **Telegram Bot**: Configured with bot token and user ID
 4. **Google Sheets** (optional): Sheets integration configured for exports
 
@@ -147,7 +147,7 @@ Useful when you don't want to be disturbed but want searches to continue.
 When the scheduler runs (either on schedule or via `/search`):
 
 1. **Gets Resume**: Queries database for most recent resume
-2. **Fetches Jobs**: Calls Apify LinkedIn Jobs Scraper (1 API call)
+2. **Fetches Jobs**: Calls the Bright Data LinkedIn Jobs API (1 API call)
 3. **Imports to Database**: Stores new jobs, deduplicates existing ones
 4. **Matches Jobs**: Runs matching algorithm against resume
 5. **Saves Results**: Stores match results in database
@@ -272,7 +272,7 @@ Match results are stored with:
 
 ### API Cost Optimization
 
-Each Apify API call costs money. The profile system ensures:
+Each provider API call costs money. The profile system ensures:
 - 1 keyword per profile = 1 API call per search
 - With `interval_hours: 4` and 4 runs/day = 4 API calls/day
 - Compare to old multi-keyword approach which could use 12+ calls/day

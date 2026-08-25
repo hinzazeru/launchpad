@@ -27,9 +27,8 @@ def temp_config_file():
 database:
   url: "sqlite:///test.db"
 
-apify:
+brightdata:
   api_key: "test_api_key_123"
-  actor_id: "test/actor"
 
 search:
   default_location: "Test City"
@@ -88,7 +87,7 @@ def test_config_loads_from_file(temp_config_file):
     config.load_config(temp_config_file)
 
     assert config.get("database.url") == "sqlite:///test.db"
-    assert config.get("apify.api_key") == "test_api_key_123"
+    assert config.get("brightdata.api_key") == "test_api_key_123"
 
 
 def test_config_get_with_default(temp_config_file):
@@ -97,7 +96,7 @@ def test_config_get_with_default(temp_config_file):
     config.load_config(temp_config_file)
 
     # Existing value
-    assert config.get("apify.api_key") == "test_api_key_123"
+    assert config.get("brightdata.api_key") == "test_api_key_123"
 
     # Non-existent value with default
     assert config.get("nonexistent.key", "default_value") == "default_value"
@@ -124,19 +123,19 @@ def test_config_raises_on_invalid_yaml(invalid_config_file):
         config.load_config(invalid_config_file)
 
 
-def test_get_apify_api_key(temp_config_file):
-    """Test getting Apify API key."""
+def test_get_brightdata_api_key(temp_config_file):
+    """Test getting Bright Data API key."""
     config = Config(auto_load=False)
     config.load_config(temp_config_file)
 
-    assert config.get_apify_api_key() == "test_api_key_123"
+    assert config.get_brightdata_api_key() == "test_api_key_123"
 
 
-def test_get_apify_api_key_raises_on_missing():
+def test_get_brightdata_api_key_raises_on_missing():
     """Test that missing API key raises error."""
     config_content = """
-apify:
-  api_key: "YOUR_APIFY_API_KEY_HERE"
+brightdata:
+  api_key: "YOUR_BRIGHTDATA_API_KEY_HERE"
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(config_content)
@@ -146,18 +145,10 @@ apify:
         config = Config(auto_load=False)
         config.load_config(temp_path)
 
-        with pytest.raises(ValueError, match="Apify API key is not configured"):
-            config.get_apify_api_key()
+        with pytest.raises(ValueError, match="Bright Data API key is not configured"):
+            config.get_brightdata_api_key()
     finally:
         os.unlink(temp_path)
-
-
-def test_get_apify_actor_id(temp_config_file):
-    """Test getting Apify actor ID."""
-    config = Config(auto_load=False)
-    config.load_config(temp_config_file)
-
-    assert config.get_apify_actor_id() == "test/actor"
 
 
 def test_get_database_url(temp_config_file):
@@ -288,16 +279,16 @@ def test_config_reload(temp_config_file):
     config = Config(auto_load=False)
     config.load_config(temp_config_file)
 
-    assert config.get("apify.api_key") == "test_api_key_123"
+    assert config.get("brightdata.api_key") == "test_api_key_123"
 
     # Modify the file
     with open(temp_config_file, 'w') as f:
-        f.write("apify:\n  api_key: 'new_key_456'\n")
+        f.write("brightdata:\n  api_key: 'new_key_456'\n")
 
     # Reload
     config.reload()
 
-    assert config.get("apify.api_key") == "new_key_456"
+    assert config.get("brightdata.api_key") == "new_key_456"
 
 
 def test_get_config_singleton():

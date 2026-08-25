@@ -8,7 +8,7 @@ LaunchPad fetches job postings from LinkedIn, matches them against your resume u
 
 ## Features
 
-- **Job Fetching** — Pull fresh LinkedIn jobs via Apify or Bright Data (configurable)
+- **Job Fetching** — Pull fresh LinkedIn jobs via Bright Data
 - **Dual-Mode Matching** — NLP matching (free, fast) or Gemini AI matching (richer insights: strengths, concerns, skill gaps)
 - **AI Bullet Rewrites** — Gemini rewrites your resume bullets to align with job requirements; suggestions are saved to avoid re-running expensive LLM calls
 - **Scheduled Searches** — Run job searches on a schedule via the web UI or Telegram bot
@@ -25,7 +25,7 @@ LaunchPad fetches job postings from LinkedIn, matches them against your resume u
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS |
 | Database | SQLite (local) / PostgreSQL (production) |
 | AI | Google Gemini (3 Flash / 3.1 Flash Lite) |
-| Job Data | Apify LinkedIn Scraper, Bright Data LinkedIn Jobs API |
+| Job Data | Bright Data LinkedIn Jobs API |
 | Notifications | Telegram Bot API |
 | Deployment | Docker, Railway |
 
@@ -37,7 +37,7 @@ LaunchPad fetches job postings from LinkedIn, matches them against your resume u
 
 - Python 3.10+
 - Node 20+
-- An [Apify](https://console.apify.com) or [Bright Data](https://brightdata.com) API key
+- A [Bright Data](https://brightdata.com) API key
 - A [Google Gemini](https://aistudio.google.com/app/apikey) API key (optional, for AI features)
 
 ### 1. Clone and configure
@@ -100,8 +100,8 @@ Key sections:
 | Section | Description |
 |---------|-------------|
 | `database` | SQLite path or PostgreSQL URL |
-| `apify` / `brightdata` | Job data provider credentials |
-| `job_provider` | Which provider to use (`apify`, `brightdata`, or `auto`) |
+| `brightdata` | Job data provider credentials |
+| `job_provider` | Which provider to use (`brightdata`) |
 | `matching` | Engine mode (`nlp`, `gemini`, or `auto`), weights, thresholds |
 | `gemini` | Gemini API key, model selection, rate limits |
 | `scheduling` | Automated search intervals and keyword profiles |

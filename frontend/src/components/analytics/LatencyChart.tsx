@@ -14,14 +14,12 @@ interface LatencyData {
 const API_LABELS: Record<string, string> = {
   gemini_rerank: 'Gemini Rerank',
   gemini_suggestions: 'Gemini Suggestions',
-  apify_search: 'Apify Search',
   sheets_export: 'Sheets Export',
 };
 
 const API_COLORS: Record<string, { p50: string; p90: string }> = {
   gemini_rerank: { p50: '#8b5cf6', p90: '#c4b5fd' },
   gemini_suggestions: { p50: '#6366f1', p90: '#a5b4fc' },
-  apify_search: { p50: '#3b82f6', p90: '#93c5fd' },
   sheets_export: { p50: '#10b981', p90: '#6ee7b7' },
 };
 

@@ -1,7 +1,7 @@
 """Job scheduler for automated LinkedIn job searches.
 
 This module manages automated job searches, keyword profiles, and coordinates
-between the Apify API, matching engine, and notification systems.
+between the job provider API, matching engine, and notification systems.
 
 NOTE: Scheduling is handled by Telegram's JobQueue in telegram_bot.py.
 This class provides the search pipeline orchestration and profile management.
@@ -156,7 +156,7 @@ class JobScheduler:
 
         This method executes the job search pipeline in stages:
         1. Fetches resume from database (critical - aborts if fails)
-        2. Fetches jobs from LinkedIn via Apify (critical - aborts if fails)
+        2. Fetches jobs from LinkedIn via the job provider (critical - aborts if fails)
         3. Imports jobs to database (continues with warning if fails)
         4. Matches jobs against resume (continues with warning if fails)
         5. Exports to Google Sheets (non-critical - continues if fails)
@@ -210,10 +210,10 @@ class JobScheduler:
         perf_stats['stages']['resume'] = time_module.perf_counter() - stage_start
 
         # ========================================================================
-        # STAGE 2: Apify Job Fetching (Critical - abort if fails)
+        # STAGE 2: Job Fetching (Critical - abort if fails)
         # ========================================================================
         stage_start = time_module.perf_counter()
-        logger.info("[Stage 2/6] Fetching jobs from LinkedIn via Apify...")
+        logger.info("[Stage 2/6] Fetching jobs from LinkedIn...")
 
         # Prepare search parameters
         if custom_keywords:
@@ -257,11 +257,11 @@ class JobScheduler:
                 logger.info(f"[Stage 2] SUCCESS: Found {len(jobs)} jobs")
 
         except Exception as e:
-            logger.error(f"[Stage 2] FAILED: Apify API error: {e}", exc_info=True)
+            logger.error(f"[Stage 2] FAILED: job provider API error: {e}", exc_info=True)
             self.stats['failed_runs'] += 1
-            self.stats['last_error'] = f"Apify job fetch failed: {e}"
+            self.stats['last_error'] = f"Job fetch failed: {e}"
             return self._finalize_perf_stats(perf_stats)
-        perf_stats['stages']['apify'] = time_module.perf_counter() - stage_start
+        perf_stats['stages']['fetch'] = time_module.perf_counter() - stage_start
         perf_stats['jobs_fetched'] = len(jobs) if jobs else 0
 
         # If no jobs found, exit gracefully (not an error, just no results)

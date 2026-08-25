@@ -121,7 +121,7 @@ class TestFetchFailure:
         """If the job provider raises, the SearchJob should be marked failed."""
         failing_provider = MagicMock()
         failing_provider.search_jobs_async = AsyncMock(
-            side_effect=RuntimeError("Apify API down")
+            side_effect=RuntimeError("Job provider API down")
         )
 
         client, ctx = make_search_client(
@@ -133,6 +133,6 @@ class TestFetchFailure:
 
             job = db.query(SearchJob).filter(SearchJob.search_id == search_id).first()
             assert job.status == "failed"
-            assert "Apify API down" in (job.error or "")
+            assert "Job provider API down" in (job.error or "")
         finally:
             stop_patches(ctx)

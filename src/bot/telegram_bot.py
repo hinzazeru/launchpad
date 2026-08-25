@@ -418,8 +418,8 @@ class TelegramBot:
                 if perf_stats and perf_stats.get('enabled'):
                     stages = perf_stats.get('stages', {})
                     result_message += f"\n\n⏱️ *Performance* ({perf_stats.get('total', 0):.1f}s total):\n"
-                    if 'apify' in stages:
-                        result_message += f"• Apify: {stages['apify']:.1f}s\n"
+                    if 'fetch' in stages:
+                        result_message += f"• Fetch: {stages['fetch']:.1f}s\n"
                     if 'import' in stages:
                         result_message += f"• Import \\+ AI: {stages['import']:.1f}s\n"
                     if 'matching' in stages:

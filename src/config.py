@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 # Mapping of config dot-paths to environment variable names.
 # When set, env vars take priority over config.yaml values.
 ENV_OVERRIDES: Dict[str, str] = {
-    "apify.api_key": "APIFY_API_KEY",
-    "apify.actor_id": "APIFY_ACTOR_ID",
     "brightdata.api_key": "BRIGHTDATA_API_KEY",
     "gemini.api_key": "GEMINI_API_KEY",
     "gemini.enabled": "GEMINI_ENABLED",
@@ -152,7 +150,7 @@ class Config:
         3. Provided default
 
         Args:
-            key_path: Dot-separated path to config value (e.g., "apify.api_key")
+            key_path: Dot-separated path to config value (e.g., "brightdata.api_key")
             default: Default value if key doesn't exist
 
         Returns:
@@ -160,7 +158,7 @@ class Config:
 
         Example:
             config = Config()
-            api_key = config.get("apify.api_key")
+            api_key = config.get("brightdata.api_key")
             min_score = config.get("matching.min_match_score", 0.6)
         """
         # 1. Check environment variable override
@@ -185,31 +183,6 @@ class Config:
 
         return value
 
-    def get_apify_api_key(self) -> str:
-        """Get Apify API key from config.
-
-        Returns:
-            Apify API key
-
-        Raises:
-            ValueError: If API key is not configured
-        """
-        api_key = self.get("apify.api_key")
-        if not api_key or api_key == "YOUR_APIFY_API_KEY_HERE":
-            raise ValueError(
-                "Apify API key is not configured. "
-                "Please set 'apify.api_key' in config.yaml"
-            )
-        return api_key
-
-    def get_apify_actor_id(self) -> str:
-        """Get Apify actor ID from config.
-
-        Returns:
-            Apify actor ID (defaults to vulnv/linkedin-jobs-scraper)
-        """
-        return self.get("apify.actor_id", "vulnv/linkedin-jobs-scraper")
-
     def get_brightdata_api_key(self) -> str:
         """Get Bright Data API key from config.
 
@@ -231,10 +204,10 @@ class Config:
         """Get configured job provider.
 
         Returns:
-            Job provider name ('apify', 'brightdata', or 'auto')
-            Defaults to 'apify' for backward compatibility
+            Job provider name ('brightdata'; 'auto' is accepted as a
+            legacy alias and resolves to Bright Data)
         """
-        return self.get("job_provider.provider", "apify")
+        return self.get("job_provider.provider", "brightdata")
 
     def get_database_url(self) -> str:
         """Get database URL from config.

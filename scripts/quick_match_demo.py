@@ -88,7 +88,7 @@ def main():
     print(f"* Found {len(jobs)} jobs in database")
 
     if len(jobs) == 0:
-        print("\nX No jobs found. Please run test_apify_connection.py first.")
+        print("\nX No jobs found. Please run test_brightdata_connection.py first.")
         db.close()
         sys.exit(1)
 
