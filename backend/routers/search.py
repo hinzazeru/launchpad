@@ -1471,9 +1471,14 @@ async def _execute_search_job_async(search_id: str):
             try:
                 from sqlalchemy import or_
 
-                query = db_session.query(JobPosting).filter(
-                    JobPosting.title.ilike(f"%{actual_keyword}%")
-                )
+                # Title vocabulary instead of a literal keyword match — the
+                # literal form required the whole keyword phrase to appear
+                # contiguously, silently excluding "Senior GROWTH Product
+                # Manager", "Sr. Product Mgr" and "Product Manager, X".
+                from src.matching.title_filter import apply_title_filter
+
+                query = db_session.query(JobPosting)
+                query, _role_profile = apply_title_filter(query, actual_keyword)
 
                 # Skip DB location filter for remote searches and broad geographic terms
                 BROAD_LOCATIONS = {"north america", "south america", "europe", "asia", "worldwide", "global", "anywhere"}

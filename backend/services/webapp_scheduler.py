@@ -472,9 +472,12 @@ class WebAppScheduler:
                 perf_logger.record_extra('rematch_type', rematch_type)
 
                 # Query matching jobs
-                query = db.query(JobPosting).filter(
-                    JobPosting.title.ilike(f"%{actual_keyword}%")
-                )
+                # See src/matching/title_filter.py — the literal keyword match
+                # this replaces was excluding ~40% of genuine PM roles.
+                from src.matching.title_filter import apply_title_filter
+
+                query = db.query(JobPosting)
+                query, _role_profile = apply_title_filter(query, actual_keyword)
                 
                 # Skip DB location filter for remote searches and broad geographic terms
                 # that won't appear in LinkedIn job locations (e.g. "North America", "Europe")

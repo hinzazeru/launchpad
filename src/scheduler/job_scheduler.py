@@ -296,9 +296,12 @@ class JobScheduler:
             db_session = SessionLocal()
             try:
                 # Build query: filter by keyword AND location (unless remote search)
-                query = db_session.query(JobPosting).filter(
-                    JobPosting.title.ilike(f"%{actual_keyword}%")
-                )
+                # Same title-vocabulary filter as the webapp pipeline; see
+                # src/matching/title_filter.py for the measurement behind it.
+                from src.matching.title_filter import apply_title_filter
+
+                query = db_session.query(JobPosting)
+                query, _role_profile = apply_title_filter(query, actual_keyword)
 
                 # For regular searches, also filter by location to avoid matching
                 # old jobs from different regions (e.g., US jobs when searching Canada)
