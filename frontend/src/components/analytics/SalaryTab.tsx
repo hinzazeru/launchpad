@@ -263,10 +263,15 @@ export function SalaryTab() {
       count: c.count,
     }));
 
+  // Tiers mirror the pay bands measured in the /salary endpoint: principal,
+  // staff and group all sit within ~$8k of each other and well above senior,
+  // so they share a tier. "Group only" is broken out separately because it is
+  // a distinct role shape (manages PMs), though the sample is thin.
   const seniorityOptions = [
     { value: 'senior', label: 'Senior' },
     { value: 'lead', label: 'Lead' },
-    { value: 'principal', label: 'Principal' },
+    { value: 'principal', label: 'Principal / Staff / Group' },
+    { value: 'group', label: 'Group only' },
     { value: 'all', label: 'All Levels' },
   ];
 

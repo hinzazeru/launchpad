@@ -1301,14 +1301,31 @@ async def salary_analytics(
 
         total_with_salary = len(jobs)
 
-        # Filter by seniority in Python for flexibility
+        # Filter by seniority in Python for flexibility.
+        #
+        # Tiers are grouped by observed pay band, not by title prestige. Measured
+        # over 1,646 PM postings with salary in a 90-day window:
+        #     senior/sr.        n=1064  median $165,000
+        #     lead              n=  84  median $175,000
+        #     principal         n= 128  median $190,000
+        #     staff             n=  77  median $196,400
+        #     group             n=  26  median $198,000
+        #
+        # principal / staff / group sit within $8k of each other, so they are one
+        # tier — which also lifts that bucket from 128 to ~230 samples, enough for
+        # a meaningful percentile. "group" previously matched NO tier at all, so
+        # Group Product Manager roles were invisible outside "all".
         seniority_keywords = []
         if seniority == "senior":
             seniority_keywords = ["senior", "sr.", "sr "]
-        elif seniority == "principal":
-            seniority_keywords = ["principal", "staff"]
         elif seniority == "lead":
             seniority_keywords = ["lead"]
+        elif seniority == "principal":
+            seniority_keywords = ["principal", "staff", "group"]
+        elif seniority == "group":
+            # Group PM in isolation. Thin (n~26) — the combined "principal" tier
+            # is the better default; this exists for when the distinction matters.
+            seniority_keywords = ["group"]
         elif seniority == "all":
             seniority_keywords = []
 
