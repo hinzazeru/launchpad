@@ -666,9 +666,9 @@ DOMAIN_EXTRACTION_PROMPT = """Analyze this job posting and identify the industry
 4. Consider the company's industry first, then the specific role requirements
 
 **Valid domains to choose from:**
-Industries: ecommerce, fintech, banking, investment_management, asset_management, financial_services, b2b, b2b_saas, healthcare, edtech, adtech, martech, logistics, real_estate, gaming, media, cybersecurity, hr_tech, legal_tech, construction, travel, automotive, agriculture, energy, government, nonprofit
+Industries: ecommerce, fintech, banking, investment_management, asset_management, financial_services, b2b, b2b_saas, healthcare, edtech, adtech, martech, logistics, real_estate, gaming, media, cybersecurity, hr_tech, legal_tech, construction, travel, automotive, agriculture, energy, government, nonprofit, esg, regulatory_compliance
 
-Platforms: salesforce, shopify, sap, oracle, workday, adobe, hubspot, stripe, twilio, zendesk, servicenow, atlassian, snowflake, databricks
+Platforms: salesforce, shopify, sap, oracle, workday, adobe, hubspot, stripe, twilio, zendesk, servicenow, atlassian, snowflake, databricks, aws, gcp, azure
 
 Technologies: headless_cms, composable, blockchain, ai_ml, data_engineering, devops, mobile, iot, ar_vr, voice
 
