@@ -367,24 +367,13 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
                     logger.warning(f"Failed to load domain expertise config: {e}")
 
             # Estimate experience years from roles (count years from durations)
-            experience_years = 0.0
-            import re
-            for role in parsed.roles:
-                # Try to extract years from duration string like "2020 - 2023" or "3 years"
-                duration = role.duration.lower()
-                # Match year ranges like "2020 - 2023"
-                year_match = re.findall(r'20\d{2}', duration)
-                if len(year_match) >= 2:
-                    try:
-                        years = int(year_match[-1]) - int(year_match[0])
-                        experience_years += max(0, years)
-                    except ValueError:
-                        pass
-                # Match "X years" pattern
-                elif 'year' in duration:
-                    num_match = re.search(r'(\d+)', duration)
-                    if num_match:
-                        experience_years += float(num_match.group(1))
+            # Structured start_date/end_date when present, falling back to the
+            # duration string. The previous regex silently skipped any role
+            # ending in "Present" — the current one — understating resume_2026
+            # by 2 years (13.0 vs 15.0). Experience is 25% of the match score.
+            from src.resume.experience import compute_experience_years
+            
+            experience_years = compute_experience_years(parsed.roles)
 
             # Create a Resume-like object for the matcher
             # Using a simple class that mimics the Resume model interface
@@ -1325,20 +1314,13 @@ async def _execute_search_job_async(search_id: str):
 
             # Calculate experience years
             import re
-            experience_years = 0.0
-            for role in parsed.roles:
-                duration = role.duration.lower()
-                year_match = re.findall(r'20\d{2}', duration)
-                if len(year_match) >= 2:
-                    try:
-                        years = int(year_match[-1]) - int(year_match[0])
-                        experience_years += max(0, years)
-                    except ValueError:
-                        pass
-                elif 'year' in duration:
-                    num_match = re.search(r'(\d+)', duration)
-                    if num_match:
-                        experience_years += float(num_match.group(1))
+            # Structured start_date/end_date when present, falling back to the
+            # duration string. The previous regex silently skipped any role
+            # ending in "Present" — the current one — understating resume_2026
+            # by 2 years (13.0 vs 15.0). Experience is 25% of the match score.
+            from src.resume.experience import compute_experience_years
+            
+            experience_years = compute_experience_years(parsed.roles)
 
             # Create resume object
             class ParsedResume:
