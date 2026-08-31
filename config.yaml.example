@@ -51,6 +51,13 @@ matching:
   # Minimum match score threshold (0.0 - 1.0)
   min_match_score: 0.5
 
+  # Score at or above which a match counts as "high quality" (0.0 - 1.0).
+  # Drives the high-match counts on the dashboard, the scheduled-run history,
+  # and the "(85%+)" figure quoted in Telegram notifications. Keep this single
+  # value: web searches and scheduled runs previously used different bars
+  # (0.85 vs 0.70), which made their counts silently incomparable.
+  high_match_threshold: 0.85
+
   # Enable strict 24-hour freshness validation
   enforce_24h_freshness: true
 

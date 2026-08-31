@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from src.database.db import SessionLocal
 from src.database.models import ScheduledSearch, SearchPerformance
 from src.matching.engine import GeminiUnavailableError
+from src.matching.thresholds import count_high_matches, format_high_match_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -577,7 +578,7 @@ class WebAppScheduler:
                 matches.sort(key=get_blended_score, reverse=True)
                 
                 result['jobs_matched'] = len(matches)
-                result['high_matches'] = len([m for m in matches if get_blended_score(m) >= 0.70])
+                result['high_matches'] = count_high_matches(matches, get_blended_score, config)
                 result['top_matches'] = [
                     {
                         'title': m.get('job_title', 'Unknown'),
@@ -701,17 +702,19 @@ class WebAppScheduler:
             jobs_matched = result.get('jobs_matched', 0)
             jobs_fetched = result.get('jobs_fetched', 0)
 
+            bar = format_high_match_threshold(config)
+
             if high_matches > 0:
                 message_lines = [
                     f"✅ Scheduled Search Complete: \"{schedule.name}\"",
                     "",
-                    f"Found {high_matches} high-quality matches (70%+) from {jobs_fetched} jobs:"
+                    f"Found {high_matches} high-quality matches ({bar}+) from {jobs_fetched} jobs:"
                 ]
             else:
                 message_lines = [
                     f"✅ Scheduled Search Complete: \"{schedule.name}\"",
                     "",
-                    f"Fetched {jobs_fetched} jobs, matched {jobs_matched} — no high-quality matches (70%+) this run."
+                    f"Fetched {jobs_fetched} jobs, matched {jobs_matched} — no high-quality matches ({bar}+) this run."
                 ]
             
             for i, match in enumerate(top_matches[:3], 1):

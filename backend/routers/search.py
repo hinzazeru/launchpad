@@ -23,6 +23,7 @@ from src.database.db import SessionLocal
 from src.database.models import Resume, JobPosting, MatchResult, ScheduledSearch, SearchJob
 from src.importers.provider_factory import get_job_provider
 from src.matching.engine import JobMatcher
+from src.matching.thresholds import count_high_matches
 from src.integrations.gemini_client import get_gemini_reranker
 from backend.services.matcher_service import get_job_matcher
 from src.resume.parser import ResumeParser
@@ -734,8 +735,7 @@ async def search_jobs(request: Request, job_req: JobSearchRequest):
 
         all_matches.sort(key=get_blended_score, reverse=True)
 
-        # Count high matches (>=85%)
-        high_matches = len([m for m in all_matches if get_blended_score(m) >= 0.85])
+        high_matches = count_high_matches(all_matches, get_blended_score, config)
 
         yield send_progress(SearchProgress(
             stage=SearchStage.MATCHING,
@@ -1579,7 +1579,7 @@ async def _execute_search_job_async(search_id: str):
             return nlp_score
 
         all_matches.sort(key=get_blended_score, reverse=True)
-        high_matches = len([m for m in all_matches if get_blended_score(m) >= 0.85])
+        high_matches = count_high_matches(all_matches, get_blended_score, config)
 
         update_progress('matching', 80, f"Matching complete: {high_matches} high-quality matches",
                        jobs_found=jobs_fetched, jobs_imported=jobs_imported,
