@@ -34,6 +34,7 @@ ENV_OVERRIDES: Dict[str, str] = {
     "job_provider.provider": "JOB_PROVIDER",
     "matching.engine": "MATCHING_ENGINE",
     "matching.high_match_threshold": "MATCHING_HIGH_MATCH_THRESHOLD",
+    "matching.repost_rematch_cooldown_days": "MATCHING_REPOST_COOLDOWN_DAYS",
     "scheduling.enabled": "SCHEDULING_ENABLED",
     "admin.token": "ADMIN_TOKEN",
     "gemini.rate_limit.min_interval_ms": "GEMINI_RATE_LIMIT_MIN_INTERVAL_MS",

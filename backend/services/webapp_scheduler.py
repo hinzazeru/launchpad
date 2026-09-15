@@ -21,6 +21,11 @@ from src.database.db import SessionLocal
 from src.database.models import ScheduledSearch, SearchPerformance
 from src.matching.engine import GeminiUnavailableError
 from src.matching.thresholds import count_high_matches, format_high_match_threshold
+from src.matching.rematch_filter import (
+    format_repost_flag,
+    get_repost_cooldown_days,
+    incremental_candidate_filter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -495,9 +500,15 @@ class WebAppScheduler:
                 # Count total eligible before incremental filter for jobs_skipped metric
                 total_eligible = query.count()
 
-                # Smart rematch: only match newly imported jobs unless forced
+                # Smart rematch: newly imported jobs, plus reposts re-listed
+                # since the last run. See src/matching/rematch_filter.py — a
+                # repost refreshes posting_date but not import_date, so an
+                # import_date-only filter hid them permanently.
                 if not force_rematch and schedule.last_run_at:
-                    query = query.filter(JobPosting.import_date >= schedule.last_run_at)
+                    cooldown_days = get_repost_cooldown_days(config)
+                    query = query.filter(
+                        incremental_candidate_filter(schedule.last_run_at, cooldown_days)
+                    )
 
                 all_jobs = query.limit(500).all()
 
@@ -579,11 +590,22 @@ class WebAppScheduler:
                 
                 result['jobs_matched'] = len(matches)
                 result['high_matches'] = count_high_matches(matches, get_blended_score, config)
+
+                # Repost counts come from the candidate rows, not the match
+                # dicts, so carry them across by job_id for the notification.
+                repost_counts = {
+                    j.id: (j.repost_count or 0) for j in all_jobs if j.is_repost
+                }
+                result['reposts_rematched'] = sum(
+                    1 for m in matches if m.get('job_id') in repost_counts
+                )
+
                 result['top_matches'] = [
                     {
                         'title': m.get('job_title', 'Unknown'),
                         'company': m.get('company', 'Unknown'),
-                        'score': round(get_blended_score(m) * 100, 1)
+                        'score': round(get_blended_score(m) * 100, 1),
+                        'repost_count': repost_counts.get(m.get('job_id'), 0),
                     }
                     for m in matches[:5]
                 ]
@@ -721,7 +743,8 @@ class WebAppScheduler:
                 title = match.get('title', 'Unknown')
                 company = match.get('company', 'Unknown')
                 score = match.get('score', 0)
-                message_lines.append(f"{i}. {title} @ {company} ({score}%)")
+                flag = format_repost_flag(match.get('repost_count'))
+                message_lines.append(f"{i}. {title} @ {company} ({score}%){flag}")
             
             webapp_url = config.get("webapp.url", "http://localhost:5173")
             message_lines.extend([

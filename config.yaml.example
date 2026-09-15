@@ -66,6 +66,16 @@ matching:
   # Set to null or 0 to disable (match all jobs regardless of age)
   max_job_age_days: 7
 
+  # How long before a reposted job can be re-scored by a scheduled run.
+  #
+  # LinkedIn re-lists roles repeatedly. The importer refreshes posting_date but
+  # not import_date, so an import_date-only incremental filter hid every repost
+  # permanently — a role was scored once on first sighting and never again.
+  # Reposts now re-enter matching, but no more often than this, or a role
+  # re-listed 28 times would alert 28 times.
+  # Set to 0 to re-score every repost on every run (noisy, and re-pays Gemini).
+  repost_rematch_cooldown_days: 30
+
   # Gemini re-ranking blend weights (for legacy re-ranker)
   gemini_rerank:
     blend_weights:
