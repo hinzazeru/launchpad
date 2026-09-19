@@ -15,6 +15,13 @@ Reposts are included here, with a cooldown so a job re-enters matching at most
 once per ``cooldown_days``. Without it a role reposted 28 times would be
 re-scored and re-alerted 28 times — the spam the original filter accidentally
 prevented, which is the one thing it got right.
+
+The cooldown is the *only* extra bound on the repost branch. An earlier version
+also required ``posting_date >= last_run_at``, which shipped in dc95c1b and
+matched nothing at all: ``last_run_at`` is assigned at the start of the current
+run, so it asked for jobs posted after the run had already begun. Freshness is
+the caller's job (``matching.max_job_age_days``, applied upstream) — re-deriving
+it here is both redundant and, as it turned out, wrong.
 """
 
 import logging
@@ -38,26 +45,33 @@ def incremental_candidate_filter(
 
     Two ways in:
 
-    1. Genuinely new — imported since the last run.
-    2. A repost re-listed since the last run, not scored within the cooldown.
+    1. Genuinely new — imported since this run began.
+    2. A repost still inside the freshness window, not scored within the cooldown.
+
+    The repost branch deliberately carries **no** ``posting_date`` bound. The
+    caller applies ``matching.max_job_age_days`` before this filter, so every
+    candidate reaching here is already fresh; bounding it again here was the
+    first version's bug. ``last_run_at`` is assigned at the *start of the current
+    run* (``webapp_scheduler.py:216``), not the end of the previous one, so
+    ``posting_date >= last_run_at`` asked for jobs posted after the run started
+    — never true, which made the whole branch dead code.
 
     Args:
-        last_run_at: Start of this run's window.
+        last_run_at: Timestamp this run began. Only bounds the newly-imported
+            branch, since imports are written after it is assigned.
         cooldown_days: Minimum gap between re-scores of the same repost. Values
-            <= 0 disable the cooldown, admitting every repost on every run.
+            <= 0 disable the cooldown, admitting every fresh repost every run.
         now: Override for testing.
 
     Returns:
-        A filter expression to apply to a ``JobPosting`` query.
+        A filter expression to apply to a ``JobPosting`` query that has already
+        had the freshness filter applied.
     """
     from src.database.models import JobPosting, MatchResult
 
     newly_imported = JobPosting.import_date >= last_run_at
 
-    repost_relisted = and_(
-        JobPosting.is_repost.is_(True),
-        JobPosting.posting_date >= last_run_at,
-    )
+    repost_relisted = JobPosting.is_repost.is_(True)
 
     if cooldown_days and cooldown_days > 0:
         cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=cooldown_days)
