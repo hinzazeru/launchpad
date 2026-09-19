@@ -82,6 +82,25 @@ matching:
       ai: 0.75    # Weight for AI score
       nlp: 0.25   # Weight for NLP score
 
+# Score-drift canary.
+#
+# Matching runs on a PREVIEW Gemini model. Preview models change or retire
+# without notice, and the whole calibration — validated seniority bands and the
+# 0.85 high-match threshold — is tuned to this one. A silent model swap would
+# move every score and look exactly like the job market shifting.
+# Precedent: commit b4fe360 pinned a preview model to GA and churned 86% of
+# extracted domains; nobody noticed for weeks.
+#
+# Re-scores the fixed set in data/canary_jobs.json and alerts on drift.
+# ~20 Gemini calls per run, about $0.15.
+canary:
+  enabled: true
+  day_of_week: "sun"     # before Monday's first scheduled search
+  run_time: "07:00"      # America/Toronto
+  # Alert only on drift by default. A weekly "still fine" message trains you to
+  # ignore it, which is the failure mode this feature exists to avoid.
+  alert_on_stable: false
+
 # Product Management Skills Dictionary
 # These skills are used to parse resumes and match jobs
 pm_skills:

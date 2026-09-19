@@ -10,6 +10,7 @@ from typing import List
 import uuid
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from src.database.db import SessionLocal, get_db
@@ -367,3 +368,77 @@ async def get_scheduler_status(request: Request):
         next_run_at=status['next_run_at'],
         next_schedule_name=status['next_schedule_name']
     )
+
+
+# ============================================================================
+# Score-drift canary
+# ============================================================================
+
+@router.get("/canary/status")
+@limiter.limit("200/minute")
+async def canary_status(request: Request, limit: int = 10, session: Session = Depends(get_db)):
+    """Recent canary runs, newest first — the drift series.
+
+    Read this rather than only the alerts: a slow creep that never trips a
+    single run's threshold is still visible as a trend here.
+    """
+    from sqlalchemy import func
+
+    from src.database.models import ScoreCanaryRun
+    from src.matching.canary import load_canary_set
+
+    runs = (
+        session.query(
+            ScoreCanaryRun.run_at,
+            func.count(ScoreCanaryRun.id).label("n"),
+            func.avg(func.abs(ScoreCanaryRun.delta)).label("mean_abs_delta"),
+            func.max(func.abs(ScoreCanaryRun.delta)).label("max_abs_delta"),
+            func.max(ScoreCanaryRun.model_name).label("model_name"),
+            func.sum(case((ScoreCanaryRun.score.is_(None), 1), else_=0)).label("n_failed"),
+        )
+        .group_by(ScoreCanaryRun.run_at)
+        .order_by(ScoreCanaryRun.run_at.desc())
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+
+    return {
+        "canary_set_size": len(load_canary_set()),
+        "runs": [
+            {
+                "run_at": r.run_at.isoformat() if r.run_at else None,
+                "n_jobs": r.n,
+                "n_failed": int(r.n_failed or 0),
+                "mean_abs_delta": round(float(r.mean_abs_delta), 2) if r.mean_abs_delta is not None else None,
+                "max_abs_delta": round(float(r.max_abs_delta), 2) if r.max_abs_delta is not None else None,
+                "model_name": r.model_name,
+            }
+            for r in runs
+        ],
+    }
+
+
+@router.post("/canary/run-now")
+@limiter.limit("5/minute")
+async def canary_run_now(request: Request, notify: bool = False):
+    """Run the canary immediately.
+
+    Costs roughly 20 Gemini calls (~$0.15), so it is rate-limited and defaults
+    to `notify=false` — pass `?notify=true` to also exercise the Telegram path.
+    """
+    scheduler = get_scheduler()
+    result = await scheduler.run_score_canary(notify=notify)
+
+    if result.get("error"):
+        raise HTTPException(status_code=503, detail=result["error"])
+
+    return {
+        "model_name": result.get("model_name"),
+        "baseline_model": result.get("baseline_model"),
+        "is_first_run": result.get("is_first_run"),
+        "n_requested": result.get("n_requested"),
+        "missing": result.get("missing"),
+        "summary": result.get("summary"),
+        "verdict": result.get("verdict"),
+        "notified": result.get("notified", False),
+    }

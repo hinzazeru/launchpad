@@ -21,6 +21,12 @@ from src.database.db import SessionLocal
 from src.database.models import ScheduledSearch, SearchPerformance
 from src.matching.engine import GeminiUnavailableError
 from src.matching.thresholds import count_high_matches, format_high_match_threshold
+from src.notifications.telegram_sender import send_telegram_message, telegram_configured
+from src.matching.canary import (
+    format_report,
+    persist_canary_run,
+    run_canary,
+)
 from src.matching.rematch_filter import (
     format_repost_flag,
     get_repost_cooldown_days,
@@ -28,6 +34,13 @@ from src.matching.rematch_filter import (
 )
 
 logger = logging.getLogger(__name__)
+
+# APScheduler job id for the weekly score-drift canary.
+CANARY_JOB_ID = "score_canary"
+
+# The canary is not tied to any one schedule, so it uses the scheduler's own
+# zone rather than a schedule's.
+CANARY_TIMEZONE = "America/Toronto"
 
 
 class WebAppScheduler:
@@ -823,6 +836,115 @@ class WebAppScheduler:
         except Exception as e:
             logger.warning(f"Failed to send failure notification: {e}")
 
+    # ------------------------------------------------------------------
+    # Score-drift canary
+    # ------------------------------------------------------------------
+
+    def register_canary_job(self) -> bool:
+        """Register the weekly score-canary cron.
+
+        Not backed by a ScheduledSearch row, so it is registered from
+        init_scheduler() rather than load_schedules_from_db().
+        """
+        from src.config import get_config
+        config = get_config()
+
+        if not config.get("canary.enabled", True):
+            logger.info("Score canary disabled by config; not registering")
+            return False
+
+        run_time = str(config.get("canary.run_time", "07:00"))
+        try:
+            hour, minute = map(int, run_time.split(":"))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError(run_time)
+        except (ValueError, AttributeError):
+            logger.warning("Invalid canary.run_time %r; using 07:00", run_time)
+            hour, minute = 7, 0
+
+        day = str(config.get("canary.day_of_week", "sun")).strip().lower()
+        if day not in {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}:
+            logger.warning("Invalid canary.day_of_week %r; using sun", day)
+            day = "sun"
+
+        tz = ZoneInfo(CANARY_TIMEZONE)
+        existing = self._scheduler.get_job(CANARY_JOB_ID)
+        if existing:
+            existing.remove()
+
+        self._scheduler.add_job(
+            func=self.run_score_canary,
+            trigger=CronTrigger(day_of_week=day, hour=hour, minute=minute, timezone=tz),
+            id=CANARY_JOB_ID,
+            name=f"Score canary @ {day} {hour:02d}:{minute:02d}",
+        )
+        logger.info("Registered score canary for %s at %02d:%02d %s",
+                    day, hour, minute, CANARY_TIMEZONE)
+        return True
+
+    async def run_score_canary(self, notify: bool = True) -> Dict[str, Any]:
+        """Re-score the pinned canary set and alert on drift.
+
+        Runs the real matcher against the real resume, so a change in either the
+        model or the resume shows up here. Roughly 20 Gemini calls (~$0.15).
+        """
+        from src.config import get_config
+        from src.database.models import Resume
+        from src.matching.thresholds import get_high_match_threshold
+        from src.resume.parser import ResumeParser
+        from backend.services.matcher_service import get_job_matcher
+
+        config = get_config()
+        db = SessionLocal()
+        try:
+            matcher = get_job_matcher()
+            resume = db.query(Resume).first()
+            if resume is None:
+                return {"error": "no resume in database"}
+
+            threshold = get_high_match_threshold(config) * 100
+            result = await asyncio.to_thread(
+                run_canary, db, resume, matcher, threshold
+            )
+            if result.get("error"):
+                logger.warning("Score canary: %s", result["error"])
+                return result
+
+            persist_canary_run(
+                db, result,
+                engine_version=config.get("matching.engine_version"),
+                resume_filename=config.get("scheduling.resume_filename"),
+            )
+
+            summary, verdict = result["summary"], result["verdict"]
+            logger.info(
+                "Score canary: compared %d, mean |delta| %.2f, max %.2f, crossings %d, alert=%s",
+                summary["n_compared"], summary["mean_abs_delta"],
+                summary["max_abs_delta"], summary["n_crossings"], verdict["alert"],
+            )
+
+            # The first run has no baseline, so every delta is undefined — it
+            # establishes the reference rather than reporting drift.
+            should_notify = (
+                notify
+                and not result.get("is_first_run")
+                and (verdict["alert"] or config.get("canary.alert_on_stable", False))
+            )
+            if should_notify and telegram_configured(config):
+                await send_telegram_message(
+                    format_report(summary, verdict, result["model_name"],
+                                  result.get("baseline_model"), result.get("missing")),
+                    config=config, context="score canary alert",
+                )
+            result["notified"] = should_notify
+            return result
+
+        except Exception as e:
+            logger.error(f"Score canary failed: {e}", exc_info=True)
+            return {"error": str(e)}
+        finally:
+            db.close()
+
     def _update_next_run(self, schedule_id: int, db: Optional[Session] = None) -> None:
         """Calculate and update the next_run_at for a schedule.
         
@@ -929,6 +1051,12 @@ def init_scheduler() -> WebAppScheduler:
     scheduler = get_scheduler()
     scheduler.start()
     scheduler.load_schedules_from_db()
+    # Independent of ScheduledSearch rows, so registered here rather than in
+    # load_schedules_from_db().
+    try:
+        scheduler.register_canary_job()
+    except Exception as e:
+        logger.warning(f"Could not register score canary (non-fatal): {e}")
     return scheduler
 
 

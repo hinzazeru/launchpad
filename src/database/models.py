@@ -363,3 +363,47 @@ class SearchJob(Base):
 
     def __repr__(self):
         return f"<SearchJob(id={self.id}, search_id='{self.search_id}', status='{self.status}', progress={self.progress}%)>"
+
+
+class ScoreCanaryRun(Base):
+    """One observation of one canary job's score at a point in time.
+
+    Matching runs on gemini-3-flash-preview — a preview model Google can change
+    or retire without notice. The whole calibration (senior ~71, principal ~84,
+    exec ~98) and the 0.85 high-match threshold are tuned to its behaviour, so a
+    silent model change would shift every score and quietly invalidate the
+    threshold with nothing surfacing it.
+
+    Precedent: commit b4fe360 pinned a preview model to GA and churned 86% of
+    extracted domains. Nothing detected that at the time either.
+
+    Re-scoring a fixed set of jobs on a schedule turns that invisible failure
+    into a visible one. Rows accumulate, so drift is inspectable as a series
+    rather than only as a pass/fail.
+    """
+
+    __tablename__ = "score_canary_runs"
+    __table_args__ = (
+        Index("ix_canary_run_job", "run_at", "job_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    job_id = Column(Integer, ForeignKey("job_postings.id"), nullable=False, index=True)
+
+    score = Column(Float, nullable=True)          # None when this job failed to score
+    baseline_score = Column(Float, nullable=True)  # the reference it was compared against
+    delta = Column(Float, nullable=True)
+
+    # Recorded per row: a model change is the single most likely cause of drift,
+    # and knowing which run it changed on is the first question asked.
+    model_name = Column(String(80), nullable=True)
+    engine_version = Column(String(20), nullable=True)
+    resume_filename = Column(String(255), nullable=True)
+
+    error_message = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return (f"<ScoreCanaryRun(job={self.job_id}, score={self.score}, "
+                f"delta={self.delta}, model='{self.model_name}')>")
+
