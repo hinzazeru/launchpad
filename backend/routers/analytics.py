@@ -10,7 +10,7 @@ Provides aggregated analytics data for the dashboard:
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from collections import Counter
 from sqlalchemy.orm import Session
@@ -24,6 +24,16 @@ from src.database.db import get_db
 from src.database.models import JobPosting, MatchResult, SearchPerformance, APICallMetric, ScheduledSearch
 from src.utils.salary import parse_salary_string, classify_country
 from backend.limiter import limiter
+from src.analysis.seniority_tiers import (
+    DEFAULT_BASELINE,
+    DEFAULT_TIER,
+    TIER_LABELS,
+    VALID_TIERS,
+    filter_titles_by_tier,
+    is_valid_tier,
+    title_in_tier,
+)
+from src.analysis.seniority_profile import build_profile, compare
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1315,22 +1325,9 @@ async def salary_analytics(
         # tier — which also lifts that bucket from 128 to ~230 samples, enough for
         # a meaningful percentile. "group" previously matched NO tier at all, so
         # Group Product Manager roles were invisible outside "all".
-        seniority_keywords = []
-        if seniority == "senior":
-            seniority_keywords = ["senior", "sr.", "sr "]
-        elif seniority == "lead":
-            seniority_keywords = ["lead"]
-        elif seniority == "principal":
-            seniority_keywords = ["principal", "staff", "group"]
-        elif seniority == "group":
-            # Group PM in isolation. Thin (n~26) — the combined "principal" tier
-            # is the better default; this exists for when the distinction matters.
-            seniority_keywords = ["group"]
-        elif seniority == "all":
-            seniority_keywords = []
-
-        if seniority_keywords:
-            jobs = [j for j in jobs if any(kw in j.title.lower() for kw in seniority_keywords)]
+        # Tier vocabulary lives in src/analysis/seniority_tiers.py so this and
+        # /seniority cannot drift apart the way the high-match threshold did.
+        jobs = filter_titles_by_tier(jobs, seniority)
 
         # Parse salaries
         parsed = []
@@ -1424,3 +1421,132 @@ async def salary_analytics(
     except Exception as e:
         logger.error(f"Error fetching salary analytics: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load salary analytics")
+
+
+# ============================================================================
+# Seniority profile — what a tier actually asks for
+# ============================================================================
+
+class SeniorityProfileResponse(BaseModel):
+    """What one seniority tier requires, measured against a baseline tier.
+
+    A raw count answers nothing on its own: "product management appears 276
+    times" only becomes meaningful next to Senior's 1,370. Every ranked list
+    here is therefore paired with the baseline, and `comparison` surfaces what
+    actually separates the two.
+    """
+    tier: str
+    tier_label: str
+    baseline: str
+    baseline_label: str
+    days: int
+    title_filter: str
+    generated_at: str
+
+    tier_profile: Dict[str, Any]
+    baseline_profile: Dict[str, Any]
+    comparison: Dict[str, Any]
+
+    # Caveats the UI is expected to show rather than bury.
+    caveats: Dict[str, Any]
+
+
+@router.get("/seniority", response_model=SeniorityProfileResponse)
+@limiter.limit("200/minute")
+async def seniority_profile(
+    request: Request,
+    tier: str = DEFAULT_TIER,
+    baseline: str = DEFAULT_BASELINE,
+    days: int = 90,
+    title_filter: str = "product manager",
+    session: Session = Depends(get_db),
+):
+    """Requirements, experience and skills for a seniority tier vs a baseline.
+
+    A 90-day snapshot rather than a time series: 251 of 609 Principal/Staff/Group
+    postings are reposts whose `posting_date` is the *latest* listing, so a
+    February role re-listed in September dates to September. That makes
+    month-over-month movement unreadable, while leaving a snapshot sound — an
+    actively re-listed role is a currently-open role.
+    """
+    tier = (tier or "").strip().lower()
+    baseline = (baseline or "").strip().lower()
+
+    if not is_valid_tier(tier):
+        raise HTTPException(status_code=400, detail=f"Unknown tier '{tier}'. Valid: {VALID_TIERS}")
+    if not is_valid_tier(baseline):
+        raise HTTPException(status_code=400, detail=f"Unknown baseline '{baseline}'. Valid: {VALID_TIERS}")
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=400, detail="days must be between 1 and 365")
+
+    cache_key = f"seniority:{tier}:{baseline}:{days}:{title_filter}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        cutoff = datetime.now() - timedelta(days=days)
+
+        jobs = session.query(JobPosting).filter(
+            JobPosting.title.ilike(f"%{title_filter}%"),
+            JobPosting.posting_date >= cutoff,
+        ).all()
+
+        tier_rows = [j for j in jobs if title_in_tier(j.title, tier)]
+        # The baseline excludes the tier itself, or "Staff/Senior Product
+        # Manager" would sit in both cohorts and blunt the contrast.
+        baseline_rows = [
+            j for j in jobs
+            if title_in_tier(j.title, baseline) and not title_in_tier(j.title, tier)
+        ]
+
+        tier_profile = build_profile(tier_rows)
+        baseline_profile = build_profile(baseline_rows)
+
+        comparison = {
+            field: compare(tier_profile, baseline_profile, field)
+            for field in ("must_have", "nice_to_have", "domains", "responsibility_themes")
+        }
+
+        # Roles whose title says this tier but whose description does not.
+        gem = tier_profile.get("gemini_seniority", {})
+        tier_aligned = {"principal": {"principal", "staff"}, "senior": {"senior"},
+                        "lead": {"senior", "staff"}, "group": {"principal", "staff"}}.get(tier, set())
+        disagreements = sum(v for k, v in gem.items() if k not in tier_aligned)
+        usable = tier_profile.get("n_usable", 0)
+
+        result = {
+            "tier": tier,
+            "tier_label": TIER_LABELS.get(tier, tier),
+            "baseline": baseline,
+            "baseline_label": TIER_LABELS.get(baseline, baseline),
+            "days": days,
+            "title_filter": title_filter,
+            "generated_at": datetime.now().isoformat(),
+            "tier_profile": tier_profile,
+            "baseline_profile": baseline_profile,
+            "comparison": comparison,
+            "caveats": {
+                # Title is the cohort definition; Gemini's own read of the
+                # description disagrees on some. Reported, not filtered — an
+                # inflated title is itself market signal.
+                "title_vs_gemini_disagreement": disagreements,
+                "title_vs_gemini_pct": round(100.0 * disagreements / usable, 1) if usable else 0.0,
+                "responsibility_coverage_pct": tier_profile.get(
+                    "responsibility_coverage", {}).get("pct", 0.0),
+                "snapshot_only": (
+                    "A snapshot of the last %d days, not a trend. Reposts carry the "
+                    "date of their latest listing, so month-over-month movement would "
+                    "reflect re-listing and collection cadence rather than the market."
+                ) % days,
+            },
+        }
+
+        _set_cached(cache_key, result)
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Seniority profile failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Seniority analytics failed: {e}")

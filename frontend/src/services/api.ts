@@ -1058,6 +1058,21 @@ class ApiClient {
     return this.fetch<ScheduledSearchesSummaryResponse>(`/analytics/performance/scheduled-summary?days=${days}`);
   }
 
+  async getSeniorityProfile(params?: {
+    tier?: string;
+    baseline?: string;
+    days?: number;
+    title_filter?: string;
+  }): Promise<SeniorityProfile> {
+    const searchParams = new URLSearchParams();
+    if (params?.tier) searchParams.set('tier', params.tier);
+    if (params?.baseline) searchParams.set('baseline', params.baseline);
+    if (params?.days) searchParams.set('days', String(params.days));
+    if (params?.title_filter) searchParams.set('title_filter', params.title_filter);
+    const query = searchParams.toString();
+    return this.fetch<SeniorityProfile>(`/analytics/seniority${query ? `?${query}` : ''}`);
+  }
+
   async getSalaryAnalytics(params?: {
     title_filter?: string;
     seniority?: string;
@@ -1679,6 +1694,69 @@ export function useScheduledSearchSummary(days: number = 30) {
   });
 }
 
+// Seniority profile analytics
+
+export interface RankedItem {
+  name: string;
+  count: number;
+  pct: number;
+}
+
+export interface ExperienceStats {
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+  min: number | null;
+  max: number | null;
+  n: number;
+}
+
+export interface TierProfile {
+  n_postings: number;
+  n_usable: number;
+  experience: ExperienceStats;
+  must_have: RankedItem[];
+  nice_to_have: RankedItem[];
+  domains: RankedItem[];
+  responsibility_themes: RankedItem[];
+  responsibility_coverage: { classified: number; total: number; pct: number };
+  focus: Record<string, number>;
+  focus_pct: Record<string, number>;
+  gemini_seniority: Record<string, number>;
+}
+
+export interface ComparisonRow {
+  name: string;
+  tier_pct: number;
+  baseline_pct: number;
+  delta: number;
+}
+
+export interface ComparisonBlock {
+  distinctive_to_tier: ComparisonRow[];
+  shared: ComparisonRow[];
+  stronger_in_baseline: ComparisonRow[];
+}
+
+export interface SeniorityProfile {
+  tier: string;
+  tier_label: string;
+  baseline: string;
+  baseline_label: string;
+  days: number;
+  title_filter: string;
+  generated_at: string;
+  tier_profile: TierProfile;
+  baseline_profile: TierProfile;
+  comparison: Record<string, ComparisonBlock>;
+  caveats: {
+    title_vs_gemini_disagreement: number;
+    title_vs_gemini_pct: number;
+    responsibility_coverage_pct: number;
+    snapshot_only: string;
+  };
+}
+
 // Salary analytics hooks
 
 export function useSalaryAnalytics(titleFilter?: string, seniority?: string, days?: number) {
@@ -1689,6 +1767,14 @@ export function useSalaryAnalytics(titleFilter?: string, seniority?: string, day
       seniority: seniority,
       days: days,
     }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSeniorityProfile(tier?: string, baseline?: string, days?: number) {
+  return useQuery({
+    queryKey: ['seniority-profile', tier, baseline, days],
+    queryFn: () => api.getSeniorityProfile({ tier, baseline, days }),
     staleTime: 5 * 60 * 1000,
   });
 }

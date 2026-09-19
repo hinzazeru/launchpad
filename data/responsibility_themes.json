@@ -1,0 +1,115 @@
+{
+  "themes": [
+    {
+      "name": "product strategy and vision",
+      "keywords": [
+        "product vision",
+        "product strategy",
+        "strategic direction",
+        "long-term strategic",
+        "product focus"
+      ]
+    },
+    {
+      "name": "roadmap and backlog management",
+      "keywords": [
+        "product roadmap",
+        "backlog",
+        "prioritize features",
+        "prioritize initiatives",
+        "sequence deliverables"
+      ]
+    },
+    {
+      "name": "cross-functional collaboration",
+      "keywords": [
+        "cross-functional",
+        "partner with engineering",
+        "collaborate with design",
+        "stakeholder management",
+        "alignment"
+      ]
+    },
+    {
+      "name": "product discovery and research",
+      "keywords": [
+        "market research",
+        "competitive analysis",
+        "user research",
+        "customer discovery",
+        "user interviews"
+      ]
+    },
+    {
+      "name": "requirements and documentation",
+      "keywords": [
+        "user stories",
+        "acceptance criteria",
+        "product requirements",
+        "technical specifications",
+        "product documentation"
+      ]
+    },
+    {
+      "name": "lifecycle and delivery",
+      "keywords": [
+        "product lifecycle",
+        "end-to-end",
+        "ideation to launch",
+        "delivery",
+        "ship",
+        "product development"
+      ]
+    },
+    {
+      "name": "metrics and analytics",
+      "keywords": [
+        "success metrics",
+        "kpis",
+        "okrs",
+        "performance analytics",
+        "data-driven"
+      ]
+    },
+    {
+      "name": "customer advocacy",
+      "keywords": [
+        "voice of the customer",
+        "customer pain points",
+        "user journeys",
+        "customer-centric",
+        "user experience"
+      ]
+    },
+    {
+      "name": "go-to-market and commercialization",
+      "keywords": [
+        "go-to-market",
+        "pricing strategy",
+        "product positioning",
+        "value proposition",
+        "commercialization"
+      ]
+    },
+    {
+      "name": "compliance and governance",
+      "keywords": [
+        "regulatory compliance",
+        "safety",
+        "privacy",
+        "governance",
+        "risk mitigation"
+      ]
+    },
+    {
+      "name": "team leadership and mentorship",
+      "keywords": [
+        "mentor",
+        "coach",
+        "lead a team",
+        "grow a team",
+        "supervise"
+      ]
+    }
+  ]
+}
