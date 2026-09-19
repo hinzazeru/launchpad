@@ -182,3 +182,42 @@ def test_select_returns_empty_when_nothing_eligible():
         def all(self): return []
         c = type("c", (), {"score": None, "job_id": None})()
     assert select_canary_jobs(EmptyQuery()) == []
+
+
+# --- model name resolution -----------------------------------------------------
+
+class _Inner:
+    model_name = "gemini-3-flash-preview"
+
+
+class _JobMatcher:
+    """Mirrors engine.JobMatcher: delegates to .gemini_matcher."""
+    gemini_matcher = _Inner()
+
+
+def test_model_name_read_from_the_delegate():
+    """Regression: reading model_name off JobMatcher returns nothing.
+
+    A recorded "unknown" compares equal to itself every week, so a model swap
+    would never alert while every run still looked healthy — the canary's
+    primary check silently dead.
+    """
+    from src.matching.canary import resolve_model_name
+
+    assert resolve_model_name(_JobMatcher()) == "gemini-3-flash-preview"
+    assert getattr(_JobMatcher(), "model_name", None) is None, "the trap this guards"
+
+
+def test_model_name_falls_back_to_the_object_itself():
+    from src.matching.canary import resolve_model_name
+
+    class Direct:
+        model_name = "gemini-3.8-flash"
+
+    assert resolve_model_name(Direct()) == "gemini-3.8-flash"
+
+
+def test_model_name_unknown_only_when_genuinely_absent():
+    from src.matching.canary import resolve_model_name
+
+    assert resolve_model_name(object()) == "unknown"

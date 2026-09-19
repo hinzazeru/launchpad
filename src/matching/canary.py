@@ -264,6 +264,22 @@ def format_report(
 
 # --- execution -----------------------------------------------------------------
 
+def resolve_model_name(matcher: Any) -> str:
+    """The model actually doing the matching.
+
+    JobMatcher delegates to a GeminiMatcher held on `.gemini_matcher`, and only
+    that inner object carries `model_name` — reading it off JobMatcher returns
+    nothing. Getting this wrong is quietly fatal: an "unknown" recorded every
+    week compares equal to itself forever, so a model swap never alerts and the
+    canary's primary check is dead while every run still looks healthy.
+    """
+    for candidate in (getattr(matcher, "gemini_matcher", None), matcher):
+        name = getattr(candidate, "model_name", None)
+        if name:
+            return str(name)
+    return "unknown"
+
+
 def run_canary(db, resume, matcher, high_match_threshold: float = 85.0) -> Dict[str, Any]:
     """Re-score the pinned canary set and compare against the last baseline.
 
@@ -284,7 +300,7 @@ def run_canary(db, resume, matcher, high_match_threshold: float = 85.0) -> Dict[
         return {"error": "canary set is empty — run scripts/build_canary_set.py", "observations": []}
 
     jobs, missing = resolve_canary_jobs(db, canary_set)
-    model_name = getattr(matcher, "model_name", None) or "unknown"
+    model_name = resolve_model_name(matcher)
 
     # Baseline = each job's score from the most recent previous run.
     last_run_at = (
