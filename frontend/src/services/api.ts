@@ -755,6 +755,7 @@ export interface ScheduleRunHistory {
   gemini_failed: number | null;
   jobs_skipped: number | null;
   rematch_type: string | null;
+  reposts_rematched: number | null;
 }
 
 export interface ScheduleHistoryResponse {

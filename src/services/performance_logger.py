@@ -117,6 +117,7 @@ class PerformanceLogger:
                 # Smart rematch tracking
                 rematch_type=self.extra.get('rematch_type'),
                 jobs_skipped=self.counts.get('jobs_skipped'),
+                reposts_rematched=self.counts.get('reposts_rematched'),
 
                 # Gemini timing summary
                 gemini_timing_summary=self.extra.get('gemini_timing_summary'),

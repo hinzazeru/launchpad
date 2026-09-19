@@ -528,6 +528,11 @@ function RunDetailsPanel({
         if (run.jobs_skipped != null && run.jobs_skipped > 0) {
             rematchParts.push(`${run.jobs_skipped} skipped`);
         }
+        // Shown even at 0, unlike the counts above: a run that re-scores no
+        // reposts is the signal that the repost filter has stopped working.
+        if (run.reposts_rematched != null) {
+            rematchParts.push(`${run.reposts_rematched} reposts re-scored`);
+        }
         rows.push({ label: 'Rematch', value: rematchParts.join(', ') });
     }
 

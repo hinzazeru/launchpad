@@ -596,8 +596,19 @@ class WebAppScheduler:
                 repost_counts = {
                     j.id: (j.repost_count or 0) for j in all_jobs if j.is_repost
                 }
-                result['reposts_rematched'] = sum(
+                reposts_rematched = sum(
                     1 for m in matches if m.get('job_id') in repost_counts
+                )
+                result['reposts_rematched'] = reposts_rematched
+
+                # Persisted so a repost filter that admits nothing says so. The
+                # first version of that filter ran dead for three days and only
+                # surfaced on a manual review; a column that sits at 0 is the
+                # cheapest way for it to report its own failure.
+                perf_logger.record_count('reposts_rematched', reposts_rematched)
+                logger.info(
+                    f"Rematched {reposts_rematched} reposted job(s) "
+                    f"of {len(matches)} matches"
                 )
 
                 result['top_matches'] = [

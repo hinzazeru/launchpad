@@ -121,6 +121,8 @@ async def startup_event():
             # repost detection
             ("job_postings", "is_repost", "BOOLEAN DEFAULT FALSE"),
             ("job_postings", "repost_count", "INTEGER DEFAULT 0"),
+            # reposts re-scored per run — makes a dead repost filter self-reporting
+            ("search_performance", "reposts_rematched", "INTEGER"),
         ]
 
         # Whitelist valid table/column names to prevent injection

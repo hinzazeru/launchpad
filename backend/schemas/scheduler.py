@@ -176,6 +176,7 @@ class ScheduleRunHistory(BaseModel):
     gemini_failed: Optional[int] = None
     jobs_skipped: Optional[int] = None
     rematch_type: Optional[str] = None
+    reposts_rematched: Optional[int] = None
 
     class Config:
         from_attributes = True

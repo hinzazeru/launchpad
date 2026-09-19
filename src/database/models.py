@@ -261,6 +261,12 @@ class SearchPerformance(Base):
     rematch_type = Column(String(30), nullable=True)  # 'incremental' | 'full_resume' | 'full_engine' | 'full_both'
     jobs_skipped = Column(Integer, nullable=True)
 
+    # Reposted jobs re-scored this run (see src/matching/rematch_filter.py).
+    # Exists because the first repost fix shipped broken and ran for three days
+    # producing zero effect; nothing measured it, so nothing reported it.
+    # A persistent 0 here means the repost branch is admitting nothing.
+    reposts_rematched = Column(Integer, nullable=True)
+
     # Per-job Gemini timing summary
     gemini_timing_summary = Column(JSON, nullable=True)  # {min_ms, max_ms, avg_ms, p50_ms, p90_ms}
 
