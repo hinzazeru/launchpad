@@ -91,7 +91,9 @@ frontend/src/
 15. **Parallel Gemini Enrichment**: During job import, Gemini extraction (domains, summaries, requirements) runs concurrently across jobs using `ThreadPoolExecutor(max_workers=5)` via `src/importers/enrichment.py`. The existing `GeminiRateLimiter` (thread-safe `threading.Lock`) throttles calls to stay within Gemini rate limits. The Bright Data provider uses this helper.
     - **3 separate calls per job (intentional)**: Domain extraction, summarization, and requirements extraction are kept as 3 individual Gemini calls rather than 1 combined call. Combining them into a single prompt was tested and significantly reduced extraction accuracy — focused single-task prompts produce better results. Do not attempt to merge these into one call to save API quota.
 
-16. **Railway Deployment**: The app is deployed on Railway at `https://YOUR_APP.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + Python deps; no ML/PyTorch). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
+16. **Greenhouse Provider Is Shelved, Not Unfinished**: `src/importers/greenhouse_provider.py` and `src/importers/company_names.py` are complete and tested but **intentionally not wired into `provider_factory`**. Do not connect them. A 2026-09-19 spike measured 59% overlap with Bright Data and only 2 net-new Canadian PM roles per week against a pre-agreed go threshold of 10, so the multi-source roadmap (aggregator fan-out, company registry, four more providers) was declined. The code stays as a hot spare because Bright Data is a single point of failure. Re-measure with `python scripts/spike_greenhouse_yield.py --dry-run --max-age-days 7` before revisiting — don't trust the stored numbers.
+
+17. **Railway Deployment**: The app is deployed on Railway at `https://YOUR_APP.up.railway.app`. Uses a multi-stage Dockerfile (Node frontend build + Python deps; no ML/PyTorch). PostgreSQL replaces SQLite in production. Railway sets `PORT` dynamically; the Dockerfile CMD uses `${PORT:-8000}`.
 
 ## Common Tasks
 

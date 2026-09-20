@@ -1,5 +1,28 @@
 """Greenhouse job board provider.
 
+SHELVED 2026-09-19 — deliberately not wired into ``provider_factory``.
+============================================================================
+This module works and is tested. It is unused on purpose, and wiring it in
+would undo a measured decision rather than finish an unfinished one.
+
+A spike measured it against production (8078 postings): 28 boards returned
+2634 postings in 1.5s for free, yielding 32 Canadian PM roles — but **59% of
+those already came from Bright Data**, leaving 2 net-new per week against a
+pre-agreed go threshold of 10. The gate said no-go: the value on offer is
+second-source resilience, not additional listings, and that did not justify
+the aggregator fan-out, company registry and four further providers the
+roadmap had queued.
+
+Kept in the tree as a ready hot spare, since Bright Data is still a single
+point of failure and a per-call cost. To re-check whether the overlap has
+shifted, re-run the measurement rather than trusting these numbers::
+
+    python scripts/spike_greenhouse_yield.py --dry-run --max-age-days 7
+
+Full reasoning, including three measurement bugs that made the first run
+report a confident but wrong GO: ``tasks/tasks-greenhouse-source-spike.md``
+(local only — ``tasks/`` is gitignored).
+
 Unlike Bright Data, Greenhouse has no aggregate search endpoint. Each company
 publishes its own board at::
 
