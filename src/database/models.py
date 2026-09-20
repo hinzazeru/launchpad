@@ -365,6 +365,45 @@ class SearchJob(Base):
         return f"<SearchJob(id={self.id}, search_id='{self.search_id}', status='{self.status}', progress={self.progress}%)>"
 
 
+class DigestLog(Base):
+    """One weekly-digest send attempt, keyed by the week it covers.
+
+    The scheduler uses a MemoryJobStore with a 300s misfire grace period, so a
+    weekly cron that falls inside a redeploy window is dropped silently — for
+    the whole week, since the next fire is seven days out. This table is what
+    makes the send recoverable: boot checks for the current week's row and
+    queues a catch-up when it is missing.
+
+    `week_start` is unique, which is the idempotency guarantee: a catch-up that
+    races the real cron cannot produce two digests. Failures are recorded too
+    (`status='failed'`), so a broken send is visible as a row rather than as
+    silence indistinguishable from "nothing scored this week".
+
+    `min_score` is stored per row because the floor is a config knob — without
+    it a historical row's `roles_count` becomes uninterpretable the moment the
+    threshold moves.
+
+    New table rather than a column on an existing one: `create_all()` runs on
+    every boot, which makes new tables free on Postgres and new columns a
+    migration.
+    """
+
+    __tablename__ = "digest_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Monday 00:00 local of the week being reported, stored as naive UTC.
+    week_start = Column(DateTime, nullable=False, unique=True, index=True)
+    sent_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    roles_count = Column(Integer, nullable=False, default=0)
+    min_score = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="sent")  # sent|failed|skipped
+    error_message = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return (f"<DigestLog(week_start={self.week_start}, status='{self.status}', "
+                f"roles={self.roles_count})>")
+
+
 class ScoreCanaryRun(Base):
     """One observation of one canary job's score at a point in time.
 

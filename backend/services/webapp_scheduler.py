@@ -22,6 +22,12 @@ from src.database.models import ScheduledSearch, SearchPerformance
 from src.matching.engine import GeminiUnavailableError
 from src.matching.thresholds import count_high_matches, format_high_match_threshold
 from src.notifications.telegram_sender import send_telegram_message, telegram_configured
+from src.notifications.weekly_digest import (
+    fetch_top_roles,
+    format_week_label,
+    previous_week_bounds,
+    render_digest,
+)
 from src.matching.canary import (
     format_report,
     persist_canary_run,
@@ -41,6 +47,13 @@ CANARY_JOB_ID = "score_canary"
 # The canary is not tied to any one schedule, so it uses the scheduler's own
 # zone rather than a schedule's.
 CANARY_TIMEZONE = "America/Toronto"
+
+# APScheduler job ids for the weekly roles digest and its boot catch-up.
+DIGEST_JOB_ID = "weekly_digest"
+DIGEST_CATCHUP_JOB_ID = "weekly_digest_catchup"
+
+# Same reasoning as CANARY_TIMEZONE: not tied to any one schedule's zone.
+DIGEST_TIMEZONE = "America/Toronto"
 
 
 class WebAppScheduler:
@@ -736,12 +749,9 @@ class WebAppScheduler:
             config = get_config()
             
             # Check if Telegram is configured
-            bot_token = config.get("telegram.bot_token")
-            chat_id = config.get("telegram.chat_id")
-            
-            if not bot_token or not chat_id:
+            if not telegram_configured(config):
                 return
-            
+
             # Build notification message
             high_matches = result.get('high_matches', 0)
             top_matches = result.get('top_matches', [])
@@ -777,19 +787,13 @@ class WebAppScheduler:
             ])
             
             message = "\n".join(message_lines)
-            
-            # Send via Telegram API
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-                await session.post(url, json={
-                    'chat_id': chat_id,
-                    'text': message,
-                    'parse_mode': 'HTML'
-                })
-            
-            logger.info(f"Sent Telegram notification for schedule '{schedule.name}'")
-            
+
+            await send_telegram_message(
+                message,
+                config=config,
+                context=f"run notification for '{schedule.name}'",
+            )
+
         except Exception as e:
             logger.warning(f"Failed to send Telegram notification: {e}")
 
@@ -808,10 +812,7 @@ class WebAppScheduler:
             from src.config import get_config
             config = get_config()
 
-            bot_token = config.get("telegram.bot_token")
-            chat_id = config.get("telegram.chat_id")
-
-            if not bot_token or not chat_id:
+            if not telegram_configured(config):
                 return
 
             message = "\n".join([
@@ -822,16 +823,11 @@ class WebAppScheduler:
                 f"Retries configured: {schedule.max_retries or 0}",
             ])
 
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-                await session.post(url, json={
-                    'chat_id': chat_id,
-                    'text': message,
-                    'parse_mode': 'HTML'
-                })
-
-            logger.info(f"Sent failure notification for schedule '{schedule.name}'")
+            await send_telegram_message(
+                message,
+                config=config,
+                context=f"failure notification for '{schedule.name}'",
+            )
 
         except Exception as e:
             logger.warning(f"Failed to send failure notification: {e}")
@@ -942,6 +938,243 @@ class WebAppScheduler:
         except Exception as e:
             logger.error(f"Score canary failed: {e}", exc_info=True)
             return {"error": str(e)}
+        finally:
+            db.close()
+
+    # ------------------------------------------------------------------
+    # Weekly roles digest
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _digest_send_time() -> tuple:
+        """(hour, minute) for the digest, falling back to 08:00 when malformed.
+
+        A bad value must not take the digest out of service silently — an
+        unparseable send_time returns the default and warns, rather than
+        raising out of init_scheduler() and leaving no job registered at all.
+        """
+        from src.config import get_config
+
+        raw = str(get_config().get("notifications.weekly_digest.send_time", "08:00"))
+        try:
+            hour, minute = map(int, raw.split(":"))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                raise ValueError(raw)
+            return hour, minute
+        except (ValueError, AttributeError):
+            logger.warning("Invalid weekly_digest.send_time %r; using 08:00", raw)
+            return 8, 0
+
+    def register_digest_job(self) -> bool:
+        """Register the Monday digest cron.
+
+        Independent of ScheduledSearch rows, so this is called from
+        init_scheduler() rather than load_schedules_from_db().
+        """
+        from src.config import get_config
+        config = get_config()
+
+        if not config.get("notifications.weekly_digest.enabled", True):
+            logger.info("Weekly digest disabled by config; not registering")
+            return False
+
+        hour, minute = self._digest_send_time()
+        tz = ZoneInfo(DIGEST_TIMEZONE)
+
+        # Replace rather than add: init_scheduler() can run more than once in a
+        # process (tests, reloads), and APScheduler would otherwise raise on a
+        # duplicate id — or, worse, fire twice.
+        existing = self._scheduler.get_job(DIGEST_JOB_ID)
+        if existing:
+            existing.remove()
+
+        self._scheduler.add_job(
+            func=self.send_weekly_digest,
+            trigger=CronTrigger(day_of_week="mon", hour=hour, minute=minute, timezone=tz),
+            id=DIGEST_JOB_ID,
+            name=f"Weekly roles digest @ mon {hour:02d}:{minute:02d}",
+        )
+        logger.info("Registered weekly digest for mon at %02d:%02d %s",
+                    hour, minute, DIGEST_TIMEZONE)
+        return True
+
+    def schedule_digest_catchup(self) -> bool:
+        """Queue a one-off send when this week's digest was missed.
+
+        The scheduler uses a MemoryJobStore with a 300s misfire grace, so a
+        Monday 08:00 cron that lands inside a redeploy is dropped and the next
+        fire is seven days away. Without this, one unlucky deploy costs a whole
+        week's digest and nothing says so.
+
+        Fires ~60s after boot so the app is serving before it sends.
+        """
+        from src.config import get_config
+        from src.database.models import DigestLog
+
+        config = get_config()
+        if not config.get("notifications.weekly_digest.enabled", True):
+            return False
+
+        hour, minute = self._digest_send_time()
+        tz = ZoneInfo(DIGEST_TIMEZONE)
+        now_local = datetime.now(tz)
+
+        # Only a Monday past send time can have missed anything; earlier in the
+        # week the cron has not been due yet.
+        send_moment = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        this_monday = send_moment - timedelta(days=now_local.weekday())
+        if now_local < this_monday:
+            return False
+
+        _start, _end, week_start_local = previous_week_bounds(
+            datetime.now(timezone.utc), DIGEST_TIMEZONE
+        )
+        week_start = week_start_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+        db = SessionLocal()
+        try:
+            already = (
+                db.query(DigestLog)
+                .filter(DigestLog.week_start == week_start)
+                .first()
+            )
+            ever_sent = db.query(DigestLog).first() is not None
+        finally:
+            db.close()
+
+        if already is not None:
+            logger.info("Weekly digest already recorded for %s; no catch-up", week_start.date())
+            return False
+
+        # No rows at all means the feature has never run — most likely this is
+        # its first deploy. A catch-up recovers a send that was *missed*, and
+        # nothing was missed if nothing was ever scheduled to happen, so firing
+        # here would push an unrequested digest within a minute of boot. Wait
+        # for the first real Monday; /digest/send-now covers "I want it now".
+        if not ever_sent:
+            logger.info("No digest history yet; skipping catch-up until the first scheduled run")
+            return False
+
+        existing = self._scheduler.get_job(DIGEST_CATCHUP_JOB_ID)
+        if existing:
+            existing.remove()
+
+        self._scheduler.add_job(
+            func=self.send_weekly_digest,
+            trigger=DateTrigger(run_date=datetime.now(timezone.utc) + timedelta(seconds=60)),
+            id=DIGEST_CATCHUP_JOB_ID,
+            name="Weekly roles digest (catch-up)",
+        )
+        logger.info("Queued weekly digest catch-up for week of %s", week_start.date())
+        return True
+
+    async def send_weekly_digest(self, force: bool = False) -> Dict[str, Any]:
+        """Render and send the digest for the week that just ended.
+
+        Idempotent on `week_start`: a catch-up racing the real cron produces one
+        digest, not two. Failures are recorded as rows too, so a broken send is
+        visible rather than looking like a quiet week.
+        """
+        from src.config import get_config
+        from src.database.models import DigestLog
+
+        config = get_config()
+        db = SessionLocal()
+        try:
+            start_utc, end_utc, week_start_local = previous_week_bounds(
+                datetime.now(timezone.utc), DIGEST_TIMEZONE
+            )
+            week_start = week_start_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+            if not force:
+                existing = (
+                    db.query(DigestLog)
+                    .filter(DigestLog.week_start == week_start)
+                    .first()
+                )
+                if existing is not None:
+                    logger.info("Weekly digest for %s already %s; skipping",
+                                week_start.date(), existing.status)
+                    return {"skipped": True, "week_start": week_start.isoformat(),
+                            "status": existing.status}
+
+            min_score = float(config.get("notifications.weekly_digest.min_score", 78))
+            max_rows = int(config.get("notifications.weekly_digest.max_rows", 10))
+            webapp_url = config.get("webapp.url", "http://localhost:5173")
+
+            roles = fetch_top_roles(db, start_utc, end_utc, min_score)
+            message = render_digest(
+                roles, format_week_label(week_start_local), min_score, max_rows, webapp_url
+            )
+
+            sent = False
+            error = None
+            if telegram_configured(config):
+                sent = await send_telegram_message(
+                    message, config=config, context="weekly roles digest"
+                )
+                if not sent:
+                    error = "Telegram rejected or could not send the digest"
+            else:
+                error = "Telegram not configured"
+
+            # Recorded on failure too: a retry next boot should see a row and
+            # know the attempt happened, rather than looping on it.
+            db.add(DigestLog(
+                week_start=week_start,
+                roles_count=len(roles),
+                min_score=min_score,
+                status="sent" if sent else "failed",
+                error_message=error,
+            ))
+            db.commit()
+
+            logger.info("Weekly digest for %s: %d roles, sent=%s",
+                        week_start.date(), len(roles), sent)
+            return {
+                "week_start": week_start.isoformat(),
+                "roles_count": len(roles),
+                "sent": sent,
+                "message_length": len(message),
+                "error": error,
+            }
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Weekly digest failed: {e}", exc_info=True)
+            return {"error": str(e)}
+        finally:
+            db.close()
+
+    def preview_weekly_digest(self) -> Dict[str, Any]:
+        """Render the digest without sending it or writing anything."""
+        from src.config import get_config
+
+        config = get_config()
+        db = SessionLocal()
+        try:
+            start_utc, end_utc, week_start_local = previous_week_bounds(
+                datetime.now(timezone.utc), DIGEST_TIMEZONE
+            )
+            min_score = float(config.get("notifications.weekly_digest.min_score", 78))
+            max_rows = int(config.get("notifications.weekly_digest.max_rows", 10))
+            webapp_url = config.get("webapp.url", "http://localhost:5173")
+
+            roles = fetch_top_roles(db, start_utc, end_utc, min_score)
+            week_label = format_week_label(week_start_local)
+            message = render_digest(roles, week_label, min_score, max_rows, webapp_url)
+
+            return {
+                "week_start": week_start_local.isoformat(),
+                "week_label": week_label,
+                "roles_count": len(roles),
+                "min_score": min_score,
+                "max_rows": max_rows,
+                "message": message,
+                # Surfaced so the 4096 limit can be checked before a real send.
+                "message_length": len(message),
+                "telegram_configured": telegram_configured(config),
+            }
         finally:
             db.close()
 
@@ -1057,6 +1290,12 @@ def init_scheduler() -> WebAppScheduler:
         scheduler.register_canary_job()
     except Exception as e:
         logger.warning(f"Could not register score canary (non-fatal): {e}")
+    try:
+        scheduler.register_digest_job()
+        # Recovers a Monday send that a redeploy swallowed; a no-op otherwise.
+        scheduler.schedule_digest_catchup()
+    except Exception as e:
+        logger.warning(f"Could not register weekly digest (non-fatal): {e}")
     return scheduler
 
 

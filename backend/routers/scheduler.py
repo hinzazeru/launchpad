@@ -371,6 +371,41 @@ async def get_scheduler_status(request: Request):
 
 
 # ============================================================================
+# Weekly roles digest
+# ============================================================================
+
+@router.get("/digest/preview")
+@limiter.limit("60/minute")
+async def digest_preview(request: Request):
+    """Render the digest for the week that just ended without sending it.
+
+    Writes nothing and sends nothing, so it is safe to poll while tuning
+    `max_rows` or the score floor. `message_length` is returned so the 4096-char
+    Telegram limit can be checked before a real send rather than after one
+    silently fails.
+    """
+    scheduler = get_scheduler()
+    return scheduler.preview_weekly_digest()
+
+
+@router.post("/digest/send-now")
+@limiter.limit("5/minute")
+async def digest_send_now(request: Request, force: bool = True):
+    """Send the digest immediately.
+
+    Defaults to `force=true` so a manual trigger is not silently swallowed by
+    the week's existing DigestLog row — pass `?force=false` to exercise the
+    real idempotency path instead.
+    """
+    scheduler = get_scheduler()
+    result = await scheduler.send_weekly_digest(force=force)
+
+    if result.get("error") and not result.get("week_start"):
+        raise HTTPException(status_code=503, detail=result["error"])
+    return result
+
+
+# ============================================================================
 # Score-drift canary
 # ============================================================================
 
